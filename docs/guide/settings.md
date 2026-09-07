@@ -43,6 +43,11 @@ Channels, each of which can be enabled or disabled without being deleted:
 What gets reported is set per schedule: a run that did not finish in time, an
 account with no backup for too long. See [Schedules](schedules.md#alerting).
 
+A run that stored the account but could not take one of its databases is
+announced as partial, not as a success — the subject says how much it is
+short by, and the message names what and why. See
+[a database that will not dump](troubleshooting.md#a-database-that-will-not-dump).
+
 Each channel picks the events it wants. **A backup or restore started** is the
 one to be deliberate about: it fires as work begins rather than when it ends,
 so on a server with a nightly schedule it is one message per account per night.

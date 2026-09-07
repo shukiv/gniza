@@ -374,6 +374,35 @@ Rollup rules:
 
 Alerting distinguishes these. `partial_success` is a warning; two good copies are not an incident. `failed` pages.
 
+### Where the copies went is not what went into them
+
+Target rollup answers one question: which repositories hold a copy. It says
+nothing about whether the copy is whole. A backup can reach every destination
+and still be missing one of the account's databases, because a corrupt table
+would not dump.
+
+So a job also carries what it could not take — one line each, with the reason
+the tool gave — and a run with anything on that list is not a complete
+account, whatever its target rollup says:
+
+```
+BackupJob
+  missing []string        -- what this run could not put in the backup
+  complete_account bool   -- false whenever missing is non-empty, or the
+                             payload was built with exclusions in force
+```
+
+`complete_account` is what [termination safety](adr/0014-account-termination-safety.md)
+reads, and it is the only thing that may be read as "this account is safe to
+delete". `status = success` must not be.
+
+Two rules keep an incomplete backup from being a silent one: a dump that
+failed is deleted rather than left as an empty file that would restore as a
+database with no tables, and a failure that is really the database server
+going away is waited out and retried rather than charged to one database.
+See [ADR 17](adr/0017-a-backup-carries-on-past-a-database-it-cannot-dump.md),
+which records what cPanel's own `pkgacct` does instead, measured.
+
 Retries are per-target with exponential backoff, bounded by attempt count and by the backup window. Re-running `restic backup` after a partial upload is safe: restic reuses the pack data already stored. Note this is another argument for `split` mode — retrying a `monolithic` compressed payload re-uploads nearly everything.
 
 Staging is retained until all targets reach a terminal state, then removed.

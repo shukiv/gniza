@@ -1,6 +1,6 @@
 # 0016 — Restore trust, source-read completion, and scratch capacity
 
-Status: implemented locally; not deployed or certified on cPanel
+Status: accepted; in production on cPanel 136 since 2026-09-06
 Date: 2026-09-06
 
 ## Context

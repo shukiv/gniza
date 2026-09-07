@@ -318,7 +318,7 @@ PostgreSQL, real restic and a real append-only rest-server.
 | Controller web UI | not built; the API and CLI are the fleet-mode interface |
 | Azure/GCS/rclone destinations | not built |
 
-## Three decisions worth knowing before reading the code
+## Five decisions worth knowing before reading the code
 
 1. **Never feed restic a compressed archive.** `pkgacct` compresses by
    default, and a gzip stream defeats content-defined chunking: every
@@ -341,6 +341,13 @@ PostgreSQL, real restic and a real append-only rest-server.
    environment; repository passwords go in transient mode-0600 files. File
    *paths* are not secrets, so ssh's identity and known-hosts files do travel
    in `-o sftp.args`. See DESIGN §5, §11.
+5. **A backup can succeed and still be incomplete.** One database that will
+   not dump no longer costs an account its whole backup; what could not be
+   taken is recorded, named on the row and in the notification, and makes
+   the run something termination safety refuses to act on. Target rollup
+   says where the copies went, not what went into them, so `complete_account`
+   and not `status` is what may be read as "safe to delete". See DESIGN §9
+   and [ADR 17](docs/adr/0017-a-backup-carries-on-past-a-database-it-cannot-dump.md).
 
 ## Build and test
 

@@ -494,6 +494,9 @@ cPanel's copy lands in a temporary directory it creates *beside* the path
 it was handed, which is inside our staging directory — so it counts
 against the same allocation and is swept up with it.
 
+See [ADR 18](adr/0018-a-restore-reserves-what-it-writes.md), which records
+what the three copies were and which of them were real.
+
 Sizing the small restores needs the backup's own answer: `restic ls` over
 the paths the plan resolved to. A listing that contains a directory is
 refused rather than summed, because `restic ls` lists direct children and

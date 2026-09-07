@@ -251,8 +251,18 @@ func TestAddDestinationRoundTrip(t *testing.T) {
 		t.Fatalf("POST: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusSeeOther {
-		t.Fatalf("POST = %d, want a redirect", resp.StatusCode)
+	// Adding a destination does not end on the list. It ends on the
+	// recovery key, which is made here and exists nowhere else, so the
+	// page that comes back is the key itself rather than a redirect.
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST = %d, want the recovery key page: %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), "RESTIC_PASSWORD") {
+		t.Fatalf("adding a destination did not end on its recovery key: %s", body)
 	}
 
 	destinations, err := engine.Store().Destinations()

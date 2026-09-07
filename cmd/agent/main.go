@@ -58,6 +58,7 @@ type config struct {
 	masterKeyPath       string
 	lifecycleSocketPath string
 	cpanelHookEvent     string
+	panelHookEvent      string
 	hookSpoolDir        string
 	cpanelHookDescribe  bool
 	certifyArchive      string
@@ -78,6 +79,9 @@ func main() {
 			os.Exit(1)
 		}
 		return
+	}
+	if cfg.cpanelHookEvent == "" {
+		cfg.cpanelHookEvent = cfg.panelHookEvent
 	}
 	if cfg.cpanelHookEvent != "" {
 		// Read before the call, not after it: reaching an unreachable
@@ -220,7 +224,13 @@ func parseFlags() config {
 	flag.StringVar(&cfg.hookSpoolDir, "hook-spool", hookspool.DefaultDir,
 		"where a cPanel lifecycle hook leaves an account event this service was not running to hear")
 	flag.StringVar(&cfg.cpanelHookEvent, "cpanel-hook", "",
-		"internal: forward a cPanel create, modify, suspend, unsuspend, remove-pre or remove hook")
+		"internal: forward a create, modify, suspend, unsuspend, remove-pre or remove hook")
+	// The same thing under a name that is not one panel's. The original
+	// spelling stays because installed cPanel hooks name it, and a hook
+	// registered on a live server is not a string this program gets to
+	// change.
+	flag.StringVar(&cfg.panelHookEvent, "panel-hook", "",
+		"internal: forward an account lifecycle event from the panel's own hook")
 	flag.BoolVar(&cfg.cpanelHookDescribe, "describe", false,
 		"internal: describe cPanel Standardized Hooks")
 	flag.StringVar(&cfg.certifyArchive, "certify-live-archive", "",

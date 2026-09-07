@@ -1,0 +1,17 @@
+#!/bin/sh
+# Gniza's account page on DirectAdmin.
+#
+# DirectAdmin runs this as the account it belongs to, which is exactly
+# what the account socket needs: it reads who is asking from the socket
+# itself rather than from anything in the request. What is missing is the
+# other half of the check cPanel's plugin performs -- proof that the
+# request came from that customer'"'"'s own logged-in session rather than
+# from any process running as them. See ADR 0019.
+set -eu
+printf '%s' '<div class="ui-widget">
+<h1>Backups</h1>
+<p>This server'"'"'s backups are run by Gniza. Your account is included in
+them, and your host can restore it, or any part of it, for you.</p>
+<p>The self-service page is not available on DirectAdmin yet. Ask your
+host for a restore.</p>
+</div>'

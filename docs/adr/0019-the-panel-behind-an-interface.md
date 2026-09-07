@@ -126,6 +126,15 @@ None of these can be answered from documentation, and each changes code:
 6. The exact member names inside the backup archive, beyond `backup/` and
    the domains, which is what `ItemLayout` has to answer for a
    single-item restore.
+7. What stands in for cPanel's session bridge on the account-facing
+   socket. DirectAdmin runs a `user/` plugin script as the account, so
+   `SO_PEERCRED` attributes the request correctly — but cPanel's plugin
+   also proves the request came from that customer's own logged-in
+   session, and without an equivalent every process running as the
+   account could read its backups. That is a decision about who may read
+   a customer's data, not a detail to arrange quietly in the packaging,
+   so the DirectAdmin plugin ships two pages that say what is and is not
+   available rather than an interface that quietly lowers the bar.
 
 Until 1–6 are answered on a real host, the DirectAdmin provider is not
 something to run against a customer's server.

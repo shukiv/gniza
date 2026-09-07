@@ -106,6 +106,7 @@ func (r *Runner) Drill(ctx context.Context, req DrillRequest) (DrillResult, erro
 			WorkDir:    workDir,
 			TreeOnly:   true,
 			Repo:       repo,
+			Layout:     r.layout,
 		})
 		if err != nil {
 			return "", err

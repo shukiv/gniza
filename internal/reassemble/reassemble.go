@@ -7,44 +7,20 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/pkgacct"
 	"github.com/shukiv/gniza/internal/resticrun"
-)
-
-// Layout names the subdirectories a cpmove archive keeps its parts in.
-//
-// These are cPanel's, not ours, and have been stable for a long time — but
-// they have never been verified against a live cPanel here. Reassembly
-// therefore discovers the archive's actual top-level directory rather than
-// assuming it, and fails loudly if what it finds does not look like a
-// cpmove tree. Verify these against the target cPanel version before
-// trusting a restore in production.
-const (
-	HomedirDir  = "homedir"
-	DatabaseDir = "mysql"
-	// DatabaseUsersFile is where a cpmove archive keeps the account's
-	// database users and their grants: at the top of the tree, not with
-	// the databases. Checked against what /scripts/pkgacct produces on
-	// cPanel 136.
-	DatabaseUsersFile = "mysql.sql"
-	// StagedDatabaseUsersFile is what Gniza names the same thing where
-	// it dumps it, beside the databases. It is granular.DatabaseUsersFile
-	// spelt out rather than imported: granular imports this package.
-	StagedDatabaseUsersFile = "_users.sql"
-	// authSuffix names the file cPanel keeps beside the grants, holding
-	// each user's real password hash and authentication plugin.
-	authSuffix = "-auth.json"
-	// RunnableDatabaseUsersFile is the readable copy staged beside the
-	// grants. It is granular.RunnableDatabaseUsersFile spelt out, for
-	// the same reason as StagedDatabaseUsersFile: granular imports this
-	// package.
-	RunnableDatabaseUsersFile = "_users-runnable.sql"
 )
 
 // Request describes a restore of one account.
 type Request struct {
 	Account    string
 	SnapshotID string
+	// Layout says where the panel this backup came from keeps the parts
+	// of an account. Reassembly puts them back in that shape, so there is
+	// no default: a restore built to the wrong panel's layout is an
+	// archive its own restore will not read.
+	Layout panel.ArchiveLayout
 	// WorkDir is scratch space. Everything under it is the caller's to
 	// remove when the restore is finished.
 	WorkDir string
@@ -82,6 +58,9 @@ func (r Request) stage(name string) {
 
 // Result is what a completed reassembly produced.
 type Result struct {
+	// Account is whose backup this is, carried so that whatever checks
+	// the result reads it against the same account it was rebuilt for.
+	Account string
 	// ArchivePath is the cpmove archive, ready for restorepkg.
 	ArchivePath string
 	// TreeDir is the extracted tree the archive was built from, kept so an
@@ -100,6 +79,9 @@ type Result struct {
 	Mode pkgacct.Mode
 	// BytesRestored is what restic reported across every part.
 	BytesRestored uint64
+	// Layout is the panel shape this was rebuilt into, so that whoever
+	// checks the result reads it the same way it was written.
+	Layout panel.ArchiveLayout
 	// Skipped is what the backup was taken without, in the words the
 	// snapshot's tags use ("databases", "homedir", "email"). Empty means
 	// the snapshot holds the whole account.
@@ -133,6 +115,9 @@ func Run(ctx context.Context, restorer Restorer, req Request) (Result, error) {
 	if req.WorkDir == "" {
 		return Result{}, fmt.Errorf("reassemble: work directory is required")
 	}
+	if req.Layout == nil {
+		return Result{}, fmt.Errorf("reassemble: the panel's archive layout is required")
+	}
 
 	snapshot, err := findSnapshot(ctx, restorer, req)
 	if err != nil {
@@ -156,6 +141,7 @@ func Run(ctx context.Context, restorer Restorer, req Request) (Result, error) {
 	// rehearsal has to check what this backup claims to hold: a snapshot
 	// taken without databases has no dumps in it, and reading that as
 	// "the account has none" is how a partial backup passes as a full one.
+	result.Account = req.Account
 	result.Skipped = snapshot.Skipped()
 	return result, nil
 }
@@ -280,11 +266,12 @@ func restoreMonolithic(ctx context.Context, restorer Restorer, req Request,
 	if _, err := os.Stat(archive); err != nil {
 		return Result{}, fmt.Errorf("reassemble: restored archive is missing: %w", err)
 	}
-	if err := ValidateAccountArchive(ctx, archive, req.Account); err != nil {
+	if err := req.Layout.ValidateArchive(ctx, archive, req.Account); err != nil {
 		return Result{}, err
 	}
 	return Result{
 		ArchivePath:   archive,
+		Layout:        req.Layout,
 		Mode:          pkgacct.ModeMonolithic,
 		BytesRestored: restored.BytesRestored,
 	}, nil
@@ -320,7 +307,7 @@ func restoreSplit(ctx context.Context, restorer Restorer, req Request,
 	if err != nil {
 		return Result{}, err
 	}
-	if err := ValidateAccountArchive(ctx, archive, req.Account); err != nil {
+	if err := req.Layout.ValidateArchive(ctx, archive, req.Account); err != nil {
 		return Result{}, err
 	}
 	treeDir := filepath.Join(req.WorkDir, "tree")
@@ -330,21 +317,23 @@ func restoreSplit(ctx context.Context, restorer Restorer, req Request,
 	}
 
 	// 2. The archive's own top-level directory is discovered rather than
-	//    assumed, because its name is cPanel's to choose.
-	root, err := soleDirectory(treeDir)
+	//    assumed, because its name is the panel's to choose.
+	root, err := req.Layout.AccountRoot(treeDir, req.Account)
 	if err != nil {
-		return Result{}, fmt.Errorf("reassemble: metadata archive is not a cpmove tree: %w", err)
+		return Result{}, fmt.Errorf("reassemble: the metadata archive is not an account tree: %w", err)
 	}
 
 	// 3. Each remaining part is restored straight into its slot.
-	if err := restore("reading the home directory", found.Homedir, filepath.Join(root, HomedirDir)); err != nil {
+	if err := restore("reading the home directory", found.Homedir,
+		filepath.Join(root, req.Layout.HomedirDir())); err != nil {
 		return Result{}, fmt.Errorf("reassemble: restore home directory: %w", err)
 	}
 	if found.Databases != "" {
-		if err := restore("reading the databases", found.Databases, filepath.Join(root, DatabaseDir)); err != nil {
+		if err := restore("reading the databases", found.Databases,
+			filepath.Join(root, req.Layout.DatabaseDir())); err != nil {
 			return Result{}, fmt.Errorf("reassemble: restore databases: %w", err)
 		}
-		if err := placeDatabaseUsers(root); err != nil {
+		if err := req.Layout.PlaceDatabaseUsers(root); err != nil {
 			return Result{}, err
 		}
 	}
@@ -363,47 +352,10 @@ func restoreSplit(ctx context.Context, restorer Restorer, req Request,
 		ArchivePath:   rebuilt,
 		TreeDir:       treeDir,
 		RootDir:       root,
+		Layout:        req.Layout,
 		Mode:          pkgacct.ModeSplit,
 		BytesRestored: bytesRestored,
 	}, nil
-}
-
-// placeDatabaseUsers moves the grants file to the name cPanel's own
-// restore reads.
-//
-// Gniza dumps the account's database users beside its databases, because
-// that is where they are produced. A cpmove archive keeps them somewhere
-// else: one file per database under mysql/, and the users and their
-// grants in mysql.sql at the top of the tree. restorepkg reads the
-// latter and nothing else, so an archive with the file under mysql/ was
-// restored with every table in place and no user able to read them.
-func placeDatabaseUsers(root string) error {
-	from := filepath.Join(root, DatabaseDir, StagedDatabaseUsersFile)
-	if _, err := os.Stat(from); err != nil {
-		// No users file: an account with no databases, or a backup taken
-		// before Gniza dumped them.
-		return nil
-	}
-	to := filepath.Join(root, DatabaseUsersFile)
-	if err := os.Rename(from, to); err != nil {
-		return fmt.Errorf("reassemble: place the database users where restorepkg reads them: %w", err)
-	}
-	// The authentication file travels with it. "IDENTIFIED BY PASSWORD"
-	// is not valid on MySQL 8, so this is where the real hash and plugin
-	// are read from, and a grants file without it restores users that
-	// cannot authenticate.
-	if err := os.Rename(from+authSuffix, to+authSuffix); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("reassemble: place the database authentication: %w", err)
-	}
-	// The readable copy of the same users is staged for whoever pulls
-	// them out of a backup by hand. It has no business in an archive
-	// handed to restorepkg, which would find a file it does not know in
-	// a directory where it expects one file per database.
-	runnable := filepath.Join(root, DatabaseDir, RunnableDatabaseUsersFile)
-	if err := os.Remove(runnable); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("reassemble: %w", err)
-	}
-	return nil
 }
 
 // soleArchive finds the single archive a metadata restore produced.
@@ -431,23 +383,4 @@ func soleArchive(dir string) (string, error) {
 		return "", fmt.Errorf("reassemble: %d archives in the restored metadata part, expected one",
 			len(archives))
 	}
-}
-
-// soleDirectory returns the one directory inside dir, which for a cpmove
-// archive is the account tree.
-func soleDirectory(dir string) (string, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return "", fmt.Errorf("reassemble: read %s: %w", dir, err)
-	}
-	var dirs []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			dirs = append(dirs, filepath.Join(dir, entry.Name()))
-		}
-	}
-	if len(dirs) != 1 {
-		return "", fmt.Errorf("found %d top-level directories, expected one", len(dirs))
-	}
-	return dirs[0], nil
 }

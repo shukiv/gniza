@@ -21,6 +21,7 @@ import (
 	"github.com/shukiv/gniza/internal/certs"
 	"github.com/shukiv/gniza/internal/controller"
 	"github.com/shukiv/gniza/internal/cpanel"
+	"github.com/shukiv/gniza/internal/layout/cpmove"
 	"github.com/shukiv/gniza/internal/maintenance"
 	"github.com/shukiv/gniza/internal/repobuild"
 	"github.com/shukiv/gniza/internal/resticrun"
@@ -279,7 +280,7 @@ func (h *harness) buildAgent(t *testing.T, workDir string) {
 		// only needs to see that the target fails and the others do not.
 		TargetTimeout: 30 * time.Second,
 	})
-	h.maintenance = maintenance.New(h.db, h.v, h.resticRunner, testLogger(t))
+	h.maintenance = maintenance.New(h.db, h.v, h.resticRunner, testLogger(t), cpmove.Layout{})
 }
 
 // seed creates the destinations, repositories, policy and account.

@@ -51,7 +51,7 @@ func (a *Agent) restoreItems(ctx context.Context, log *slog.Logger,
 		report.Error = err.Error()
 		return report, false
 	}
-	plan, err := granular.BuildAll(parts, itemRequests(assignment))
+	plan, err := granular.BuildAll(a.provider.Layout(), parts, itemRequests(assignment))
 	if err != nil {
 		report.Error = err.Error()
 		return report, false

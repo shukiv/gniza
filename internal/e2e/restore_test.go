@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/shukiv/gniza/internal/job"
+	"github.com/shukiv/gniza/internal/layout/cpmove"
 	"github.com/shukiv/gniza/internal/maintenance"
 	"github.com/shukiv/gniza/internal/protocol"
-	"github.com/shukiv/gniza/internal/reassemble"
 	"github.com/shukiv/gniza/internal/store"
 )
 
@@ -70,12 +70,12 @@ func TestRestoreRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("restored tree: %v", err)
 	}
-	restored := readTree(t, filepath.Join(root, reassemble.HomedirDir))
+	restored := readTree(t, filepath.Join(root, cpmove.HomedirDir))
 	compareTrees(t, original, restored)
 
 	// The database dumps came back too.
 	for _, database := range []string{"customer1_wp", "customer1_shop"} {
-		path := filepath.Join(root, reassemble.DatabaseDir, database+".sql")
+		path := filepath.Join(root, cpmove.DatabaseDir, database+".sql")
 		body, err := os.ReadFile(path)
 		if err != nil {
 			t.Errorf("read restored dump %s: %v", database, err)

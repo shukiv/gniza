@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/shukiv/gniza/internal/layout/cpmove"
 )
 
 // TestARehearsalNeedsNoArchive.
@@ -19,6 +21,7 @@ func TestARehearsalNeedsNoArchive(t *testing.T) {
 	workDir := filepath.Join(root, "work")
 
 	result, err := Run(context.Background(), restorer, Request{
+		Layout:  cpmove.Layout{},
 		Account: "customer1", SnapshotID: "40dc15203b1cf9aa", WorkDir: workDir,
 		TreeOnly: true,
 	})
@@ -42,8 +45,8 @@ func TestARehearsalNeedsNoArchive(t *testing.T) {
 	tree := filepath.Join(workDir, "tree", "cpmove-customer1")
 	for _, want := range []string{
 		filepath.Join(tree, "version"),
-		filepath.Join(tree, HomedirDir, "public_html", "index.html"),
-		filepath.Join(tree, DatabaseDir, "customer1_wp.sql"),
+		filepath.Join(tree, cpmove.HomedirDir, "public_html", "index.html"),
+		filepath.Join(tree, cpmove.DatabaseDir, "customer1_wp.sql"),
 	} {
 		if _, err := os.Stat(want); err != nil {
 			t.Errorf("the tree is incomplete: %v", err)

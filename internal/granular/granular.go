@@ -16,6 +16,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/reassemble"
 )
 
@@ -143,91 +144,15 @@ type Plan struct {
 	Description string
 }
 
-// Members inside a cpmove archive, verified against cPanel 136.0.37. They
-// are cPanel's names, not ours, and a snapshot from a different version may
-// not carry all of them — a plan asks for what it wants and the extraction
-// reports what it actually found.
-var (
-	settingsMembers = []string{
-		"cp/", "meta/", "quota", "shell", "shadow", "digestshadow",
-		"userconfig/", "version", "packaged_in_version",
-	}
-	cronMembers = []string{"cron/"}
-	ftpMembers  = []string{"proftpdpasswd"}
-	// A mailbox is not only its maildir: forwarders, filters and the
-	// domain's mail configuration live in the metadata archive.
-	mailMembers = []string{"va/", "vad/", "vf/", "meta/mailserver"}
-	// What a per-domain SSL restore carries whichever domain was chosen.
-	// cPanel 136 keeps the certificate and its key in apache_tls, one
-	// file per domain, and these are empty; a server that still uses them
-	// would otherwise hand back a certificate with no key, so they travel
-	// whole rather than being filtered by a name whose shape inside them
-	// is not known here.
-	sslAlways = []string{"ssl/", "sslcerts/", "sslkeys/", "has_sslstorage", "autossl.json"}
-	// What a per-domain restore of the domains carries regardless: which
-	// domain is the main one and which are addons is a property of the
-	// account, not of any one domain, and a domain restored without it
-	// has nowhere to be put back.
-	domainAlways = []string{"userdata/main", "userdata/cache.json", "ips/", "addons"}
-)
-
-// dnsMembers is the account's zone files, or the zones of the domains
-// named.
-func dnsMembers(names []string) ([]string, error) {
-	if len(names) == 0 {
-		return []string{"dnszones/"}, nil
-	}
-	members := make([]string, 0, len(names))
-	for _, name := range names {
-		if err := UsableDomainName(name); err != nil {
-			return nil, err
-		}
-		members = append(members, "dnszones/"+name+".db")
-	}
-	return members, nil
-}
-
-// sslMembers is the account's certificates, or those of the domains named.
-func sslMembers(names []string) ([]string, error) {
-	if len(names) == 0 {
-		return append([]string{"apache_tls/"}, sslAlways...), nil
-	}
-	members := make([]string, 0, len(names)+len(sslAlways))
-	for _, name := range names {
-		if err := UsableDomainName(name); err != nil {
-			return nil, err
-		}
-		members = append(members, "apache_tls/"+name)
-	}
-	return append(members, sslAlways...), nil
-}
-
-// domainMembers is the web server configuration of the account's domains,
-// or of the domains named.
-func domainMembers(names []string) ([]string, error) {
-	if len(names) == 0 {
-		return []string{"userdata/", "dnszones/", "ips/", "addons"}, nil
-	}
-	members := make([]string, 0, 4*len(names)+len(domainAlways))
-	for _, name := range names {
-		if err := UsableDomainName(name); err != nil {
-			return nil, err
-		}
-		members = append(members,
-			"userdata/"+name,
-			"userdata/"+name+"_SSL",
-			"userdata/"+name+".php-fpm.yaml",
-			"dnszones/"+name+".db")
-	}
-	return append(members, domainAlways...), nil
-}
-
 // Build turns a request into the paths that satisfy it.
 //
 // It fails rather than returning an empty plan: a granular restore that
 // quietly asks for nothing would report success having produced nothing,
 // which is the failure this program most has to avoid.
-func Build(parts reassemble.Parts, req Request) (Plan, error) {
+func Build(layout panel.ItemLayout, parts reassemble.Parts, req Request) (Plan, error) {
+	if layout == nil {
+		return Plan{}, fmt.Errorf("granular: the panel's layout is required")
+	}
 	if req.Account == "" {
 		return Plan{}, fmt.Errorf("granular: account is required")
 	}
@@ -239,23 +164,23 @@ func Build(parts reassemble.Parts, req Request) (Plan, error) {
 	case KindFiles:
 		return buildFiles(parts, req)
 	case KindWebsite:
-		return buildHomedir(parts, req, []string{"public_html"}, "the website files")
+		return buildHomedir(parts, req, layout.WebsitePaths(), "the website files")
 	case KindMailbox:
-		return buildMailbox(parts, req)
+		return buildMailbox(layout, parts, req)
 	case KindDatabase:
 		return buildDatabase(parts, req)
 	case KindDNS:
-		return buildChosen(parts, req, dnsMembers, "the DNS records")
+		return buildChosen(parts, req, layout.DNSMembers, "the DNS records")
 	case KindSSL:
-		return buildChosen(parts, req, sslMembers, "the SSL certificates and keys")
+		return buildChosen(parts, req, layout.SSLMembers, "the SSL certificates and keys")
 	case KindSettings:
-		return buildMetadata(parts, settingsMembers, "the panel configuration")
+		return buildMetadata(parts, layout.SettingsMembers(), "the panel configuration")
 	case KindCron:
-		return buildMetadata(parts, cronMembers, "the cron jobs")
+		return buildMetadata(parts, layout.CronMembers(), "the cron jobs")
 	case KindDomains:
-		return buildChosen(parts, req, domainMembers, "the domains")
+		return buildChosen(parts, req, layout.DomainMembers, "the domains")
 	case KindFTP:
-		return buildMetadata(parts, ftpMembers, "the FTP accounts")
+		return buildMetadata(parts, layout.FTPMembers(), "the FTP accounts")
 	case KindDBUsers:
 		return buildDatabaseUsers(parts, req.Names)
 	case KindSystem:
@@ -281,12 +206,12 @@ func Build(parts reassemble.Parts, req Request) (Plan, error) {
 // written. Restoring them together makes that impossible. Every request is
 // built before any of it is used, so a basket holding one thing this cannot
 // do fails whole rather than half way through.
-func BuildAll(parts reassemble.Parts, reqs []Request) (Plan, error) {
+func BuildAll(layout panel.ItemLayout, parts reassemble.Parts, reqs []Request) (Plan, error) {
 	if len(reqs) == 0 {
 		return Plan{}, fmt.Errorf("granular: nothing was asked for")
 	}
 	if len(reqs) == 1 {
-		return Build(parts, reqs[0])
+		return Build(layout, parts, reqs[0])
 	}
 
 	var (
@@ -294,7 +219,7 @@ func BuildAll(parts reassemble.Parts, reqs []Request) (Plan, error) {
 		descriptions []string
 	)
 	for _, req := range reqs {
-		plan, err := Build(parts, req)
+		plan, err := Build(layout, parts, req)
 		if err != nil {
 			return Plan{}, err
 		}
@@ -372,12 +297,8 @@ func buildHomedir(parts reassemble.Parts, req Request, relative []string, descri
 	return plan, nil
 }
 
-func buildMailbox(parts reassemble.Parts, req Request) (Plan, error) {
-	names := make([]string, 0, len(req.Names))
-	for _, name := range req.Names {
-		names = append(names, path.Join("mail", name))
-	}
-	plan, err := buildHomedir(parts, req, names,
+func buildMailbox(layout panel.ItemLayout, parts reassemble.Parts, req Request) (Plan, error) {
+	plan, err := buildHomedir(parts, req, layout.MailboxPaths(req.Names),
 		"the mail for "+strings.Join(req.Names, ", "))
 	if err != nil {
 		return Plan{}, err
@@ -386,7 +307,7 @@ func buildMailbox(parts reassemble.Parts, req Request) (Plan, error) {
 	// come back if the metadata part is in the snapshot too.
 	if parts.Metadata != "" {
 		plan.Metadata = parts.Metadata
-		plan.Members = mailMembers
+		plan.Members = layout.MailMembers()
 		plan.Include = append(plan.Include, parts.Metadata)
 	}
 	return plan, nil
@@ -547,35 +468,12 @@ func UsableDatabaseName(database string) error {
 	return nil
 }
 
-// UsableDomainName refuses anything that is not a domain name.
-//
-// These names come out of a backup and back in from a form, and go on to
-// select members inside the account's archive by name. A name carrying a
-// slash or a pair of dots would reach members belonging to a different part
-// of the account, so what is checked is what a domain may contain rather
-// than what it may not.
+// UsableDomainName refuses anything that is not a domain name. The check
+// itself belongs with the panel layouts that build paths out of one, and
+// this is the name the rest of the program already calls.
 func UsableDomainName(domain string) error {
-	refuse := fmt.Errorf("granular: %q is not a domain name", domain)
-	if domain == "" || len(domain) > 253 {
-		return refuse
-	}
-	labels := strings.Split(domain, ".")
-	if len(labels) < 2 {
-		return refuse
-	}
-	for _, label := range labels {
-		if label == "" || len(label) > 63 ||
-			label[0] == '-' || label[len(label)-1] == '-' {
-			return refuse
-		}
-		for _, char := range label {
-			switch {
-			case char >= 'a' && char <= 'z', char >= 'A' && char <= 'Z',
-				char >= '0' && char <= '9', char == '-', char == '_':
-			default:
-				return refuse
-			}
-		}
+	if err := panel.UsableDomainName(domain); err != nil {
+		return fmt.Errorf("granular: %w", err)
 	}
 	return nil
 }

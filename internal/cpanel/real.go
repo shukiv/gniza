@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/shukiv/gniza/internal/granular"
+	"github.com/shukiv/gniza/internal/layout/cpmove"
 	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/pkgacct"
 )
@@ -1162,3 +1163,6 @@ const (
 	stderrLinesKept = 3
 	stderrBytesKept = 400
 )
+
+// Layout is cPanel's own: a cpmove tree.
+func (r *Real) Layout() panel.Layout { return cpmove.Layout{} }

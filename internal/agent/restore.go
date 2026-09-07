@@ -193,6 +193,7 @@ func (a *Agent) restoreAccount(ctx context.Context, log *slog.Logger,
 		SnapshotID: assignment.SnapshotID,
 		WorkDir:    dir.Path,
 		Repo:       repo,
+		Layout:     a.provider.Layout(),
 		OnStage:    watch.StageFunc(),
 		OnProgress: watch.ProgressFunc(),
 		// A restore that goes straight to cPanel needs no tar: restorepkg

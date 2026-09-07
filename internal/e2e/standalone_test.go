@@ -16,9 +16,9 @@ import (
 
 	"github.com/shukiv/gniza/internal/cpanel"
 	"github.com/shukiv/gniza/internal/job"
+	"github.com/shukiv/gniza/internal/layout/cpmove"
 	"github.com/shukiv/gniza/internal/node"
 	"github.com/shukiv/gniza/internal/nodestore"
-	"github.com/shukiv/gniza/internal/reassemble"
 	"github.com/shukiv/gniza/internal/testsupport"
 	"github.com/shukiv/gniza/internal/vault"
 	"github.com/shukiv/gniza/internal/webui"
@@ -297,9 +297,9 @@ func TestStandaloneBackupAndRestoreThroughTheInterface(t *testing.T) {
 	if err != nil {
 		t.Fatalf("restored tree: %v", err)
 	}
-	compareTrees(t, original, readTree(t, filepath.Join(accountRoot, reassemble.HomedirDir)))
+	compareTrees(t, original, readTree(t, filepath.Join(accountRoot, cpmove.HomedirDir)))
 
-	dump, err := os.ReadFile(filepath.Join(accountRoot, reassemble.DatabaseDir, "customer1_wp.sql"))
+	dump, err := os.ReadFile(filepath.Join(accountRoot, cpmove.DatabaseDir, "customer1_wp.sql"))
 	if err != nil {
 		t.Fatalf("restored database dump: %v", err)
 	}

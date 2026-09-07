@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/shukiv/gniza/internal/granular"
+	"github.com/shukiv/gniza/internal/layout/cpmove"
 	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/pkgacct"
 )
@@ -537,3 +538,7 @@ func (f *Fake) StageSystem(_ context.Context, stagingDir string) (pkgacct.Payloa
 	}
 	return payload, payload.Verify()
 }
+
+// Layout is the same cpmove tree the real provider produces: the fake
+// exists to exercise the machinery, not to invent a second format.
+func (f *Fake) Layout() panel.Layout { return cpmove.Layout{} }

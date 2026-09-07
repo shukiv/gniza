@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/shukiv/gniza/internal/cpanel"
+	"github.com/shukiv/gniza/internal/layout/cpmove"
 	"github.com/shukiv/gniza/internal/pkgacct"
 	"github.com/shukiv/gniza/internal/reassemble"
 )
@@ -82,7 +83,7 @@ func TestAMonolithicRestoreIsNotFailedForDatabasesItCannotList(t *testing.T) {
 func rebuiltWithDatabases(t *testing.T, account string, databases ...string) reassemble.Result {
 	t.Helper()
 	tree := t.TempDir()
-	dumps := filepath.Join(tree, "cpmove-"+account, reassemble.DatabaseDir)
+	dumps := filepath.Join(tree, "cpmove-"+account, cpmove.DatabaseDir)
 	if err := os.MkdirAll(dumps, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -98,5 +99,8 @@ func rebuiltWithDatabases(t *testing.T, account string, databases ...string) rea
 			t.Fatal(err)
 		}
 	}
-	return reassemble.Result{TreeDir: tree, Mode: pkgacct.ModeSplit}
+	return reassemble.Result{
+		Account: account, TreeDir: tree,
+		Layout: cpmove.Layout{}, Mode: pkgacct.ModeSplit,
+	}
 }

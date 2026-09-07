@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shukiv/gniza/internal/layout/cpmove"
 	"github.com/shukiv/gniza/internal/pkgacct"
 	"github.com/shukiv/gniza/internal/reassemble"
 )
@@ -25,7 +26,7 @@ func buildTree(t *testing.T, withHomedir bool, dumps map[string]string) reassemb
 		t.Fatal(err)
 	}
 	if withHomedir {
-		home := filepath.Join(account, reassemble.HomedirDir)
+		home := filepath.Join(account, cpmove.HomedirDir)
 		if err := os.MkdirAll(home, 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -34,7 +35,7 @@ func buildTree(t *testing.T, withHomedir bool, dumps map[string]string) reassemb
 		}
 	}
 	if dumps != nil {
-		dir := filepath.Join(account, reassemble.DatabaseDir)
+		dir := filepath.Join(account, cpmove.DatabaseDir)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -45,6 +46,7 @@ func buildTree(t *testing.T, withHomedir bool, dumps map[string]string) reassemb
 		}
 	}
 	return reassemble.Result{
+		Layout:      cpmove.Layout{},
 		ArchivePath: archive, TreeDir: tree, Mode: pkgacct.ModeSplit,
 	}
 }

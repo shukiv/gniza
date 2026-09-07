@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/shukiv/gniza/internal/layout/cpmove"
 )
 
 // TestWhatCPanelIsHandedIsTheAccountItself.
@@ -19,6 +21,7 @@ func TestWhatCPanelIsHandedIsTheAccountItself(t *testing.T) {
 	workDir := filepath.Join(root, "work")
 
 	result, err := Run(context.Background(), restorer, Request{
+		Layout:  cpmove.Layout{},
 		Account: "customer1", SnapshotID: "40dc15203b1cf9aa", WorkDir: workDir,
 		TreeOnly: true,
 	})

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/shukiv/gniza/internal/layout/cpmove"
 	"github.com/shukiv/gniza/internal/maintenance"
 	"github.com/shukiv/gniza/internal/resticrun"
 	"github.com/shukiv/gniza/internal/store"
@@ -118,7 +119,7 @@ func run(ctx context.Context, cfg runConfig) error {
 		CacheDir:   cfg.cacheDir,
 		CACertPath: cfg.caCert,
 	}, nil)
-	runner := maintenance.New(db, v, restic, log)
+	runner := maintenance.New(db, v, restic, log, cpmove.Layout{})
 
 	switch cfg.kind {
 	case maintenance.KindProvision:

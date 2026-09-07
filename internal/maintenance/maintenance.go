@@ -14,6 +14,7 @@ import (
 
 	"github.com/shukiv/gniza/internal/destination"
 	"github.com/shukiv/gniza/internal/job"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/repobuild"
 	"github.com/shukiv/gniza/internal/resticrun"
 	"github.com/shukiv/gniza/internal/store"
@@ -35,14 +36,23 @@ type Runner struct {
 	vault  *vault.Vault
 	restic *resticrun.Runner
 	log    *slog.Logger
+	// layout is the panel shape a drill rebuilds a snapshot into.
+	//
+	// The maintenance runner has no panel of its own -- it runs where the
+	// repositories are reachable, not where the accounts live -- so it is
+	// told which one to expect. One fleet running two panels will have to
+	// record the panel against the server a snapshot came from; until a
+	// second panel exists there is nothing to record.
+	layout panel.Layout
 }
 
 // New builds a Runner.
-func New(db *store.Store, v *vault.Vault, restic *resticrun.Runner, log *slog.Logger) *Runner {
+func New(db *store.Store, v *vault.Vault, restic *resticrun.Runner, log *slog.Logger,
+	layout panel.Layout) *Runner {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Runner{store: db, vault: v, restic: restic, log: log}
+	return &Runner{store: db, vault: v, restic: restic, log: log, layout: layout}
 }
 
 // ProvisionPending creates every repository that does not exist yet.

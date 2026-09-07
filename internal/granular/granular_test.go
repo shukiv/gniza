@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shukiv/gniza/internal/layout/cpmove"
 	"github.com/shukiv/gniza/internal/reassemble"
 )
 
@@ -32,7 +33,7 @@ func TestEachKindAsksForTheRightPartOfTheSnapshot(t *testing.T) {
 		{KindSSL, nil, []string{split.Metadata}, true},
 		{KindSettings, nil, []string{split.Metadata}, true},
 	} {
-		plan, err := Build(split, Request{Kind: tc.kind, Account: "studio", Names: tc.names})
+		plan, err := Build(cpmove.Layout{}, split, Request{Kind: tc.kind, Account: "studio", Names: tc.names})
 		if err != nil {
 			t.Errorf("%s: %v", tc.kind, err)
 			continue
@@ -60,7 +61,7 @@ func TestAPathOutsideTheAccountIsRefused(t *testing.T) {
 		"public_html/../../someone-else",
 		"",
 	} {
-		if _, err := Build(split, Request{Kind: KindFiles, Account: "studio", Names: []string{name}}); err == nil {
+		if _, err := Build(cpmove.Layout{}, split, Request{Kind: KindFiles, Account: "studio", Names: []string{name}}); err == nil {
 			t.Errorf("a files restore of %q was accepted", name)
 		}
 	}
@@ -68,7 +69,7 @@ func TestAPathOutsideTheAccountIsRefused(t *testing.T) {
 
 func TestADatabaseIsANameNotAPath(t *testing.T) {
 	for _, name := range []string{"../../etc/passwd", "studio/../..", "a/b"} {
-		if _, err := Build(split, Request{Kind: KindDatabase, Account: "studio", Names: []string{name}}); err == nil {
+		if _, err := Build(cpmove.Layout{}, split, Request{Kind: KindDatabase, Account: "studio", Names: []string{name}}); err == nil {
 			t.Errorf("a database restore of %q was accepted", name)
 		}
 	}
@@ -97,7 +98,7 @@ func TestAnImpossibleRequestFailsRatherThanAskingForNothing(t *testing.T) {
 		{"an unknown kind", split, Request{Kind: "everything", Account: "studio"}},
 		{"no account", split, Request{Kind: KindDNS}},
 	} {
-		if _, err := Build(tc.parts, tc.req); err == nil {
+		if _, err := Build(cpmove.Layout{}, tc.parts, tc.req); err == nil {
 			t.Errorf("%s was accepted", tc.what)
 		}
 	}
@@ -117,7 +118,7 @@ func TestEveryBackupItemHasSomewhereToComeFrom(t *testing.T) {
 		case KindDatabase:
 			req.Names = []string{"studio_kpeh1"}
 		}
-		plan, err := Build(split, req)
+		plan, err := Build(cpmove.Layout{}, split, req)
 		if err != nil {
 			t.Errorf("%s: %v", kind, err)
 			continue
@@ -134,7 +135,7 @@ func TestEveryBackupItemHasSomewhereToComeFrom(t *testing.T) {
 // Database users are staged beside the dumps, so a snapshot's paths do not
 // change when an account gains or loses a database.
 func TestDatabaseUsersComeFromBesideTheDumps(t *testing.T) {
-	plan, err := Build(split, Request{Kind: KindDBUsers, Account: "studio"})
+	plan, err := Build(cpmove.Layout{}, split, Request{Kind: KindDBUsers, Account: "studio"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +162,7 @@ func TestDatabaseUsersComeFromBesideTheDumps(t *testing.T) {
 
 	// A backup with no databases has no users to restore either, and says
 	// so rather than producing an empty file.
-	if _, err := Build(reassemble.Parts{Metadata: "/stage/metadata", Homedir: "/home/studio"},
+	if _, err := Build(cpmove.Layout{}, reassemble.Parts{Metadata: "/stage/metadata", Homedir: "/home/studio"},
 		Request{Kind: KindDBUsers, Account: "studio"}); err == nil {
 		t.Error("database users were promised from a backup that holds none")
 	}
@@ -173,13 +174,13 @@ func TestDatabaseUsersComeFromBesideTheDumps(t *testing.T) {
 // here would otherwise leave the grants file behind in the rebuilt
 // archive with nothing failing.
 func TestTheStagedUsersFileNameMatchesReassemble(t *testing.T) {
-	if DatabaseUsersFile != reassemble.StagedDatabaseUsersFile {
+	if DatabaseUsersFile != cpmove.StagedGrantsFile {
 		t.Fatalf("granular calls it %q, reassemble looks for %q",
-			DatabaseUsersFile, reassemble.StagedDatabaseUsersFile)
+			DatabaseUsersFile, cpmove.StagedGrantsFile)
 	}
-	if RunnableDatabaseUsersFile != reassemble.RunnableDatabaseUsersFile {
+	if RunnableDatabaseUsersFile != cpmove.StagedRunnableFile {
 		t.Fatalf("granular calls it %q, reassemble takes out %q",
-			RunnableDatabaseUsersFile, reassemble.RunnableDatabaseUsersFile)
+			RunnableDatabaseUsersFile, cpmove.StagedRunnableFile)
 	}
 }
 
@@ -225,7 +226,7 @@ func TestADatabaseNameHasToBeOne(t *testing.T) {
 // paths of both come out of the snapshot together, so the account cannot
 // end up with one and not the other.
 func TestABasketAsksForEveryPartOnce(t *testing.T) {
-	plan, err := BuildAll(split, []Request{
+	plan, err := BuildAll(cpmove.Layout{}, split, []Request{
 		{Kind: KindDatabase, Account: "studio", Names: []string{"studio_kpeh1"}},
 		{Kind: KindDBUsers, Account: "studio"},
 		{Kind: KindDNS, Account: "studio"},
@@ -279,13 +280,13 @@ func TestABasketAsksForEveryPartOnce(t *testing.T) {
 // account left with a database and no user for it is the failure the
 // basket exists to prevent.
 func TestABasketWithOneImpossiblePartFailsWhole(t *testing.T) {
-	if _, err := BuildAll(split, []Request{
+	if _, err := BuildAll(cpmove.Layout{}, split, []Request{
 		{Kind: KindDatabase, Account: "studio", Names: []string{"studio_kpeh1"}},
 		{Kind: KindFiles, Account: "studio", Names: []string{"/etc/shadow"}},
 	}); err == nil {
 		t.Error("a basket carrying a path outside the account was accepted")
 	}
-	if _, err := BuildAll(split, nil); err == nil {
+	if _, err := BuildAll(cpmove.Layout{}, split, nil); err == nil {
 		t.Error("an empty basket was accepted")
 	}
 }

@@ -688,7 +688,7 @@ func (e *Engine) itemBytes(ctx context.Context, stored nodestore.Restore) uint64
 			Kind: granular.Kind(selection.Kind), Account: stored.Account, Names: selection.Names,
 		})
 	}
-	plan, err := granular.BuildAll(parts, requests)
+	plan, err := granular.BuildAll(e.provider.Layout(), parts, requests)
 	if err != nil || len(plan.Include) == 0 {
 		return 0
 	}
@@ -1251,6 +1251,7 @@ func (e *Engine) Drill(ctx context.Context, repositoryID, account string) (
 		SnapshotID: newest.ID,
 		WorkDir:    dir.Path,
 		Repo:       repo,
+		Layout:     e.provider.Layout(),
 		// The tar answers nothing the tree does not, and costs the same
 		// disk again to write.
 		TreeOnly: true,

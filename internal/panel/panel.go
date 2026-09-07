@@ -99,6 +99,11 @@ type StageRequest struct {
 
 // Provider produces backup payloads for accounts.
 type Provider interface {
+	// Layout says where this panel keeps the parts of an account, both
+	// inside the archive its restore reads and inside the metadata a
+	// single-item restore takes things out of.
+	Layout() Layout
+
 	// NativeExcludes is what the panel's own backups would leave out of
 	// this account -- on cPanel, the server-wide cpbackup-exclude.conf
 	// and the account's own. An operator who wrote a path in there has said it

@@ -17,14 +17,14 @@ import (
 // its databases are inside pkgacct's own archive, where nothing here can
 // see them without unpacking cPanel's format.
 func (r Result) Databases() []string {
-	if r.Mode == pkgacct.ModeMonolithic || r.TreeDir == "" {
+	if r.Mode == pkgacct.ModeMonolithic || r.TreeDir == "" || r.Layout == nil {
 		return nil
 	}
-	root, err := soleDirectory(r.TreeDir)
+	root, err := r.Layout.AccountRoot(r.TreeDir, r.Account)
 	if err != nil {
 		return nil
 	}
-	entries, err := os.ReadDir(filepath.Join(root, DatabaseDir))
+	entries, err := os.ReadDir(filepath.Join(root, r.Layout.DatabaseDir()))
 	if err != nil {
 		return nil
 	}
@@ -86,14 +86,17 @@ func Verify(rebuilt Result) ([]string, error) {
 		return passed, nil
 	}
 
-	root, err := soleDirectory(rebuilt.TreeDir)
+	if rebuilt.Layout == nil {
+		return passed, fmt.Errorf("reassemble: this restore records no panel layout to check it against")
+	}
+	root, err := rebuilt.Layout.AccountRoot(rebuilt.TreeDir, rebuilt.Account)
 	if err != nil {
 		return passed, err
 	}
 	passed = append(passed, "account tree present")
 
 	if !skipped["homedir"] {
-		homedir := filepath.Join(root, HomedirDir)
+		homedir := filepath.Join(root, rebuilt.Layout.HomedirDir())
 		files, err := countFiles(homedir)
 		if err != nil {
 			return passed, fmt.Errorf("reassemble: home directory: %w", err)
@@ -108,7 +111,7 @@ func Verify(rebuilt Result) ([]string, error) {
 	// cannot be optional is a backup that was taken with databases and
 	// came back without them -- that is the case this used to read as
 	// "the account has none".
-	dumps, err := os.ReadDir(filepath.Join(root, DatabaseDir))
+	dumps, err := os.ReadDir(filepath.Join(root, rebuilt.Layout.DatabaseDir()))
 	if err != nil && !os.IsNotExist(err) {
 		return passed, fmt.Errorf("reassemble: database directory: %w", err)
 	}
@@ -117,7 +120,7 @@ func Verify(rebuilt Result) ([]string, error) {
 		if dump.IsDir() || !strings.HasSuffix(dump.Name(), ".sql") {
 			continue
 		}
-		path := filepath.Join(root, DatabaseDir, dump.Name())
+		path := filepath.Join(root, rebuilt.Layout.DatabaseDir(), dump.Name())
 		body, err := os.ReadFile(path)
 		if err != nil {
 			return passed, fmt.Errorf("reassemble: read dump %s: %w", dump.Name(), err)

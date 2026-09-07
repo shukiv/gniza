@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shukiv/gniza/internal/layout/cpmove"
 	"github.com/shukiv/gniza/internal/pkgacct"
 	"github.com/shukiv/gniza/internal/resticrun"
 )
@@ -132,6 +133,7 @@ func TestRunSplitRebuildsCpmoveTree(t *testing.T) {
 	workDir := filepath.Join(root, "work")
 
 	result, err := Run(context.Background(), restorer, Request{
+		Layout:  cpmove.Layout{},
 		Account: "customer1", SnapshotID: "40dc15203b1cf9aa", WorkDir: workDir,
 	})
 	if err != nil {
@@ -148,10 +150,10 @@ func TestRunSplitRebuildsCpmoveTree(t *testing.T) {
 	// archive's own top-level directory.
 	tree := filepath.Join(workDir, "tree", "cpmove-customer1")
 	for path, want := range map[string]string{
-		filepath.Join(tree, "version"):                               "6\n",
-		filepath.Join(tree, "meta", "user"):                          "customer1\n",
-		filepath.Join(tree, HomedirDir, "public_html", "index.html"): "<h1>hello</h1>",
-		filepath.Join(tree, DatabaseDir, "customer1_wp.sql"):         "CREATE TABLE posts (id int);\n",
+		filepath.Join(tree, "version"):                                      "6\n",
+		filepath.Join(tree, "meta", "user"):                                 "customer1\n",
+		filepath.Join(tree, cpmove.HomedirDir, "public_html", "index.html"): "<h1>hello</h1>",
+		filepath.Join(tree, cpmove.DatabaseDir, "customer1_wp.sql"):         "CREATE TABLE posts (id int);\n",
 	} {
 		body, err := os.ReadFile(path)
 		if err != nil {
@@ -180,6 +182,7 @@ func TestRunSplitRestoresPartsByDiscoveredRole(t *testing.T) {
 	restorer, root := buildSplitSnapshot(t)
 
 	if _, err := Run(context.Background(), restorer, Request{
+		Layout:  cpmove.Layout{},
 		Account: "customer1", SnapshotID: "40dc1520",
 		WorkDir: filepath.Join(root, "work"),
 	}); err != nil {
@@ -204,6 +207,7 @@ func TestRunSplitRestoresPartsByDiscoveredRole(t *testing.T) {
 func TestRunRejectsSnapshotFromAnotherAccount(t *testing.T) {
 	restorer, root := buildSplitSnapshot(t)
 	_, err := Run(context.Background(), restorer, Request{
+		Layout:  cpmove.Layout{},
 		Account: "customer2", SnapshotID: "40dc15203b1cf9aa",
 		WorkDir: filepath.Join(root, "work"),
 	})
@@ -220,6 +224,7 @@ func TestRunRejectsSnapshotFromAnotherAccount(t *testing.T) {
 	restorer.snapshot.Tags = []string{"account:customer1", "mode:split"}
 	unfiltered := &fakeRestorer{snapshot: restorer.snapshot, source: restorer.source}
 	if _, err := Run(context.Background(), unfilteredAll{unfiltered}, Request{
+		Layout:  cpmove.Layout{},
 		Account: "customer2", SnapshotID: "40dc15203b1cf9aa",
 		WorkDir: filepath.Join(root, "work2"),
 	}); err == nil {
@@ -273,14 +278,15 @@ func TestSoleArchiveAndDirectory(t *testing.T) {
 	}
 
 	tree := t.TempDir()
-	if _, err := soleDirectory(tree); err == nil {
-		t.Error("an archive with no top-level directory is not a cpmove tree")
+	layout := cpmove.Layout{}
+	if _, err := layout.AccountRoot(tree, "x"); err == nil {
+		t.Error("an archive with no top-level directory is not an account tree")
 	}
 	if err := os.Mkdir(filepath.Join(tree, "cpmove-x"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := soleDirectory(tree); err != nil || filepath.Base(got) != "cpmove-x" {
-		t.Errorf("soleDirectory = %q, %v", got, err)
+	if got, err := layout.AccountRoot(tree, "x"); err != nil || filepath.Base(got) != "cpmove-x" {
+		t.Errorf("AccountRoot = %q, %v", got, err)
 	}
 }
 
@@ -378,6 +384,7 @@ func TestReassemblyNamesEachStageItIsWorkingOn(t *testing.T) {
 	var stages []string
 
 	_, err := Run(context.Background(), restorer, Request{
+		Layout:  cpmove.Layout{},
 		Account: "customer1", SnapshotID: "40dc15203b1cf9aa",
 		WorkDir: filepath.Join(root, "work"),
 		OnStage: func(stage string) { stages = append(stages, stage) },

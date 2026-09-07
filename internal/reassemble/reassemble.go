@@ -61,6 +61,16 @@ type Request struct {
 	// part is being read now. It runs on the goroutine reading restic's
 	// output, so it must not block.
 	OnProgress func(resticrun.RestoreProgress)
+	// TreeOnly stops after the account tree, without repacking it.
+	//
+	// A rehearsal asks whether this backup can be turned back into an
+	// account, and the tree answers that. The tar is a second full copy
+	// on the same disk, and asking for it is why a 48.7 GiB account could
+	// not be rehearsed on a server with 63 GiB free. cPanel's own restore
+	// takes a directory as readily as an archive -- see restorepkg's
+	// usage, which lists /path/to/extracted-cpuser-file -- so the archive
+	// is for whoever asked to download one.
+	TreeOnly bool
 }
 
 // stage says what is happening now, for a caller that wants to show it.
@@ -77,6 +87,15 @@ type Result struct {
 	// TreeDir is the extracted tree the archive was built from, kept so an
 	// operator can inspect it.
 	TreeDir string
+	// RootDir is the cpmove directory inside that tree -- the account
+	// itself, as cPanel lays one out.
+	//
+	// restorepkg takes it as readily as an archive: its usage lists
+	// "/path/to/extracted-cpuser-file", and it copies whatever it is
+	// given into a temporary directory of its own either way. Handing it
+	// the directory saves building a tar that would be a second full
+	// copy of the account on the same disk.
+	RootDir string
 	// Mode records which payload shape was restored.
 	Mode pkgacct.Mode
 	// BytesRestored is what restic reported across every part.
@@ -330,15 +349,20 @@ func restoreSplit(ctx context.Context, restorer Restorer, req Request,
 		}
 	}
 
-	// 4. Repack, which is the form restorepkg accepts.
-	rebuilt := filepath.Join(req.WorkDir, filepath.Base(root)+".tar")
-	req.stage("building the account archive")
-	if err := createTar(treeDir, rebuilt); err != nil {
-		return Result{}, err
+	// 4. Repack, for a caller that asked for an archive. A rehearsal did
+	//    not, and the tar would double what it needs on disk.
+	var rebuilt string
+	if !req.TreeOnly {
+		rebuilt = filepath.Join(req.WorkDir, filepath.Base(root)+".tar")
+		req.stage("building the account archive")
+		if err := createTar(treeDir, rebuilt); err != nil {
+			return Result{}, err
+		}
 	}
 	return Result{
 		ArchivePath:   rebuilt,
 		TreeDir:       treeDir,
+		RootDir:       root,
 		Mode:          pkgacct.ModeSplit,
 		BytesRestored: bytesRestored,
 	}, nil

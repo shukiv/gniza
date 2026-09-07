@@ -542,7 +542,8 @@ func (e *Engine) runRestore(ctx context.Context, stored nodestore.Restore) error
 	if err != nil {
 		return e.failRestore(stored, err.Error())
 	}
-	account.SizeBytes = restoreStagingEstimate(stored.Kind, account.SizeBytes, snapshotBytes)
+	account.SizeBytes = restoreStagingEstimate(stored.Kind, account.SizeBytes, snapshotBytes,
+		e.itemBytes(ctx, stored))
 
 	now := time.Now().UTC()
 	stored.Status = job.StatusRunning
@@ -641,15 +642,121 @@ func (e *Engine) snapshotBytes(ctx context.Context, repositoryID, account, snaps
 	return 0, fmt.Errorf("node: snapshot %s does not belong to %s", snapshotID, account)
 }
 
-// restoreStagingEstimate accounts for the peak shape of a whole-account
-// reassembly. At its fullest, the extracted account tree and the cpmove tar
-// built from it coexist. The extra GiB follows cPanel's own pkgacct space
-// guidance and gives metadata and filesystem bookkeeping somewhere to go.
-func restoreStagingEstimate(_ string, liveBytes, snapshotBytes uint64) uint64 {
+// itemBytes is what the parts of an account this restore asks for come
+// to, according to the backup itself. Zero when the backup cannot be
+// asked, which is not an error: the caller then keeps the whole-account
+// figure, which is always enough.
+func (e *Engine) itemBytes(ctx context.Context, stored nodestore.Restore) uint64 {
+	switch stored.Kind {
+	case protocol.RestoreItems:
+	case protocol.RestoreFiles:
+		// Named files out of a backup, which is the other restore that
+		// takes a small part of a large account.
+		return e.pathBytes(ctx, stored, stored.IncludePaths)
+	default:
+		return 0
+	}
+	selections := restoreSelections(stored)
+	if len(selections) == 0 && stored.ItemKind != "" {
+		selections = []protocol.RestoreSelection{{Kind: stored.ItemKind, Names: stored.ItemNames}}
+	}
+	if len(selections) == 0 {
+		return 0
+	}
+	snapshots, err := e.Snapshots(ctx, stored.RepositoryID, stored.Account)
+	if err != nil {
+		return 0
+	}
+	var snapshot resticrun.Snapshot
+	for _, candidate := range snapshots {
+		if candidate.ID == stored.SnapshotID {
+			snapshot = candidate
+			break
+		}
+	}
+	if snapshot.ID == "" {
+		return 0
+	}
+	parts, err := reassemble.Classify(snapshot.Paths)
+	if err != nil {
+		return 0
+	}
+	requests := make([]granular.Request, 0, len(selections))
+	for _, selection := range selections {
+		requests = append(requests, granular.Request{
+			Kind: granular.Kind(selection.Kind), Account: stored.Account, Names: selection.Names,
+		})
+	}
+	plan, err := granular.BuildAll(parts, requests)
+	if err != nil || len(plan.Include) == 0 {
+		return 0
+	}
+	return e.pathBytes(ctx, stored, plan.Include)
+}
+
+// pathBytes asks the backup what these paths come to.
+func (e *Engine) pathBytes(ctx context.Context, stored nodestore.Restore, paths []string) uint64 {
+	if len(paths) == 0 {
+		return 0
+	}
+	repo, err := e.OpenRepository(stored.RepositoryID, false)
+	if err != nil {
+		return 0
+	}
+	entries, err := e.runner.Ls(ctx, repo, stored.SnapshotID, paths...)
+	if err != nil {
+		// A listing too large to take at once, or a backend that would
+		// not answer. Either way the account's own figure stands.
+		e.log.Debug("could not size what is being restored",
+			"account", stored.Account, "error", errorText(err))
+		return 0
+	}
+	return sizeOfEntries(entries)
+}
+
+// sizeOfEntries is what a listing comes to, and zero when it cannot be
+// known from the listing alone.
+//
+// "restic ls" without --recursive lists a directory's direct children, so
+// a directory in the answer means there is more underneath that was not
+// counted. Summing anyway would size a 30 GiB folder from the few
+// kilobytes of files at its top and hand the restore scratch space it
+// cannot possibly fit in -- filling a volume on a live cPanel server,
+// which is worse than the over-refusal this replaces. So any directory
+// means the account's own figure stands.
+func sizeOfEntries(entries []resticrun.Entry) uint64 {
+	var total uint64
+	for _, entry := range entries {
+		if entry.IsDir() {
+			return 0
+		}
+		total += entry.Size
+	}
+	return total
+}
+
+// restoreStagingEstimate is the scratch space this restore needs at its
+// fullest, which depends on what it is going to write.
+//
+// A whole-account restore writes the account tree and then a second copy
+// of it: either the tar it repacks, or the copy restorepkg makes beside
+// whatever it is handed. Two copies.
+//
+// A restore of one item writes that item. Sizing it as a whole account
+// made taking one 800 KiB database out of a 48.7 GiB account ask for
+// 176.5 GiB, which no server that account lives on is going to have --
+// so the feature was unusable on exactly the accounts that need it.
+// itemBytes is what the backup says those items come to; zero means the
+// backup could not be asked, and then the account's own figure stands
+// rather than a guess that would fill the volume.
+func restoreStagingEstimate(kind string, liveBytes, snapshotBytes, itemBytes uint64) uint64 {
 	if snapshotBytes == 0 {
 		return 0
 	}
-	return reassemble.StagingBytes(max(liveBytes, snapshotBytes))
+	if kind == protocol.RestoreItems && itemBytes > 0 {
+		return reassemble.ArchiveBytes(itemBytes)
+	}
+	return reassemble.ArchiveBytes(max(liveBytes, snapshotBytes))
 }
 
 // runDrill rehearses a restore and records what it proved.
@@ -1122,7 +1229,10 @@ func (e *Engine) Drill(ctx context.Context, repositoryID, account string) (
 	if err != nil {
 		return nil, nil, err
 	}
-	dir, err := e.staging.Allocate("drill-"+account, reassemble.StagingBytes(sourceBytes))
+	// A rehearsal stops at the tree, so it needs room for one copy of the
+	// account rather than two. Asking for two is what stopped a 48.7 GiB
+	// account being rehearsed on a server with 63 GiB free.
+	dir, err := e.staging.Allocate("drill-"+account, reassemble.TreeBytes(sourceBytes))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1137,6 +1247,9 @@ func (e *Engine) Drill(ctx context.Context, repositoryID, account string) (
 		SnapshotID: newest.ID,
 		WorkDir:    dir.Path,
 		Repo:       repo,
+		// The tar answers nothing the tree does not, and costs the same
+		// disk again to write.
+		TreeOnly: true,
 	})
 	if err != nil {
 		return nil, nil, err

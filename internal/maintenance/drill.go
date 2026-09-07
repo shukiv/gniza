@@ -95,7 +95,8 @@ func (r *Runner) Drill(ctx context.Context, req DrillRequest) (DrillResult, erro
 		if err != nil {
 			return "", err
 		}
-		if required := reassemble.StagingBytes(sourceBytes); available < required {
+		// A drill stops at the tree, so it is one copy rather than two.
+		if required := reassemble.TreeBytes(sourceBytes); available < required {
 			return "", &staging.ErrInsufficientSpace{Required: required, Available: available}
 		}
 
@@ -103,6 +104,7 @@ func (r *Runner) Drill(ctx context.Context, req DrillRequest) (DrillResult, erro
 			Account:    account,
 			SnapshotID: snapshotID,
 			WorkDir:    workDir,
+			TreeOnly:   true,
 			Repo:       repo,
 		})
 		if err != nil {

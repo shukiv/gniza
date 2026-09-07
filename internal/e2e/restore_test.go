@@ -246,8 +246,16 @@ func TestRestoreAppliesWhenAsked(t *testing.T) {
 	if len(h.provider.Applied) != 1 {
 		t.Fatalf("restorepkg was invoked %d times, want once", len(h.provider.Applied))
 	}
-	if !strings.HasSuffix(h.provider.Applied[0], ".tar") {
-		t.Errorf("restorepkg was handed %q, want a cpmove archive", h.provider.Applied[0])
+	// The account directory, not a tar of it. restorepkg takes either and
+	// copies whatever it is given into a temporary directory of its own,
+	// so repacking first would put a second full copy of the account on
+	// the same disk for nothing.
+	handed := h.provider.Applied[0]
+	if filepath.Base(handed) != "cpmove-customer1" {
+		t.Errorf("restorepkg was handed %q, want the extracted account directory", handed)
+	}
+	if info, err := os.Stat(handed); err != nil || !info.IsDir() {
+		t.Errorf("restorepkg was handed something that is not a directory: %q (%v)", handed, err)
 	}
 }
 

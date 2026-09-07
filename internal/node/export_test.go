@@ -17,7 +17,7 @@ func (e *Engine) RetentionIsThrottledForTest(repo nodestore.Repository) bool {
 // RestoreStagingEstimateForTest exposes the pure sizing rule to the
 // external-package tests without making it part of the production API.
 func RestoreStagingEstimateForTest(kind string, liveBytes, snapshotBytes uint64) uint64 {
-	return restoreStagingEstimate(kind, liveBytes, snapshotBytes)
+	return restoreStagingEstimate(kind, liveBytes, snapshotBytes, 0)
 }
 
 // BackupMessage is what a finished run would be announced as, with the

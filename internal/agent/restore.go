@@ -63,7 +63,7 @@ func (a *Agent) RunRestore(ctx context.Context, assignment protocol.RestoreAssig
 		report.Error = err.Error()
 		return report
 	}
-	estimate := max(assignment.SizeEstimate, reassemble.StagingBytes(sourceBytes))
+	estimate := max(assignment.SizeEstimate, reassemble.ArchiveBytes(sourceBytes))
 	// The key carries the kind as well as the account: a granular restore
 	// and a whole-account rebuild are different output, and one must not
 	// silently replace the other while somebody is downloading it.
@@ -195,14 +195,21 @@ func (a *Agent) restoreAccount(ctx context.Context, log *slog.Logger,
 		Repo:       repo,
 		OnStage:    watch.StageFunc(),
 		OnProgress: watch.ProgressFunc(),
+		// A restore that goes straight to cPanel needs no tar: restorepkg
+		// takes the account directory, and copies whatever it is given
+		// into a temporary directory of its own either way. Repacking
+		// first would put a second full copy of the account on the same
+		// disk for nothing. A restore left to collect is the other way
+		// round -- one file is what somebody downloads.
+		TreeOnly: assignment.Apply,
 	})
 	if err != nil {
 		log.Error("rebuild account archive", "error", err)
 		return reassemble.Result{}, err
 	}
 	log.Info("account archive rebuilt",
-		"archive", result.ArchivePath, "mode", result.Mode,
-		"bytes_restored", result.BytesRestored)
+		"archive", result.ArchivePath, "account_dir", result.RootDir,
+		"mode", result.Mode, "bytes_restored", result.BytesRestored)
 
 	if !assignment.Apply {
 		// The default. An operator inspects the archive and applies it
@@ -223,12 +230,13 @@ func (a *Agent) restoreAccount(ctx context.Context, log *slog.Logger,
 		Unrestricted: assignment.Unrestricted,
 		Overwrite:    lookupErr == nil,
 	}
+	handOver := handOverPath(result)
 	log.Warn("applying restore to the live account",
-		"archive", result.ArchivePath, "restricted", !options.Unrestricted)
+		"handing_over", handOver, "restricted", !options.Unrestricted)
 	// The longest stage restic cannot count: cPanel's own restore reports
 	// nothing until it is finished.
-	watch.Stage("handing the archive to cPanel's restore")
-	transcript, err := a.provider.Apply(ctx, result.ArchivePath, options)
+	watch.Stage("handing the account to cPanel's restore")
+	transcript, err := a.provider.Apply(ctx, handOver, options)
 	if err != nil {
 		log.Error("restorepkg", "error", err, "transcript", transcript)
 		return reassemble.Result{}, err
@@ -379,4 +387,20 @@ func (a *Agent) restoreSource(assignment protocol.RestoreAssignment) (resticrun.
 		Path:     assignment.Source.RepoPath,
 		Password: assignment.Source.RepoPassword,
 	}, nil
+}
+
+// handOverPath is what cPanel's restore is given: the extracted account
+// where there is one, and the archive otherwise.
+//
+// restorepkg takes either -- its usage lists
+// "/path/to/extracted-cpuser-file" beside the archive forms -- and copies
+// whatever it is given into a temporary directory of its own. Handing it
+// the directory saves building a tar that would be a second full copy of
+// the account on the same disk. A monolithic snapshot has no tree: it is
+// cPanel's own archive, restored as one file.
+func handOverPath(rebuilt reassemble.Result) string {
+	if rebuilt.RootDir != "" {
+		return rebuilt.RootDir
+	}
+	return rebuilt.ArchivePath
 }

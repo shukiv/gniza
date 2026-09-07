@@ -229,13 +229,22 @@ func (f *Fake) Stage(ctx context.Context, req StageRequest) (pkgacct.Payload, er
 // to read them from.
 func (f *Fake) NativeExcludes(string) []string { return f.Excludes }
 
+// Apply stands in for restorepkg, which takes an account archive or the
+// extracted account directory -- its usage lists both, and it copies
+// whichever it is given into a temporary directory of its own. A
+// directory is checked for the cpuser file restorepkg reads to know whose
+// account it is, because a directory without one is what restorepkg
+// refuses.
 func (f *Fake) Apply(_ context.Context, archivePath string, options ApplyOptions) (string, error) {
 	info, err := os.Stat(archivePath)
 	if err != nil {
 		return "", fmt.Errorf("cpanel: restore archive: %w", err)
 	}
 	if info.IsDir() {
-		return "", fmt.Errorf("cpanel: restore archive %s is a directory", archivePath)
+		if _, err := os.Stat(filepath.Join(archivePath, "meta", "user")); err != nil {
+			return "", fmt.Errorf(
+				"cpanel: %s is not an extracted account: no cpanel user file in it", archivePath)
+		}
 	}
 	f.AppliedWith = append(f.AppliedWith, options)
 	f.Applied = append(f.Applied, archivePath)

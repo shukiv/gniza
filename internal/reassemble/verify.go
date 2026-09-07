@@ -63,14 +63,22 @@ func Verify(rebuilt Result) ([]string, error) {
 			", so this is not a backup of the whole account")
 	}
 
-	info, err := os.Stat(rebuilt.ArchivePath)
-	if err != nil {
-		return passed, fmt.Errorf("reassemble: rebuilt archive is missing: %w", err)
+	// A rehearsal is run without repacking the tree, because the tar
+	// answers nothing the tree does not and costs the same disk again.
+	// There is then no archive to check, and claiming one would be a
+	// check that never ran.
+	if rebuilt.ArchivePath != "" {
+		info, err := os.Stat(rebuilt.ArchivePath)
+		if err != nil {
+			return passed, fmt.Errorf("reassemble: rebuilt archive is missing: %w", err)
+		}
+		if info.Size() == 0 {
+			return passed, fmt.Errorf("reassemble: rebuilt archive is empty")
+		}
+		passed = append(passed, "archive present")
+	} else if rebuilt.TreeDir == "" {
+		return passed, fmt.Errorf("reassemble: the restore produced neither an archive nor a tree")
 	}
-	if info.Size() == 0 {
-		return passed, fmt.Errorf("reassemble: rebuilt archive is empty")
-	}
-	passed = append(passed, "archive present")
 
 	if rebuilt.Mode == pkgacct.ModeMonolithic {
 		// There is nothing to reassemble, so the archive itself is the

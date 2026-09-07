@@ -1,0 +1,74 @@
+{{define "content"}}
+{{$data := .Data}}
+<section class="cpr-user-heading">
+  <div>
+    <p class="cpr-eyebrow">Account backup</p>
+    <h1>What has happened</h1>
+    <p class="cpr-sub">Every backup taken of <b>{{$data.Account}}</b>, and every recovery asked for
+    from it. This is your account's own record and nobody else can see it.</p>
+  </div>
+  {{if $data.TotalPoints}}<a class="cpr-btn cpr-user-cta" href="browse.live.php">Choose a restore point</a>{{end}}
+</section>
+
+{{with $data.Err}}
+<div class="cpr-banner cpr-warn"><div class="cpr-body">{{.}}</div></div>
+{{end}}
+
+<section class="cpr-card">
+  <div class="cpr-pad cpr-user-section-head">
+    <h2>Backups of your account</h2>
+    <p class="cpr-hint">Your host controls when these run and how long they are kept.</p>
+  </div>
+  {{if $data.Backups}}
+  <div class="cpr-tablewrap"><table>
+    <thead><tr><th>When</th><th>Result</th><th>Not in this backup</th></tr></thead>
+    <tbody>
+      {{range $data.Backups}}
+      <tr class="cpr-state {{if .Bad}}cpr-s-bad{{else if .Missing}}cpr-s-warn{{else}}cpr-s-ok{{end}}">
+        <td style="white-space:nowrap">{{stamp .When}}<div class="cpr-sublabel">{{agoTime .When}}</div></td>
+        <td>{{.Outcome}}{{if .Kept}}<div class="cpr-sublabel">A restore point for the whole account.</div>{{end}}</td>
+        <td>
+          {{if .Missing}}
+          {{range .Missing}}<div class="cpr-acct">{{.}}</div>{{end}}
+          <div class="cpr-sublabel">Everything else was stored. Ask your host why these were left out.</div>
+          {{else}}<span class="cpr-muted">Nothing</span>{{end}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table></div>
+  {{else}}
+  <div class="cpr-empty"><p><b>No backup has run for this account yet.</b><br>Your host sets the schedule.</p></div>
+  {{end}}
+</section>
+
+<section class="cpr-card" style="margin-top:var(--s4)">
+  <div class="cpr-pad cpr-user-section-head">
+    <h2>Recovery activity</h2>
+    <p class="cpr-hint">What you asked to be put back or prepared for download.</p>
+  </div>
+  {{if $data.Restores}}
+  <div class="cpr-tablewrap" data-live="user-restores"><table>
+    <thead><tr><th>Requested</th><th>Contents</th><th>What was done</th><th>Status</th><th class="cpr-right"><span class="cpr-visually-hidden">Download</span></th></tr></thead>
+    <tbody>
+      {{range $data.Restores}}
+      <tr class="cpr-state {{template "runstripe" .Status}}" {{if not .Status.Terminal}}data-running="1"{{end}}>
+        <td style="white-space:nowrap">{{stamp .QueuedAt}}<div class="cpr-sublabel">{{agoTime .QueuedAt}}</div></td>
+        <td class="cpr-acct">{{$data.RestoreTitle .}}</td>
+        <td>{{if .Apply}}Restore into the account{{else}}Copy to download{{end}}
+          {{if and .Applied .Detail}}<div class="cpr-sublabel">{{.Detail}}</div>{{end}}</td>
+        <td>{{template "runstate" .Status}}</td>
+        <td class="cpr-right"><div class="cpr-actions">
+          {{if .Collectable}}<a class="cpr-btn cpr-primary" href="download.live.php?id={{.ID}}">Download package</a>
+          {{else if .Applied}}<span class="cpr-sublabel">Nothing to download: it is in your account.</span>
+          {{else if .Error}}<span class="cpr-sublabel">{{.Error}}</span>{{end}}
+        </div></td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table></div>
+  {{else}}
+  <div class="cpr-empty"><p>No recovery has been asked for from this account.</p></div>
+  {{end}}
+</section>
+{{end}}

@@ -159,6 +159,24 @@ func (e *Engine) BelongsToCurrentHolder(restore nodestore.Restore) bool {
 	return !restore.AccountSince.Before(stored.SinceAt)
 }
 
+// BackupBelongsToCurrentHolder says whether a backup run is the present
+// account's to see.
+//
+// The same boundary as BelongsToCurrentHolder, asked of a run rather than
+// a restore. A run carries no incarnation of its own, so it is judged by
+// when it was queued -- which is what a restore written before restores
+// carried one is judged by too.
+//
+// It matters because a run names what it could not store, and those names
+// are the last customer's database names.
+func (e *Engine) BackupBelongsToCurrentHolder(run nodestore.Job) bool {
+	stored, err := e.store.Identity(run.Account)
+	if err != nil || !stored.Recycled {
+		return true
+	}
+	return run.QueuedAt.After(stored.SinceAt)
+}
+
 func (e *Engine) visibleSince(account string) time.Time {
 	stored, err := e.store.Identity(account)
 	if err != nil || !stored.Recycled {

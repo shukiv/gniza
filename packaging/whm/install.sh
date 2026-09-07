@@ -384,12 +384,12 @@ fi
 # cPanel runs these as the account they belong to, which is the whole
 # point: the service reads who is asking from the socket rather than from
 # anything the page says. Installed by copying, because a plugin that is
-# four PHP files and one menu entry does not need a tarball and a script
-# that unpacks it.
+# a handful of PHP files and one menu entry does not need a tarball and a
+# script that unpacks it.
 FRONTEND=/usr/local/cpanel/base/frontend/jupiter
 if [ -d "$FRONTEND" ]; then
     install -d -m 755 "$FRONTEND/gniza"
-    for page in index.live.php browse.live.php restore.live.php download.live.php proxy.php; do
+    for page in index.live.php browse.live.php logs.live.php restore.live.php download.live.php proxy.php; do
         if [ -f "$SOURCE_DIR/cpanel/$page" ]; then
             install -m 644 "$SOURCE_DIR/cpanel/$page" "$FRONTEND/gniza/$page"
         fi

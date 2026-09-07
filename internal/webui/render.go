@@ -198,8 +198,11 @@ func (s *Server) renderUser(w http.ResponseWriter, r *http.Request, name string,
 	w.Header().Set("Cache-Control", "no-store, max-age=0")
 	w.Header().Set("Pragma", "no-cache")
 	nav := "overview"
-	if name == "user_browse.html" {
+	switch name {
+	case "user_browse.html":
 		nav = "restore"
+	case "user_logs.html":
+		nav = "logs"
 	}
 	s.renderWithCSRF(w, r, name, "Backups", nav, data, s.userCSRFToken(accountOf(r)))
 }

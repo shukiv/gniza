@@ -24,6 +24,7 @@
     <nav class="cpr-usernav" aria-label="Backup pages">
       <a href="index.live.php" {{if eq .Nav "overview"}}aria-current="page"{{end}}>Overview</a>
       <a href="browse.live.php" {{if eq .Nav "restore"}}aria-current="page"{{end}}>Restore &amp; download</a>
+      <a href="logs.live.php" {{if eq .Nav "logs"}}aria-current="page"{{end}}>Logs</a>
     </nav>
     <span class="cpr-user-account" title="Signed-in cPanel account">{{.Data.Account}}</span>
     <div class="cpr-theme" id="theme" hidden aria-label="Colour theme">

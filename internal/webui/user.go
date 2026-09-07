@@ -185,6 +185,7 @@ func (s *Server) UserHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.userPage(s.handleUserHome))
 	mux.HandleFunc("GET /browse", s.userPage(s.handleUserBrowse))
+	mux.HandleFunc("GET /logs", s.userPage(s.handleUserLogs))
 	mux.HandleFunc("POST /restore", s.userPage(s.userGuard(s.handleUserRestore)))
 	mux.HandleFunc("GET /download", s.userPage(s.handleUserDownload))
 
@@ -272,11 +273,13 @@ type userView struct {
 	Account      string
 	Repositories []userRepository
 	Restores     []restoreRow
-	Kinds        []granular.Kind
-	Err          string
-	TotalPoints  int
-	Ready        int
-	Latest       time.Time
+	// Backups is this account's own backup history, on the logs page.
+	Backups     []userBackupRow
+	Kinds       []granular.Kind
+	Err         string
+	TotalPoints int
+	Ready       int
+	Latest      time.Time
 
 	// The browser, when one is open.
 	Repository string

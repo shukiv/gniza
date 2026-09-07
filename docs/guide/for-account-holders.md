@@ -61,6 +61,32 @@ handing back part of one would hand back a file that is not the one in the
 backup. The FTP list shows the login name and its directory and never the
 password hash beside them.
 
+## The Logs tab
+
+Three tabs now: **Overview**, **Restore & download**, and **Logs**. The last
+one answers the question customers actually open the tile to ask — *was my
+site backed up last night* — without anybody having to ask their host.
+
+It is their own account's record and nothing else. Two tables:
+
+- **Backups of your account**: when each run happened, whether it worked,
+  and what is **not in this backup**. A run that stored everything but one
+  database reads as *Backed up, without everything* rather than as a
+  success or a failure, because it is neither, and it does not claim to be
+  a restore point for the whole account.
+- **Recovery activity**: the same restores the overview shows, in full
+  rather than only the ones with a package still waiting to be collected.
+
+What a customer is *not* shown is the reason something was left out. That
+line is command output — it names the server's paths, the destination's
+address and the software that failed — so only the thing itself survives:
+`database studio_wp`, never the `mysqldump` line under it. The same rule
+already governs a failed restore, which reaches the customer as a sentence
+they can act on rather than the operator's diagnostics.
+
+The server's own log is not here and never will be. That is what
+[Logs](logs.md) in WHM is for, behind the root-only socket.
+
 ## Watching one run
 
 The customer's page carries the same strip as the operator's, showing only

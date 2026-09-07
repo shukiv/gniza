@@ -6,10 +6,10 @@ import (
 )
 
 // MaxIssueURLBytes is how long a prefilled issue link is allowed to get.
-// Browsers and servers each stop reading a URL somewhere, and the limits
-// are neither published nor the same, so this is well under the lowest of
-// them: a link that arrives whole matters more than one that carries every
-// last line.
+// Measured against the tracker rather than guessed: it answers 414 above
+// about 8 KiB and starts failing before that, while a link of this length
+// is served. A link that arrives whole matters more than one that carries
+// every last line, so this stays well under where the trouble starts.
 const MaxIssueURLBytes = 6000
 
 // cutNotice is what replaces the part that did not fit. It is in the issue
@@ -28,17 +28,25 @@ const cutNotice = "\n\n_(cut short to fit in a link — the full report is the f
 func (r Report) IssueURL() string {
 	trimmed := r
 	trimmed.Sections = append([]Section(nil), r.Sections...)
-	// Shrink against the untrimmed link. Measuring the capped one instead
-	// would always say it fits, because capping is what NewIssueURL does
-	// -- and it cuts from the end, which is the newest part of a log.
-	for len(buildIssue(trimmed.Subject, trimmed.Markdown())) > MaxIssueURLBytes && trimmed.shrink() {
+	for !trimmed.fits() && trimmed.shrink() {
 	}
 	return NewIssueURL(trimmed.Subject, trimmed.Markdown())
 }
 
-// shrink takes the oldest half of the longest section away, and drops a
-// section once halving it is no longer worth the heading. It reports
-// whether there was anything left to give.
+// fits reports whether the whole report goes into a link untrimmed. It
+// measures the uncapped link, because capping is what NewIssueURL does and
+// asking it would always answer yes.
+func (r Report) fits() bool {
+	return len(buildIssue(r.Subject, r.Markdown())) <= MaxIssueURLBytes
+}
+
+// shrink cuts the longest section down to the most of its newest lines
+// that still leave the link whole, and drops it if not one line does. It
+// reports whether there was anything left to give.
+//
+// The size is searched for rather than halved: halving lands wherever the
+// halves happen to fall and throws away lines there was room for, which on
+// a service log is the difference between a dozen lines and sixty.
 func (r *Report) shrink() bool {
 	longest, size := -1, 0
 	for i, section := range r.Sections {
@@ -46,21 +54,28 @@ func (r *Report) shrink() bool {
 			longest, size = i, len(section.Text)
 		}
 	}
-	switch {
-	case longest < 0:
+	if longest < 0 {
 		return false
-	case size <= minSectionBytes:
+	}
+
+	full := r.Sections[longest].Text
+	low, high := 0, size
+	for low < high {
+		try := (low + high + 1) / 2
+		r.Sections[longest].Text = Clip(full, try)
+		if r.fits() {
+			low = try
+		} else {
+			high = try - 1
+		}
+	}
+	if low == 0 {
 		r.Sections = append(r.Sections[:longest:longest], r.Sections[longest+1:]...)
 		return true
-	default:
-		r.Sections[longest].Text = Clip(r.Sections[longest].Text, size/2)
-		return true
 	}
+	r.Sections[longest].Text = Clip(full, low)
+	return true
 }
-
-// minSectionBytes is the point below which a section is worth less than
-// the heading above it.
-const minSectionBytes = 200
 
 // NewIssueURL is that form with a subject and a body of the caller's
 // choosing. IssueURL is what the interface uses; this is the piece under

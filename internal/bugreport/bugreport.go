@@ -7,8 +7,8 @@
 // settings that shape behaviour, and the last lines the service logged.
 //
 // Nothing here leaves the server on its own. The report is built, shown
-// and handed over as a file; the operator files it on the public form at
-// PublicReportURL, which is a page a person fills in. So the contents are
+// and handed over as a file; the operator files it as an issue on the
+// tracker at PublicReportURL, a page a person fills in. So the contents are
 // chosen rather than swept up -- no credentials, repository passwords or
 // tokens -- and log lines pass through a redactor first. That the operator
 // carries the report themselves is what makes the redaction matter: they
@@ -23,19 +23,15 @@ import (
 	"unicode/utf8"
 )
 
-// PublicReportURL is where a bug report is filed. It is a form a person
-// fills in, not an API this program posts to: an endpoint that accepts
-// reports without a person behind them needs a credential, and there is no
-// credential a plugin published to every cPanel server could hold without
-// publishing it too.
-const PublicReportURL = "https://bugs.jabali-panel.com/report"
-
-// IntakeProgram is the product to pick on that form. It is the tracker's
-// own key for this project and not a name this program is free to choose,
-// so it did not follow the rename to Gniza: the tracker has no Gniza
-// product, and a report filed under one that does not exist is a report
-// nobody reads.
-const IntakeProgram = "cprestic"
+// PublicReportURL is where a bug report is filed: this project's issues,
+// which anybody can open in a browser and which need nothing installed.
+//
+// It is a page a person fills in, not an API this program posts to. An
+// endpoint that accepts reports with nobody behind them needs a
+// credential, and there is no credential a plugin published to every
+// cPanel server could hold without publishing it too. NewIssueURL fills
+// that page in from what the operator typed.
+const PublicReportURL = "https://github.com/shukiv/gniza/issues"
 
 // Safe returns a separate copy suitable for both preview and download.
 // User text is redacted too: the operator wrote it, but they may have

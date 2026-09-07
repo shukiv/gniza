@@ -145,10 +145,12 @@
                     placeholder="What did you do? What did you expect? What happened instead?"></textarea>
         </div>
       </div>
-      <p id="report-problem-privacy" class="cpr-report-privacy">The report includes versions, recent failures, selected settings and recent service logs. Automatic redaction is best-effort; check for sensitive information before you file it.</p>
+      <p id="report-problem-privacy" class="cpr-report-privacy">The file this server can attach includes versions, recent failures, selected settings and recent service logs. Automatic redaction is best-effort; check for sensitive information before you file it.</p>
       <div class="cpr-actions cpr-report-actions">
         <a class="cpr-btn cpr-quiet" href="?p=report">Open full page</a>
-        <button class="cpr-btn cpr-primary" type="submit">Show me the report</button>
+        <button class="cpr-btn" type="submit">Show me the report</button>
+        <button class="cpr-btn cpr-primary" type="submit" name="file" value="1"
+                formtarget="_blank">File it</button>
       </div>
     </form>
   </div>

@@ -22,9 +22,11 @@
 
 ## Where problems are reported
 
-**Report a problem** submits reviewed bug reports to the `gniza` program at
-`bugs.jabali-panel.com`. The intake panel shows the key-file path and local
-readiness, never the key. See [intake setup](troubleshooting.md#enable-intake-delivery).
+**Report a problem** builds the report here and hands it to you: the button
+opens <https://github.com/shukiv/gniza/issues> with what you typed already
+in the form. Nothing is transmitted from the server, so there is nothing to
+configure and no credential to install. See
+[Reporting a problem](troubleshooting.md#reporting-a-problem).
 
 Backup/restore notifications are separate from bug reports:
 

@@ -3550,7 +3550,7 @@ func (s *Server) settingsPage() (settingsView, error) {
 		OutputBytes: held,
 		KeepDays:    keepDays(settings),
 		DeletedDays: deletedDays(settings), DeletedPreset: deletedPreset(settings),
-		BugReportURL: bugreport.PublicReportURL, BugIntakeProgram: bugreport.IntakeProgram,
+		BugReportURL: bugreport.PublicReportURL,
 		LogLevels: nodestore.LogLevels,
 		Version:     agent.Version,
 		LastChecked: lastChecked, CheckError: checkError,
@@ -3577,11 +3577,9 @@ type settingsView struct {
 	// when it is a number somebody typed rather than one on the list.
 	DeletedDays   int
 	DeletedPreset string
-	// BugReportURL is the public form a bug report is filed on, and
-	// BugIntakeProgram is the product to pick there. Neither is a setting:
-	// they are shown so an operator knows where a report goes.
-	BugReportURL     string
-	BugIntakeProgram string
+	// BugReportURL is the tracker a bug report is filed on. It is not a
+	// setting -- it is shown so an operator knows where a report goes.
+	BugReportURL string
 	// LogLevels are what the log level can be set to, quietest first.
 	LogLevels []string
 	// Version is what this build calls itself, and LastChecked and

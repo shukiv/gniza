@@ -2,12 +2,11 @@
 {{$data := .Data}}
 <div class="cpr-page-head">
   <h1>Report a problem</h1>
-  <p class="cpr-hint">What went wrong, in your words, with what this server can say about itself
-  attached. Nothing leaves this server on its own. Two steps: <b>Download it</b>, then
-  <b>File it at {{$data.Program}}</b> — which opens
+  <p class="cpr-hint">What went wrong, in your words. <b>File it</b> opens
   <a class="cpr-link" href="{{$data.ReportURL}}" target="_blank" rel="noopener noreferrer">{{$data.ReportURL}}</a>
-  in a new tab, where you attach the file you just downloaded and pick <b>{{$data.Program}}</b> as
-  the product. Email and notification channels are not used.</p>
+  in a new tab with the subject and description already filled in — you press the tracker's own
+  button to send it. Nothing leaves this server on its own. <b>Download it</b> gives you this
+  server's diagnostics as a file to attach to that issue.</p>
 </div>
 
 {{if $data.Error}}
@@ -15,7 +14,7 @@
 {{end}}
 
 <div class="cpr-card">
-  <form method="post" action="?p=report/send">
+  <form id="report-form" method="post" action="?p=report/send">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
     {{if $data.Prepared}}
     <input type="hidden" name="prepared" value="{{$data.Prepared}}">
@@ -31,17 +30,18 @@
         <label for="report_body">What happened</label>
         <textarea id="report_body" name="body" rows="8" required maxlength="20000"
                   placeholder="What you did, what you expected, what happened instead.">{{$data.Body}}</textarea>
-        <small class="cpr-help">Versions, this server's recent failures, its settings without
-        credentials, and the last 200 lines the service logged are attached. Passwords, keys and
-        tokens are filtered out, but automatic redaction is best-effort. You are the last check:
-        read the report before you file it.</small>
+        <small class="cpr-help">The file you can download carries versions, this server's recent
+        failures, its settings without credentials, and the last 200 lines the service logged.
+        Passwords, keys and tokens are filtered out, but automatic redaction is best-effort. You
+        are the last check: read it before you attach it.</small>
       </div>
     </div>
     <div class="cpr-pad cpr-bulkbar" style="border-top:1px solid var(--line)">
       <span style="flex:1"></span>
       <button class="cpr-btn" type="submit">Show me the report</button>
-      <button class="cpr-btn cpr-primary" type="submit" name="download" value="1">Download it</button>
-      <a class="cpr-btn" href="{{$data.ReportURL}}" target="_blank" rel="noopener noreferrer">File it at {{$data.Program}}</a>
+      <button class="cpr-btn" type="submit" name="download" value="1">Download it</button>
+      <button class="cpr-btn cpr-primary" type="submit" name="file" value="1"
+              formtarget="_blank">File it</button>
     </div>
   </form>
 </div>
@@ -50,12 +50,12 @@
 <div class="cpr-card" style="margin-top:var(--s4)">
   <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
     <h2 style="margin:0">The report</h2>
-    <a class="cpr-btn" href="{{$data.ReportURL}}" target="_blank" rel="noopener noreferrer">Open the report form</a>
+    <button class="cpr-btn cpr-primary" type="submit" name="file" value="1"
+            form="report-form" formtarget="_blank">File it</button>
   </div>
   <div class="cpr-pad">
     <textarea rows="18" readonly class="cpr-mono" aria-label="The whole report">{{$data.Preview}}</textarea>
-    <small class="cpr-help">Download this and attach it to the form as the log file, or paste it in.
-    Pick <b>{{$data.Program}}</b> as the product so it reaches the right tracker.</small>
+    <small class="cpr-help">Download this and attach it to the issue, or paste it in.</small>
   </div>
 </div>
 {{end}}

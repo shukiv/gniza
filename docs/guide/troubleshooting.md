@@ -12,11 +12,15 @@ service logged. Passwords, keys, tokens and private keys are removed from
 those lines first, and each section is capped so a noisy week does not become
 a report nobody reads.
 
-Nothing is transmitted from the server. **Download it** hands the report over
-as `gniza-report-<when>.md`, and you file it yourself at
-<https://bugs.jabali-panel.com/report>, picking **cprestic** as the product —
-the tracker's own key for this project, which did not follow the rename to
-Gniza. Attach the file as the log file, or paste it into the description.
+Nothing is transmitted from the server. **File it** opens
+<https://github.com/shukiv/gniza/issues> in a new tab with the subject and
+the description already in the form; you press GitHub's own button to send
+it. **Download it** hands the diagnostics over as `gniza-report-<when>.md`
+to attach to that issue, or to paste into it.
+
+A link cannot carry the whole report — browsers and servers each stop
+reading a URL somewhere — so a long description is cut short in the link and
+says where it was cut. The file is the whole of it.
 
 There is nothing to configure and no credential to install. A plugin that is
 published to every cPanel server cannot hold a key to an authenticated
@@ -33,7 +37,7 @@ becomes public: read it for secrets in unusual formats or sensitive customer
 details before you file it. Legacy `bug_email` and `sendmail_path` settings
 remain readable for compatibility but are not used.
 
-Customers with no access to WHM can use the same form directly; it needs
+Customers with no access to WHM can open the same tracker directly; it needs
 nothing installed.
 
 ## Reading the log

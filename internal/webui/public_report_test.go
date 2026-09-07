@@ -4,6 +4,7 @@ import (
 	"html"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -41,9 +42,8 @@ func postReport(t *testing.T, client *http.Client, fields map[string][]string) s
 // TestTheReportIsPreparedHereAndFiledByHand is the whole of reporting a bug
 // now: the server builds the report, shows it, and hands it over. It does
 // not send it anywhere, and it needs no credential installed to be useful.
-// The operator files it on the public form, which is a page a person fills
-// in -- so the page has to name that form, and name the product to pick on
-// it, or the report lands in the wrong tracker.
+// The operator files it as an issue on the tracker, which is a page a
+// person fills in -- so the page has to name that tracker.
 func TestTheReportIsPreparedHereAndFiledByHand(t *testing.T) {
 	client, _, engine := newUI(t)
 
@@ -66,10 +66,8 @@ func TestTheReportIsPreparedHereAndFiledByHand(t *testing.T) {
 	if regexp.MustCompile(`<button\b[^>]*\bname="send"`).MatchString(form) {
 		t.Fatal("the form still offers to send the report from this server")
 	}
-	for _, want := range []string{bugreport.PublicReportURL, bugreport.IntakeProgram} {
-		if !strings.Contains(form, want) {
-			t.Errorf("the form does not name %q", want)
-		}
+	if !strings.Contains(form, bugreport.PublicReportURL) {
+		t.Errorf("the form does not name %q", bugreport.PublicReportURL)
 	}
 	for _, gone := range []string{"intake key", "Send to intake", "Sending is not configured"} {
 		if strings.Contains(form, gone) {
@@ -109,6 +107,53 @@ func TestTheReportIsPreparedHereAndFiledByHand(t *testing.T) {
 	stale := postReport(t, client, fields)
 	if !strings.Contains(stale, "Download it") || strings.Contains(stale, "Sent to") {
 		t.Fatal("a stale send was not answered with the report itself")
+	}
+}
+
+// TestFilingCarriesWhatWasTyped. Two fields typed here and typed again on
+// the tracker is how a bug report stops being filed at all, so filing
+// hands the tracker's form what is in the fields.
+//
+// It is a submit and not a link because a link's target is decided when
+// the page is drawn, which is before anything has been typed into it. The
+// button posts the form and is answered with a redirect to the tracker.
+func TestFilingCarriesWhatWasTyped(t *testing.T) {
+	client, _, _ := newUI(t)
+	_, form := get(t, client, "/report")
+
+	stay := *client
+	stay.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := stay.PostForm("http://ui/report/send", map[string][]string{
+		"csrf": {csrfToken(t, form)}, "file": {"1"},
+		"subject": {"Restore failed on studio"},
+		"body":    {"It stopped at exit status 2. password=remove-me"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("filing answered %d, not a redirect to the tracker", resp.StatusCode)
+	}
+
+	target, err := url.Parse(resp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("the filing redirect does not parse: %v", err)
+	}
+	if !strings.HasPrefix(resp.Header.Get("Location"), bugreport.PublicReportURL) {
+		t.Fatalf("filing goes to %q, not the tracker", resp.Header.Get("Location"))
+	}
+	if got := target.Query().Get("title"); got != "Restore failed on studio" {
+		t.Errorf("the tracker's form opens with title %q", got)
+	}
+	if got := target.Query().Get("body"); !strings.Contains(got, "exit status 2") {
+		t.Errorf("the tracker's form opens with body %q", got)
+	}
+
+	// What the operator reviewed is redacted, so what the link carries to
+	// a public tracker has to be redacted too, or the preview's promise is
+	// worth nothing.
+	if strings.Contains(resp.Header.Get("Location"), "remove-me") {
+		t.Error("filing carries an unredacted password to the tracker")
 	}
 }
 
@@ -165,7 +210,7 @@ func TestFilingItIsOnTheSamePageAsDownloadingIt(t *testing.T) {
 	if end := strings.Index(bar, "</div>"); end >= 0 {
 		bar = bar[:end]
 	}
-	if !strings.Contains(bar, bugreport.PublicReportURL) {
-		t.Error("the button that downloads the report is not beside the one that opens the form")
+	if !strings.Contains(bar, `name="file"`) {
+		t.Error("the button that downloads the report is not beside the one that files it")
 	}
 }

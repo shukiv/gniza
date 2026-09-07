@@ -175,11 +175,10 @@ func (s *Server) reportLog(ctx context.Context) string {
 type reportView struct {
 	Subject string
 	Body    string
-	// ReportURL is the form the operator files this on, and Program is the
-	// product to pick there. The page carries both because this server
-	// does not file anything itself.
+	// ReportURL is the tracker this is filed on. The page names it
+	// because this server files nothing itself -- the operator does,
+	// on the tracker's own form.
 	ReportURL string
-	Program   string
 	// Preview is the whole report, shown before it is downloaded because
 	// it is the operator who then carries it somewhere public.
 	Preview   string
@@ -201,7 +200,7 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) newReportView(subject, body string) reportView {
 	return reportView{Subject: subject, Body: body,
-		ReportURL: bugreport.PublicReportURL, Program: bugreport.IntakeProgram}
+		ReportURL: bugreport.PublicReportURL}
 }
 
 type preparedReport struct {
@@ -235,6 +234,17 @@ func (s *Server) handleSendReport(w http.ResponseWriter, r *http.Request) {
 	if err := (bugreport.Report{Subject: subject, Body: body}).Validate(); err != nil {
 		view.Error = err.Error()
 		s.render(w, r, "report.html", "Report a problem", "", view)
+		return
+	}
+
+	// Filing is a submit rather than a link because a link's target is
+	// fixed when the page is drawn, which is before anything has been
+	// typed into the form. The redirect is built from the fields as they
+	// were posted, and redacted, because what it carries becomes public
+	// and the operator reviewed a redacted copy.
+	if r.PostFormValue("file") == "1" {
+		typed := (bugreport.Report{Subject: subject, Body: body}).Safe()
+		http.Redirect(w, r, bugreport.NewIssueURL(typed.Subject, typed.Body), http.StatusSeeOther)
 		return
 	}
 

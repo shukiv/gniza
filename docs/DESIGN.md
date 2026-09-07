@@ -1,8 +1,9 @@
 # Gniza — Design
 
 Hosting-panel fleet backup orchestration built on
-[restic](https://restic.net/). cPanel/WHM is the only panel implemented
-today; DirectAdmin and Plesk are planned, and §1 says what that costs.
+[restic](https://restic.net/). cPanel/WHM is the panel implemented in
+full; DirectAdmin backs an account up and refuses what it cannot yet do
+(ADR 0019), and Plesk is planned. §1 says what that costs.
 
 Status: design accepted; everything described here is implemented and
 covered end to end. The real cPanel provider runs in production on cPanel
@@ -20,10 +21,15 @@ Last updated: 2026-09-07.
 - Back up hosting accounts from many servers to one or more remote destinations.
 - Keep the panel behind one interface. Everything that knows what an account
   is, how to package one and how to put one back sits behind the provider in
-  `internal/cpanel`; the scheduler, the repositories, the restore machinery
-  and the interface do not. cPanel/WHM is the implementation that exists;
-  DirectAdmin and Plesk are meant to be further implementations of the same
-  interface rather than forks of the program.
+  `internal/cpanel` and `internal/directadmin`; the scheduler, the
+  repositories, the restore machinery and the interface do not. The panel
+  answers two things behind that interface: what it can be asked to do
+  (`panel.Provider`) and where it keeps the parts of an account
+  (`panel.Layout`, with cPanel's answers in `internal/layout/cpmove` and
+  DirectAdmin's in `internal/layout/dabackup`). cPanel/WHM is the
+  implementation that exists in full; DirectAdmin is the second and is
+  unfinished; Plesk is meant to be a third rather than a fork of the
+  program. See [ADR 19](adr/0019-the-panel-behind-an-interface.md).
 - Keep backup *data* off the control plane. The controller orchestrates and records state; it never proxies backup bytes.
 - Support several destination types (local, SFTP, restic REST server, S3-compatible) behind one abstraction.
 - Survive a single destination being unavailable without invalidating the copies that succeeded.

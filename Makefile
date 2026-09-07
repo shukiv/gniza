@@ -22,7 +22,7 @@ REST_SERVER_VERSION := v0.14.0
 # fetches whatever is newest is a build step nobody reviewed.
 GOVULNCHECK         := golang.org/x/vuln/cmd/govulncheck@v1.7.0
 
-.PHONY: all build plugin release provenance test cover e2e vet vuln fmt tools clean
+.PHONY: all build plugin directadmin-package release provenance test cover e2e vet vuln fmt tools clean
 
 all: fmt vet test build
 
@@ -86,6 +86,30 @@ plugin:
 #
 # GNIZA_SIGNING_KEY_FILE says where the private key is. It is never read
 # from the repository and never written into one.
+# The DirectAdmin package.
+#
+# It is deliberately not part of a release. The DirectAdmin provider backs
+# up a whole account and refuses everything that needs an answer only a
+# running DirectAdmin can give (ADR 0019), and a package on the releases
+# page is one curl away from being run against a customer's server. This
+# target builds it for whoever is doing that verification.
+directadmin-package:
+	rm -rf $(BIN)/gniza-directadmin
+	mkdir -p $(BIN)/gniza-directadmin/directadmin
+	CGO_ENABLED=0 GOOS=linux GOARCH=$(PLUGIN_ARCH) go build -trimpath \
+		-ldflags="-s -w -X github.com/shukiv/gniza/internal/agent.Version=$(VERSION) \
+			-X github.com/shukiv/gniza/internal/agent.BuiltAt=$(BUILT_AT)" \
+		-o $(BIN)/gniza-directadmin/gniza-agent ./cmd/agent
+	cp packaging/directadmin/install.sh packaging/directadmin/uninstall.sh \
+		$(BIN)/gniza-directadmin/
+	cp -R packaging/directadmin/plugin.conf packaging/directadmin/hooks \
+		packaging/directadmin/admin packaging/directadmin/user \
+		$(BIN)/gniza-directadmin/directadmin/
+	chmod +x $(BIN)/gniza-directadmin/install.sh $(BIN)/gniza-directadmin/uninstall.sh
+	tar -C $(BIN) --owner=0 --group=0 --numeric-owner --mode='u+rwX,go+rX,go-w' \
+		-czf $(BIN)/gniza-directadmin-$(PLUGIN_ARCH).tar.gz gniza-directadmin
+	@echo "built $(BIN)/gniza-directadmin-$(PLUGIN_ARCH).tar.gz -- unfinished, see ADR 0019"
+
 # What the artifact was really built from.
 #
 # govulncheck reads the source; this reads the binary. A build made by an

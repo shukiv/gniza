@@ -18,10 +18,10 @@ Start here if you run the WHM plugin.
 | [Schedules](guide/schedules.md) | When backups run, what they contain, how long they are kept |
 | [Accounts](guide/accounts.md) | Coverage per account, backing one up now, termination and suspension safety |
 | [Restoring](guide/restoring.md) | Whole accounts, deleted accounts, single files and items, disaster recovery |
-| [Logs](guide/logs.md) | Backups, system backups, restores, cPanel events |
-| [Settings](guide/settings.md) | Concurrency, staging, alerting channels, payload contents |
+| [Logs](guide/logs.md) | Backups, system backups, restores, cPanel events, and the service's own log |
+| [Settings](guide/settings.md) | Concurrency, staging, log level, alerting channels, payload contents |
 | [For account holders](guide/for-account-holders.md) | The cPanel tile your customers see |
-| [Troubleshooting](guide/troubleshooting.md) | When something fails, and where to look |
+| [Troubleshooting](guide/troubleshooting.md) | When something fails, where to look, and how to report it |
 
 ## For the curious and the contributing
 

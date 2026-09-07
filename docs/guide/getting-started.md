@@ -203,3 +203,7 @@ reachable over the network at all: the WHM plugin proxies to it.
 systemctl status gniza
 journalctl -u gniza -f
 ```
+
+The same log is readable without a shell under
+[Logs → Service log](logs.md#the-service-log), with a level, a span and an
+account to filter by.

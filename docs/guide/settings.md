@@ -11,6 +11,12 @@
   folder name a new destination defaults to. It is on the recovery card, and a
   disaster recovery needs it.
 - **Keep raw output for *n* days.** restic's own output per run, for diagnosis.
+- **Log level.** How much the service writes to its own log: `error`, `warn`,
+  `info` or `debug`, quietest first. It takes effect at once, without a
+  restart, and it is remembered across one. `debug` is for watching something
+  that is going wrong now, and is worth turning back down afterwards — it
+  writes down every command the service runs. Read the result under
+  [Logs → Service log](logs.md#the-service-log).
 
 ## Safety switches
 

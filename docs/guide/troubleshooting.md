@@ -45,14 +45,9 @@ nothing installed.
 ## Reading the log
 
 **Logs → Service log** is what the service itself wrote, read back from the
-journal without a shell. Four controls narrow it: a level, how far back to
-read, how many lines, and one account's name — which keeps only the lines
-that name that account, so a single backup's story is one filter away.
-
-**Keep up with it** re-reads every few seconds while you watch, and the box
-stays at the newest line. **Download all of it** hands over the whole of
-what the journal still keeps for the span chosen; the box on the page is the
-tail of that.
+journal without a shell: a level, a span, a number of lines and an account
+to filter by. [Logs](logs.md#the-service-log) describes the controls. What
+follows is how much there is to read, and what is kept out of it.
 
 Nothing on that page is filtered for secrets. It is this server's own log,
 behind the root-only socket, read by somebody who could run `journalctl`
@@ -71,9 +66,9 @@ comes back at the level you chose.
 At `debug` the service writes down what it actually ran: every `pkgacct`,
 `mysqldump` and `restic` invocation with its arguments and how long it
 took, which schedule was due and which was not and why, which accounts a
-schedule resolved to, each destination probe, and the staging and upload of
-each account. That is enough to reproduce a failure by hand — copy the
-command out of the log and run it.
+schedule resolved to by name, each destination probe, and the staging and
+upload of each account. That is enough to reproduce a failure by hand —
+copy the command out of the log and run it.
 
 The account filter reaches `pkgacct` and `mysqldump`, which carry the
 account on the line. The `restic` lines do not: that runner works on

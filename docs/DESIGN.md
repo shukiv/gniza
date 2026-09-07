@@ -5,10 +5,11 @@ Hosting-panel fleet backup orchestration built on
 today; DirectAdmin and Plesk are planned, and §1 says what that costs.
 
 Status: design accepted; everything described here is implemented and
-covered end to end, except the real cPanel provider, which is written but
-has never been run against a cPanel host. See the status table in the
-README.
-Last updated: 2026-08-30.
+covered end to end. The real cPanel provider runs in production on cPanel
+136. What is not built is listed in the status table in the README —
+notably the controller's own web interface, and the Azure, GCS and rclone
+destination types.
+Last updated: 2026-09-07.
 
 ---
 

@@ -46,6 +46,10 @@ full-account schedule promises.
   refreshes every missing destination. It never deletes the account.
 - If the service is down, the hook logs it and *allows* removal, so cPanel
   administration cannot be wedged by a stopped backup service.
+- A run that stored the account but could not take one of its databases is
+  not a complete copy and does not count here, however successful it looks.
+  The row says [not backed up](logs.md#reading-a-backup-row) and names what
+  is missing.
 
 The Accounts list and the account page preview the same decision, so you learn
 the answer before you open cPanel's termination flow rather than during it.

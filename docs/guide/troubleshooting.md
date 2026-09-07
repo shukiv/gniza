@@ -120,6 +120,39 @@ Settings → Staging shows what is left; the Overview shows the same number.
 Second most common: an account whose home directory is being written to
 heavily. The run reports partial and names the account.
 
+## A database that will not dump
+
+The backup carries on. The row says **not backed up** and names the database,
+the notification says the same, and the run is recorded as short of a
+complete account — so termination safety will not let that account be deleted
+on the strength of it.
+
+Everything else was stored: the home directory, and every other database. One
+corrupt table is not a reason to store nothing, which is what used to happen —
+an account with forty-seven databases and one bad table in one of them had no
+backup at all.
+
+The dump that failed is deleted rather than left behind. An empty `.sql` would
+restore as a database with no tables and say nothing about it.
+
+`Lost connection to MySQL server during query (2013)` is usually a corrupt
+table rather than a network problem: reading it takes the server down, and the
+server comes back on its own a second or two later. The service log at `debug`
+names the table. `SELECT` it by hand to confirm — on a copy of the data, or
+out of hours, because it will take the server down again.
+
+Fixing it is MySQL's business, not Gniza's: repair the table, or drop and
+regenerate it if it is a cache. The backup starts including that database
+again the next night, with nothing to change here.
+
+Reading a corrupt table can stop the server for a moment, and a dump attempted
+in that moment fails for a reason that has nothing to do with the database
+being dumped. Gniza waits for the server to answer again and tries that
+database once more, rather than recording the rest of the account's databases
+as missing. cPanel's own `pkgacct` does not: measured on such an account, it
+dumped 16 of 47 databases, lost the other 31 to `Can'''t connect`, and exited
+zero saying `pkgacct completed`.
+
 ## A destination stops answering
 
 The destination row says when it was last reachable. Test it from the row menu

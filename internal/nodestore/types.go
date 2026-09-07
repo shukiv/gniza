@@ -295,6 +295,12 @@ type Job struct {
 	Status          job.Status  `json:"status"`
 	Targets         []JobTarget `json:"targets"`
 	StagingErr      string      `json:"staging_error,omitempty"`
+	// Missing is what this run could not put in the backup, one line
+	// each: a database that would not dump, most often. The run still
+	// stored everything else, which is why it is not a failure -- but it
+	// is not a complete account either, so CompleteAccount is false and
+	// termination safety will not accept it.
+	Missing []string `json:"missing,omitempty"`
 	// Progress is what restic last reported about a running job. It is
 	// cleared when the job finishes: a percentage on a job that is over
 	// says nothing, and "100%" beside a failure would be a lie.

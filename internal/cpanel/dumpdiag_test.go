@@ -51,19 +51,22 @@ func TestAFailedDumpSaysWhatMysqldumpSaid(t *testing.T) {
 	host.MysqlPath = fakeMysqldump(t, "", 0)
 
 	dir := t.TempDir()
-	err := host.dumpDatabases(context.Background(),
+	missing, err := host.dumpDatabases(context.Background(),
 		StageRequest{StagingDir: dir, Account: AccountInfo{User: "customer1"}},
 		pkgacct.Payload{DumpPaths: map[string]string{
 			"customer1_wp": filepath.Join(dir, "databases", "customer1_wp.sql"),
 		}})
-	if err == nil {
-		t.Fatal("a dump that failed was reported as a success")
+	if err != nil {
+		t.Fatalf("one database that would not dump stopped the rest: %v", err)
 	}
-	if !strings.Contains(err.Error(), "Lost connection to MySQL server") {
-		t.Fatalf("the failure does not say what mysqldump said: %v", err)
+	if len(missing) != 1 {
+		t.Fatalf("a dump that failed was reported as a success: %v", missing)
 	}
-	if !strings.Contains(err.Error(), "customer1_wp") {
-		t.Fatalf("the failure does not say which database: %v", err)
+	if !strings.Contains(missing[0].Why, "Lost connection to MySQL server") {
+		t.Fatalf("the failure does not say what mysqldump said: %v", missing[0])
+	}
+	if !strings.Contains(missing[0].What, "customer1_wp") {
+		t.Fatalf("the failure does not say which database: %v", missing[0])
 	}
 }
 
@@ -78,7 +81,7 @@ func TestWhatWasRunIsInTheLogAtDebug(t *testing.T) {
 	host.Log = slog.New(slog.NewTextHandler(&written, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	dir := t.TempDir()
-	if err := host.dumpDatabases(context.Background(),
+	if _, err := host.dumpDatabases(context.Background(),
 		StageRequest{StagingDir: dir, Account: AccountInfo{User: "customer1"}},
 		pkgacct.Payload{DumpPaths: map[string]string{
 			"customer1_wp": filepath.Join(dir, "databases", "customer1_wp.sql"),
@@ -104,7 +107,7 @@ func TestNothingIsWrittenWhenTheLevelIsNotDebug(t *testing.T) {
 	host.Log = slog.New(slog.NewTextHandler(&written, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	dir := t.TempDir()
-	if err := host.dumpDatabases(context.Background(),
+	if _, err := host.dumpDatabases(context.Background(),
 		StageRequest{StagingDir: dir, Account: AccountInfo{User: "customer1"}},
 		pkgacct.Payload{DumpPaths: map[string]string{
 			"customer1_wp": filepath.Join(dir, "databases", "customer1_wp.sql"),

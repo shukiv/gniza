@@ -257,6 +257,11 @@ type JobReport struct {
 	// StagingError describes a failure before any target was attempted,
 	// such as insufficient disk for pkgacct.
 	StagingError string `json:"staging_error,omitempty"`
+	// Missing is what the payload could not include, one line each. A
+	// backup with a hole in it is still worth having and still worth
+	// being told about; what it must never be is counted as a complete
+	// account.
+	Missing []string `json:"missing,omitempty"`
 }
 
 // ErrorResponse is the body of any non-2xx reply.

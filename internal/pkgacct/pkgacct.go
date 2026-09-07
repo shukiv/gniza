@@ -64,6 +64,28 @@ type Payload struct {
 	// surfaces this rather than letting storage cost silently balloon.
 	Degraded bool
 	Reason   string
+	// Missing is what could not be put in this payload after all. One
+	// corrupt table used to cost an account its whole backup -- home
+	// directory and forty-six healthy databases with it -- because
+	// staging returned on the first failed dump. It carries on now, and
+	// what it could not take is written down here: a backup with a hole
+	// in it is worth having, and worth being told about, but it is not a
+	// complete account and must never be counted as one.
+	Missing []Omission
+}
+
+// Omission is one thing a payload does not contain, and why.
+type Omission struct {
+	What string
+	Why  string
+}
+
+// String renders an omission for an operator reading a job.
+func (o Omission) String() string {
+	if o.Why == "" {
+		return o.What
+	}
+	return o.What + ": " + o.Why
 }
 
 // Verify checks that every part a payload promised is actually on disk.

@@ -419,9 +419,11 @@ func (r *Real) Stage(ctx context.Context, req StageRequest) (pkgacct.Payload, er
 	}
 
 	if mode == pkgacct.ModeSplit {
-		if err := r.dumpDatabases(ctx, req, payload); err != nil {
+		missing, err := r.dumpDatabases(ctx, req, payload)
+		if err != nil {
 			return pkgacct.Payload{}, err
 		}
+		payload.Missing = append(payload.Missing, missing...)
 	}
 
 	// pkgacct can exit zero having produced nothing useful, so what it
@@ -725,53 +727,152 @@ func (r *Real) dumpDatabaseCreate(ctx context.Context, account, name, dumpPath s
 // file is exactly the kind that has never been checked.
 func plainDatabaseUser(name string) bool { return plainAccountName(name) }
 
-func (r *Real) dumpDatabases(ctx context.Context, req StageRequest, payload pkgacct.Payload) error {
+// dumpDatabases writes one dump per database, and keeps going when one of
+// them will not dump.
+//
+// It used to return on the first failure. A live account with forty-seven
+// databases and one corrupt table in one of them therefore had no backup
+// at all for a week: not the other forty-six, not its home directory. One
+// table is not a reason to store nothing.
+//
+// What it must not do is leave a quiet hole. cPanel's own pkgacct was
+// measured doing exactly that on this account: it survived the crash, lost
+// every database that came after it, and exited 0 saying "pkgacct
+// completed". So a dump that failed is deleted rather than left as an
+// empty file that would restore as a database with no tables, and every
+// database not taken is returned to the caller to be recorded against the
+// run.
+func (r *Real) dumpDatabases(ctx context.Context, req StageRequest, payload pkgacct.Payload) ([]pkgacct.Omission, error) {
 	if len(payload.DumpPaths) == 0 {
-		return nil
+		return nil, nil
 	}
 	dir := filepath.Join(req.StagingDir, "databases")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("cpanel: create database staging: %w", err)
+		return nil, fmt.Errorf("cpanel: create database staging: %w", err)
 	}
 	if err := r.dumpDatabaseUsers(ctx, req, dir); err != nil {
 		// A database restored without the user that owns it is a database
 		// no site can open, so this is part of the backup, not a bonus.
-		return err
+		return nil, err
 	}
-	for name, path := range payload.DumpPaths {
-		file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
-		if err != nil {
-			return fmt.Errorf("cpanel: create dump %s: %w", path, err)
+
+	// In name order, so that two runs of the same account report their
+	// troubles in the same order and a reader can compare them.
+	names := make([]string, 0, len(payload.DumpPaths))
+	for name := range payload.DumpPaths {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var missing []pkgacct.Omission
+	for _, name := range names {
+		path := payload.DumpPaths[name]
+		err := r.dumpOneDatabase(ctx, req, name, path)
+		if err != nil && r.serverIsGone(ctx) {
+			// Not this database's fault. Reading a corrupt table can take
+			// the whole server down with it, and every dump attempted
+			// while it restarts fails for a reason that has nothing to do
+			// with the database being dumped. Wait for it, then try this
+			// one again -- pkgacct does not, which is how it lost
+			// thirty-one databases in one run.
+			if waitErr := r.waitForServer(ctx); waitErr == nil {
+				err = r.dumpOneDatabase(ctx, req, name, path)
+			}
 		}
-		// Dumps are written uncompressed on purpose: restic deduplicates
-		// plain SQL between nights, and cannot deduplicate gzip at all.
-		cmd := exec.CommandContext(ctx, r.mysqldump(),
-			"--single-transaction", "--quick", "--routines", "--events", name)
-		cmd.Stdout = file
-		// mysqldump says why it stopped on stderr, and this used to throw
-		// that away: a backup failed with "exit status 2" and finding out
-		// what that meant took running the same command by hand on the
-		// server. It had already said "Lost connection to MySQL server
-		// during query" the first time.
-		var complaint bytes.Buffer
-		cmd.Stderr = &complaint
-		started := time.Now()
-		err = cmd.Run()
-		r.ranCommand("dumped a database", req.Account.User, cmd, started, err)
-		closeErr := file.Close()
-		if err != nil {
-			return fmt.Errorf("cpanel: mysqldump %s: %w%s",
-				name, err, saidOnStderr(complaint.String()))
+		if err == nil {
+			if err := r.dumpDatabaseCreate(ctx, req.Account.User, name, path); err != nil {
+				return nil, err
+			}
+			continue
 		}
-		if closeErr != nil {
-			return fmt.Errorf("cpanel: close dump %s: %w", path, closeErr)
-		}
-		if err := r.dumpDatabaseCreate(ctx, req.Account.User, name, path); err != nil {
-			return err
-		}
+
+		// An empty dump left on disk is worse than no dump: it restores
+		// as a database with no tables, and nothing says so.
+		_ = os.Remove(path)
+		_ = os.Remove(strings.TrimSuffix(path, ".sql") + ".create")
+		missing = append(missing, pkgacct.Omission{
+			What: "database " + name,
+			Why:  errorText(err),
+		})
+		r.debug("a database would not dump", "account", req.Account.User,
+			"database", name, "error", errorText(err))
+	}
+	return missing, nil
+}
+
+// dumpOneDatabase writes one database's dump, and says what mysqldump said
+// when it could not.
+func (r *Real) dumpOneDatabase(ctx context.Context, req StageRequest, name, path string) error {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("cpanel: create dump %s: %w", path, err)
+	}
+	// Dumps are written uncompressed on purpose: restic deduplicates
+	// plain SQL between nights, and cannot deduplicate gzip at all.
+	cmd := exec.CommandContext(ctx, r.mysqldump(),
+		"--single-transaction", "--quick", "--routines", "--events", name)
+	cmd.Stdout = file
+	// mysqldump says why it stopped on stderr, and this used to throw
+	// that away: a backup failed with "exit status 2" and finding out
+	// what that meant took running the same command by hand on the
+	// server. It had already said "Lost connection to MySQL server
+	// during query" the first time.
+	var complaint bytes.Buffer
+	cmd.Stderr = &complaint
+	started := time.Now()
+	err = cmd.Run()
+	r.ranCommand("dumped a database", req.Account.User, cmd, started, err)
+	closeErr := file.Close()
+	if err != nil {
+		return fmt.Errorf("cpanel: mysqldump %s: %w%s",
+			name, err, saidOnStderr(complaint.String()))
+	}
+	if closeErr != nil {
+		return fmt.Errorf("cpanel: close dump %s: %w", path, closeErr)
 	}
 	return nil
 }
+
+// errorText is an error as one line, and empty when there is none.
+func errorText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
+
+// serverIsGone reports whether the database server has stopped answering.
+func (r *Real) serverIsGone(ctx context.Context) bool {
+	ping, cancel := context.WithTimeout(ctx, serverPingTimeout)
+	defer cancel()
+	return exec.CommandContext(ping, r.mysql(), "--batch", "--skip-column-names",
+		"--execute", "SELECT 1").Run() != nil
+}
+
+// waitForServer waits for the database server to answer again, for as long
+// as a crash and its InnoDB recovery plausibly take and no longer.
+func (r *Real) waitForServer(ctx context.Context) error {
+	deadline := time.Now().Add(serverWait)
+	for {
+		if !r.serverIsGone(ctx) {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("cpanel: the database server did not come back within %s", serverWait)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(serverPollEvery):
+		}
+	}
+}
+
+const (
+	serverPingTimeout = 5 * time.Second
+	serverPollEvery   = 2 * time.Second
+	serverWait        = 90 * time.Second
+)
 
 // restorepkg returns the script that applies an account archive.
 func (r *Real) restorepkg() string {

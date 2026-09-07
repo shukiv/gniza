@@ -302,6 +302,13 @@ func (e *Engine) runBackup(ctx context.Context, stored nodestore.Job) error {
 	report := e.worker.RunJob(ctx, assignment)
 
 	stored.StagingErr = report.StagingError
+	stored.Missing = report.Missing
+	if len(report.Missing) > 0 {
+		// Something the account has is not in this backup. It is worth
+		// keeping and worth reporting, but it cannot authorise deleting
+		// the account it is a backup of.
+		stored.CompleteAccount = false
+	}
 	stored.Targets = nil
 	results := make([]job.TargetResult, 0, len(report.Targets))
 	for _, target := range report.Targets {
@@ -358,6 +365,23 @@ func (e *Engine) runBackup(ctx context.Context, stored nodestore.Job) error {
 // notifyBackup says what a finished backup came to, for whoever asked to
 // be told. A backup that fails silently is the same as no backup.
 func (e *Engine) notifyBackup(ctx context.Context, stored nodestore.Job) {
+	message, send := backupMessage(stored)
+	if !send {
+		return
+	}
+	message.Body = backupDetail(stored, e.destinationNames())
+	e.Notify(ctx, message)
+}
+
+// backupMessage is what a finished run is announced as, without the body,
+// which needs the engine to name destinations.
+//
+// A run that stored everything it was asked for and a run that could not
+// take one of the account's databases are both successes as far as the
+// targets go, and they must not read the same. The second is announced as
+// what it is, every time it happens: nobody goes looking in a job detail
+// for a hole they were never told about.
+func backupMessage(stored nodestore.Job) (notify.Message, bool) {
 	message := notify.Message{Account: stored.Account}
 	switch stored.Status {
 	case job.StatusSuccess:
@@ -370,10 +394,22 @@ func (e *Engine) notifyBackup(ctx context.Context, stored nodestore.Job) {
 		message.Event = notify.EventBackupFailed
 		message.Subject = fmt.Sprintf("The backup of %s failed", stored.Account)
 	default:
-		return
+		return notify.Message{}, false
 	}
-	message.Body = e.backupDetail(stored)
-	e.Notify(ctx, message)
+	if len(stored.Missing) > 0 && stored.Status != job.StatusFailed {
+		message.Event = notify.EventBackupPartial
+		message.Subject = fmt.Sprintf("Backed up %s, without %s",
+			stored.Account, countedThings(len(stored.Missing)))
+	}
+	return message, true
+}
+
+// countedThings names how much a backup is short by, for a subject line.
+func countedThings(n int) string {
+	if n == 1 {
+		return "one thing it could not take"
+	}
+	return fmt.Sprintf("%d things it could not take", n)
 }
 
 // destinationNames maps each repository to the destination an operator
@@ -404,12 +440,16 @@ func (e *Engine) destinationNames() map[string]string {
 // backupDetail is what the message says under its first line: what went
 // wrong, or what it cost — per destination, because a backup that reached
 // one of two is a different situation from one that reached both.
-func (e *Engine) backupDetail(stored nodestore.Job) string {
+func backupDetail(stored nodestore.Job, names map[string]string) string {
 	if stored.StagingErr != "" {
 		return stored.StagingErr
 	}
-	names := e.destinationNames()
 	var lines []string
+	// First, because it is the part somebody has to act on. Everything
+	// below it is about where the backup went, which is routine.
+	for _, missing := range stored.Missing {
+		lines = append(lines, "Not in this backup -- "+missing)
+	}
 	for _, target := range stored.Targets {
 		where := names[target.RepositoryID]
 		if where == "" {

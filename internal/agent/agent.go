@@ -403,9 +403,15 @@ func (a *Agent) RunJob(ctx context.Context, assignment protocol.JobAssignment) p
 		log.Warn("the payload is not quite what the schedule asked for",
 			"reason", payload.Reason)
 	}
+	for _, omission := range payload.Missing {
+		// At warn, not debug: this is the operator's business on every
+		// run, not something to go looking for.
+		log.Warn("left out of the backup", "what", omission.What, "why", omission.Why)
+		report.Missing = append(report.Missing, omission.String())
+	}
 	log.Debug("staged an account", "dir", dir.Path, "mode", mode,
 		"parts", len(payload.Parts), "dumps", len(payload.DumpPaths),
-		"degraded", payload.Degraded)
+		"degraded", payload.Degraded, "missing", len(payload.Missing))
 	// restic treats a path it cannot read as a warning and carries on, so
 	// a missing part would become a snapshot that looks fine and restores
 	// an incomplete account. It has to stop the job instead.

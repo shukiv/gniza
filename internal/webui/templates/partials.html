@@ -140,6 +140,10 @@
           </div>
         {{end}}
         {{if .StagingErr}}<div class="cpr-sublabel">{{.StagingErr}}</div>{{end}}
+        {{range .Missing}}
+        <div><span class="cpr-pill cpr-warn"><span class="cpr-dot"></span>not backed up</span>
+          <span class="cpr-sublabel">{{.}}</span></div>
+        {{end}}
       </td>
       <td class="cpr-num" data-sort="{{addedBytes .Targets}}">
         {{range .Targets}}{{if eq (printf "%s" .Status) "success"}}

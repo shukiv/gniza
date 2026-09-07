@@ -33,6 +33,13 @@ almost entirely the first number being small.
 A **partial** run is one where some accounts succeeded and others did not. The
 detail says which.
 
+**not backed up** on a row means the run stored the account but could not take
+one particular thing — almost always a database that would not dump. The line
+beside it names what and says why. The rest of the account was stored, and the
+run is not a failure; but it is not a complete account either, so
+[termination safety](accounts.md#termination-safety) will not accept it as one.
+See [a database that will not dump](troubleshooting.md#a-database-that-will-not-dump).
+
 ## cPanel events
 
 A removal marked **Blocked** is Gniza refusing to let cPanel delete an

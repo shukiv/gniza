@@ -62,6 +62,12 @@ cd gniza-directadmin && sh install.sh
 It is not on the releases page, and that is deliberate: a package one
 `curl` away is a package that ends up on a customer's server.
 
+`uninstall.sh` deletes nothing. The plugin directory, both binaries and
+the unit file are moved into a dated directory under
+`/var/lib/gniza/removed`, which the script names as it finishes, so an
+uninstall can be undone by moving them back. Repositories, the state
+database and `/etc/gniza` are left alone either way.
+
 The service runs as `gniza-agent -standalone -panel=directadmin`, and
 says once at startup that its layout came out of documentation rather
 than from a server.

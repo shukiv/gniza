@@ -20,15 +20,11 @@
 - **Back up on suspension.** See
   [Accounts](accounts.md#suspension-preservation).
 
-## Where problems are reported
+## Notifications
 
-**Report a problem** builds the report here and hands it to you: the button
-opens <https://github.com/shukiv/gniza/issues> with what you typed already
-in the form. Nothing is transmitted from the server, so there is nothing to
-configure and no credential to install. See
-[Reporting a problem](troubleshooting.md#reporting-a-problem).
-
-Backup/restore notifications are separate from bug reports:
+Reporting a bug is not configured here and has no settings: see
+[Reporting a problem](troubleshooting.md#reporting-a-problem). Backup and
+restore notifications are separate from it:
 
 Channels, each of which can be enabled or disabled without being deleted:
 

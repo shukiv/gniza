@@ -18,7 +18,6 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/shukiv/gniza/internal/agent"
-	"github.com/shukiv/gniza/internal/bugreport"
 	"github.com/shukiv/gniza/internal/cpanel"
 	"github.com/shukiv/gniza/internal/destination"
 	"github.com/shukiv/gniza/internal/granular"
@@ -3550,8 +3549,7 @@ func (s *Server) settingsPage() (settingsView, error) {
 		OutputBytes: held,
 		KeepDays:    keepDays(settings),
 		DeletedDays: deletedDays(settings), DeletedPreset: deletedPreset(settings),
-		BugReportURL: bugreport.PublicReportURL,
-		LogLevels: nodestore.LogLevels,
+		LogLevels:   nodestore.LogLevels,
 		Version:     agent.Version,
 		LastChecked: lastChecked, CheckError: checkError,
 		Update:     panel,
@@ -3577,9 +3575,6 @@ type settingsView struct {
 	// when it is a number somebody typed rather than one on the list.
 	DeletedDays   int
 	DeletedPreset string
-	// BugReportURL is the tracker a bug report is filed on. It is not a
-	// setting -- it is shown so an operator knows where a report goes.
-	BugReportURL string
 	// LogLevels are what the log level can be set to, quietest first.
 	LogLevels []string
 	// Version is what this build calls itself, and LastChecked and

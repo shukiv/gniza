@@ -157,18 +157,17 @@ func TestFilingCarriesWhatWasTyped(t *testing.T) {
 	}
 }
 
-// TestSettingsPointAtThePublicFormRatherThanAKeyFile keeps the settings page
-// honest: there is nothing to install for reporting to work, so the page
-// must not tell an operator to install anything.
-func TestSettingsPointAtThePublicFormRatherThanAKeyFile(t *testing.T) {
+// TestSettingsHoldNothingAboutReporting keeps the settings page to
+// settings. Where reports go is compiled in and cannot be typed over, so a
+// box holding it is a control that does nothing sitting among controls
+// that do -- and reporting needs nothing installed for it to explain.
+func TestSettingsHoldNothingAboutReporting(t *testing.T) {
 	client, _, _ := newUI(t)
 	_, settings := get(t, client, "/settings")
-	if !strings.Contains(settings, bugreport.PublicReportURL) {
-		t.Error("settings do not name the public report form")
-	}
-	for _, gone := range []string{"bugs-intake.key", "mode 0600", "/api/v1/intake"} {
+	for _, gone := range []string{bugreport.PublicReportURL, "Where bug reports go",
+		"bugs-intake.key", "mode 0600", "/api/v1/intake"} {
 		if strings.Contains(settings, gone) {
-			t.Errorf("settings still mention %q", gone)
+			t.Errorf("settings still carry %q", gone)
 		}
 	}
 }

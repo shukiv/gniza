@@ -9,9 +9,12 @@ A live account had 47 databases and one corrupt InnoDB table in one of
 them. Reading that table aborted `mysqld`; `mysqldump` returned exit
 status 2 with `Lost connection to MySQL server during query (2013)`.
 
-Staging returned on the first failed dump, so the account had **no backup
-at all for a week** — not its home directory, not the other 46 databases.
-Every night the same table, the same abort, the same nothing stored.
+Staging returned on the first failed dump, so from the moment that table
+went bad the account got **no new backup at all** — not its home directory,
+not the other 46 databases. Every run failed the same way, and nothing
+about the failure was self-limiting: it would have gone on for as long as
+the table stayed broken, leaving the account on an ageing copy from before
+the corruption.
 
 The rule being followed was deliberate and is written down in
 `pkgacct.Payload.Verify`: a payload missing a part is not a backup. It

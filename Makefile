@@ -129,9 +129,14 @@ cover:
 
 # The full pipeline against real dependencies. Needs PostgreSQL, restic and
 # rest-server; run "make tools" first.
+#
+# The installed tools come first on PATH, not last: RESTIC_VERSION is
+# pinned because restic's behaviour differs between releases, and a
+# distribution's own restic further down the path would quietly decide
+# what the suite proves.
 e2e:
 	mkdir -p $(E2E_TMPDIR)
-	TMPDIR=$(E2E_TMPDIR) PATH="$(PATH):$(shell go env GOPATH)/bin" \
+	TMPDIR=$(E2E_TMPDIR) PATH="$(shell go env GOPATH)/bin:$(PATH)" \
 		go test -tags e2e ./internal/e2e/ -count=1 -timeout 30m
 
 tools:

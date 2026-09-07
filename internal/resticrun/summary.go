@@ -83,6 +83,27 @@ func classifyExit(code int, stderr []byte, incompleteOK bool) error {
 	return fmt.Errorf("resticrun: restic exited %d: %s", code, explain(stderr, 5))
 }
 
+// refusedRemoval reports what restic could not delete, and is checked
+// separately from the exit code because restic does not use one for it.
+//
+// A forget whose every removal was refused -- which is what an append-only
+// endpoint does to anything holding agent credentials -- prints "unable to
+// remove <file> from the repository" and exits zero. Read by the exit code
+// alone, retention says it removed a snapshot that is still there, and a
+// repository that can never be pruned grows for months while the
+// maintenance run reports success every night.
+func refusedRemoval(stderr []byte) error {
+	for _, line := range bytes.Split(stderr, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if bytes.HasPrefix(line, []byte("unable to remove ")) ||
+			(bytes.HasPrefix(line, []byte("Remove(")) && bytes.Contains(line, []byte(") failed:"))) {
+			return fmt.Errorf("resticrun: the repository refused a deletion: %s",
+				explain(stderr, 5))
+		}
+	}
+	return nil
+}
+
 // explain summarises stderr for an error message: the last few meaningful
 // lines, with Go stack frames dropped. restic prints a trace on fatal
 // errors, and the frames crowd out the line that says what went wrong.

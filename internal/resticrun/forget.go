@@ -148,7 +148,10 @@ func (r *Runner) ForgetSnapshots(ctx context.Context, repo Repository, ids []str
 	if err != nil {
 		return err
 	}
-	return classifyExit(result.ExitCode, result.Stderr, false)
+	if err := classifyExit(result.ExitCode, result.Stderr, false); err != nil {
+		return err
+	}
+	return refusedRemoval(result.Stderr)
 }
 
 func (r *Runner) ForgetPlanned(ctx context.Context, repo Repository, spec ForgetSpec) (ForgetPlan, error) {
@@ -258,5 +261,8 @@ func (r *Runner) Prune(ctx context.Context, repo Repository) error {
 	if err != nil {
 		return err
 	}
-	return classifyExit(result.ExitCode, result.Stderr, false)
+	if err := classifyExit(result.ExitCode, result.Stderr, false); err != nil {
+		return err
+	}
+	return refusedRemoval(result.Stderr)
 }

@@ -52,7 +52,7 @@ Four controls narrow it.
 
 | Control | What it does |
 |---|---|
-| **Show** | a level and everything louder: `error`, `warn`, `info`, `debug` |
+| **Show** | a level and everything more severe — `warn` shows warnings and errors |
 | **From** | Last hour, Today, Last 7 days, or everything the journal still keeps |
 | **At most** | 200, 1,000, 5,000 lines, or all of them |
 | **Account** | keeps only the lines naming that account, so one backup's story is one filter away |

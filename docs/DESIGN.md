@@ -449,8 +449,13 @@ A split snapshot has to be put back together, which is the cost of the decision 
 2. extract it → work/tree/<discovered top-level directory>
 3. restore <snap>:/home/<user>        → work/tree/<top>/homedir
 4. restore <snap>:<staging>/databases → work/tree/<top>/mysql
-5. repack work/tree                   → cpmove-<user>.tar
+5. repack work/tree                   → cpmove-<user>.tar   (only if asked for)
 ```
+
+Step 5 is skipped by whoever does not need a file. A drill reads the tree
+and hands nothing over; an apply hands cPanel the tree itself. Only a
+restore that is downloaded needs a tar, because a tar is what a person
+can carry away.
 
 Each part is fetched with restic's subpath form (`snapshot:path`), which places a subtree directly at the target instead of recreating its leading directories. No path surgery is involved.
 
@@ -463,6 +468,39 @@ Two deliberate cautions:
 
 By default a restore rebuilds the archive and leaves it on the server. Nothing is overwritten. `restorepkg` runs only when the job was created with `-apply`, because materialising files is safe and overwriting a live account is not. The flag is refused for a files restore, which has no whole-account archive to hand over.
 
+What is handed over is the extracted directory, not a tar of it.
+`restorepkg` takes either — its usage lists
+`/path/to/extracted-cpuser-file` beside the archive forms — and
+`Whostmgr::Transfers::ArchiveManager` branches on the path being a
+directory before it splits restricted from unrestricted, so the same
+hand-off works in both modes. Repacking would have cost a third full copy
+of the account on the same volume for nothing: cPanel's next act is to
+copy what it was given anyway.
+
+### What a restore costs in scratch space
+
+Staging is checked before anything is written, and the estimate has to
+hold the *peak*, not the total. What is on the volume at once depends on
+what the restore is for:
+
+| | on disk at the peak |
+|---|---|
+| apply to a live account | the tree, and cPanel's own copy of it — **2×** |
+| rebuild for download | the tree, and the tar built from it — **2×** |
+| rehearsal (drill) | the tree — **1×** |
+| named items or files | roughly what was asked for |
+
+cPanel's copy lands in a temporary directory it creates *beside* the path
+it was handed, which is inside our staging directory — so it counts
+against the same allocation and is swept up with it.
+
+Sizing the small restores needs the backup's own answer: `restic ls` over
+the paths the plan resolved to. A listing that contains a directory is
+refused rather than summed, because `restic ls` lists direct children and
+a folder's few top-level files would stand for the whole subtree —
+passing the space check and then filling the volume. Not knowing means
+the whole-account figure stands, which is always enough.
+
 ### Single-file restore
 
 The same job kind with `-files`. It uses `restic restore --include`, which preserves the original paths under the target directory so an operator can see where each file came from — the opposite of the subpath form used for reassembly, and deliberately so.
@@ -473,7 +511,13 @@ This is the most common real-world request and does not require a full account r
 
 `gniza-maintenance -kind drill` rehearses a restore from trusted infrastructure: rebuild the newest snapshot for an account into scratch space, assert what can be asserted, record the result in `maintenance_runs`, delete the scratch.
 
-The checks are structural — the archive exists and is non-empty, the extracted tree has exactly one top-level directory, the home directory contains files, every SQL dump is non-empty and contains a `CREATE` statement. Nothing here can tell you cPanel would accept the archive; only a real `restorepkg` on a real host can. But a drill that fails means the backup certainly cannot be restored, which is the question worth answering nightly.
+A drill builds no archive: it untars nothing and hands nothing over, so
+the tar step is skipped and the rehearsal fits in one copy of the
+account. That is the difference between a 48.7 GiB account being
+rehearsable on a server with 63.2 GiB free and not being rehearsable at
+all.
+
+The checks are structural — the extracted tree has exactly one top-level directory, the home directory contains files, every SQL dump is non-empty and contains a `CREATE` statement. Nothing here can tell you cPanel would accept the archive; only a real `restorepkg` on a real host can. But a drill that fails means the backup certainly cannot be restored, which is the question worth answering nightly.
 
 For acceptance testing, `gniza-agent -certify-live-archive` runs on an
 isolated cPanel certification host. It restores under a caller-supplied

@@ -88,6 +88,12 @@ older tools do not understand these safeguards or the hidden snapshots.
 
 ### Restore estimates include historical size and simultaneous copies
 
+> Revised by [0018](0018-a-restore-reserves-what-it-writes.md): three
+> copies is the cost of no restore Gniza performs. The estimate now
+> follows what the restore actually does. The rest of this decision --
+> historical size, unknown size being an error, the worker repeating the
+> check -- stands.
+
 The chosen snapshot's recorded logical size is used, falling back to
 `restic stats --mode restore-size` when older snapshots lack it. Unknown size
 is an error, not permission to use a tiny live-account size. Restore workers

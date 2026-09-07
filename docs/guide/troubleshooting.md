@@ -153,6 +153,24 @@ as missing. cPanel's own `pkgacct` does not: measured on such an account, it
 dumped 16 of 47 databases, lost the other 31 to `Can'''t connect`, and exited
 zero saying `pkgacct completed`.
 
+## A restore says there is not enough room
+
+It names what it needs and what is free. Staging holds a whole copy of
+the account being rebuilt, and a second copy for whoever it is handed to
+— cPanel copies what it is given, and a download has to be packed into a
+file. [How much room a restore needs](restoring.md#how-much-room-a-restore-needs)
+has the figures.
+
+A rehearsal needs only one copy, because it hands nothing over. So an
+account can be verifiable on a server where restoring it would not fit,
+which is worth knowing: it is still proof the backup is good.
+
+If the account will not fit even once, the answer is room — a bigger
+staging volume, or Settings → Staging pointed at one. Restoring one
+database or a few files out of it needs only what those come to, and is
+refused only when what you picked includes a folder, whose size the
+backup cannot state.
+
 ## A destination stops answering
 
 The destination row says when it was last reachable. Test it from the row menu

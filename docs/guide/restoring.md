@@ -26,6 +26,31 @@ An account cPanel no longer has is the one case that reads differently: it
 says the account is created again, because there is nothing on this server
 to replace.
 
+## How much room a restore needs
+
+The staging volume is checked before anything is written, and a restore
+that would not fit is refused rather than started. What is needed depends
+on what the restore does:
+
+| What you asked for | Room needed |
+|---|---|
+| **Restore one thing**, or picked files | about what those parts come to |
+| Rebuild it for me to download | twice the account |
+| Overwrite the live account | twice the account |
+| The nightly rehearsal | once the account |
+
+Twice, because cPanel copies whatever it is handed before it restores it,
+and because a download has to be packed into a file as well as extracted.
+Once, for a rehearsal, because it reads the account and hands nothing
+over. The safety margin in Settings is added on top of all of these.
+
+A restore of a folder is sized as a whole account, not as the folder: the
+backup can say what a list of files comes to, but not what is under a
+directory, and a guess that came out low would fill the volume halfway
+through. Databases, mailboxes, DNS zones and certificates are files, so
+those are sized exactly — which is what makes *Restore one thing*
+possible on an account far larger than the free disk.
+
 ## Restore account(s)
 
 Choose an account and a destination. The page then shows:

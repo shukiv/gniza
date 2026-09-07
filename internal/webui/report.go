@@ -237,19 +237,11 @@ func (s *Server) handleSendReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Filing is a submit rather than a link because a link's target is
-	// fixed when the page is drawn, which is before anything has been
-	// typed into the form. The redirect is built from the fields as they
-	// were posted, and redacted, because what it carries becomes public
-	// and the operator reviewed a redacted copy.
-	if r.PostFormValue("file") == "1" {
-		typed := (bugreport.Report{Subject: subject, Body: body}).Safe()
-		http.Redirect(w, r, bugreport.NewIssueURL(typed.Subject, typed.Body), http.StatusSeeOther)
-		return
-	}
+	filing := r.PostFormValue("file") == "1"
+	downloading := r.PostFormValue("download") == "1"
 
 	var report bugreport.Report
-	if r.PostFormValue("download") == "1" && r.PostFormValue("prepared") != "" {
+	if (filing || downloading) && r.PostFormValue("prepared") != "" {
 		// Hand over precisely the diagnostic snapshot the operator reviewed,
 		// not newly gathered logs that might now say something different.
 		view.Prepared, view.Signature = r.PostFormValue("prepared"), r.PostFormValue("signature")
@@ -258,7 +250,7 @@ func (s *Server) handleSendReport(w http.ResponseWriter, r *http.Request) {
 			json.Unmarshal([]byte(view.Prepared), &prepared) == nil && prepared.Expires >= time.Now().Unix()
 		typed := (bugreport.Report{Subject: subject, Body: body}).Safe()
 		if !valid || prepared.Report.Subject != typed.Subject || prepared.Report.Body != typed.Body {
-			view.Error = "Preview this report again before downloading; the preview expired or its contents changed."
+			view.Error = "Show the report again; the preview expired or its contents changed."
 			view.Prepared, view.Signature = "", ""
 			s.render(w, r, "report.html", "Report a problem", "", view)
 			return
@@ -277,9 +269,19 @@ func (s *Server) handleSendReport(w http.ResponseWriter, r *http.Request) {
 	}
 	view.Preview = report.Markdown()
 
-	// The file is how the report leaves: the operator attaches it to the
-	// public form. It is the whole report, the same text as the preview.
-	if r.PostFormValue("download") == "1" {
+	// Filing is a submit rather than a link because a link's target is
+	// fixed when the page is drawn, which is before anything has been
+	// typed into the form. The redirect carries the whole report, cut
+	// down to what a URL holds -- what the operator typed and what this
+	// server knows, redacted, in the tracker's own form.
+	if filing {
+		http.Redirect(w, r, report.IssueURL(), http.StatusSeeOther)
+		return
+	}
+
+	// The file is the whole report with nothing cut, for attaching to
+	// that issue. It is the same text as the preview.
+	if downloading {
 		name := fmt.Sprintf("gniza-report-%s.md", time.Now().UTC().Format("20060102-1504"))
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)

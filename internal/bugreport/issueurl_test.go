@@ -58,3 +58,43 @@ func TestAnEmptyFormStillOpensTheTracker(t *testing.T) {
 		t.Errorf("an empty report links to %q", got)
 	}
 }
+
+// TestTheIssueCarriesTheDiagnostics. Filing a bug is one action, so what
+// the server knows has to travel with what the operator typed. A form that
+// arrives holding only the description asks the maintainer the same three
+// questions the report exists to answer.
+func TestTheIssueCarriesTheDiagnostics(t *testing.T) {
+	report := bugreport.Report{
+		Subject: "Backups fail every night",
+		Body:    "Every account fails at 02:00.",
+		Sections: []bugreport.Section{
+			{Title: "Versions and environment", Text: "gniza v0.2.5\nhostname cp01.example.com"},
+			{Title: "Service log", Text: strings.Repeat("an old line\n", 4000) + "the newest line"},
+		},
+	}
+
+	issue := report.IssueURL()
+	if len(issue) > bugreport.MaxIssueURLBytes {
+		t.Fatalf("the issue URL is %d bytes, over the %d cap", len(issue), bugreport.MaxIssueURLBytes)
+	}
+	parsed, err := url.Parse(issue)
+	if err != nil {
+		t.Fatalf("the issue URL does not parse: %v", err)
+	}
+	body := parsed.Query().Get("body")
+
+	for _, want := range []string{"Every account fails at 02:00.", "cp01.example.com"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the issue does not carry %q", want)
+		}
+	}
+	// A log is cut from its front, because the lines that matter are the
+	// ones nearest the failure. The newest line survives; most of the
+	// 4000 older ones do not.
+	if !strings.Contains(body, "the newest line") {
+		t.Error("the log was cut from the wrong end: the newest line is gone")
+	}
+	if kept := strings.Count(body, "an old line"); kept >= 4000 {
+		t.Errorf("the log was not cut down at all: %d lines of it", kept)
+	}
+}

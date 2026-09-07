@@ -4,9 +4,10 @@
   <h1>Report a problem</h1>
   <p class="cpr-hint">What went wrong, in your words. <b>File it</b> opens
   <a class="cpr-link" href="{{$data.ReportURL}}" target="_blank" rel="noopener noreferrer">{{$data.ReportURL}}</a>
-  in a new tab with the subject and description already filled in — you press the tracker's own
-  button to send it. Nothing leaves this server on its own. <b>Download it</b> gives you this
-  server's diagnostics as a file to attach to that issue.</p>
+  in a new tab with the whole report already in the form — what you typed and what this server
+  knows — and you press the tracker's own button to send it. Nothing leaves this server on its
+  own. A link cannot hold every line of a log, so <b>Download it</b> gives you the uncut report
+  as a file to attach.</p>
 </div>
 
 {{if $data.Error}}
@@ -30,10 +31,11 @@
         <label for="report_body">What happened</label>
         <textarea id="report_body" name="body" rows="8" required maxlength="20000"
                   placeholder="What you did, what you expected, what happened instead.">{{$data.Body}}</textarea>
-        <small class="cpr-help">The file you can download carries versions, this server's recent
-        failures, its settings without credentials, and the last 200 lines the service logged.
-        Passwords, keys and tokens are filtered out, but automatic redaction is best-effort. You
-        are the last check: read it before you attach it.</small>
+        <small class="cpr-help">Filed with it: versions, this server's recent failures, its
+        settings without credentials, and the last 200 lines the service logged, cut down to what
+        a link holds. Passwords, keys and tokens are filtered out, but automatic redaction is
+        best-effort. You are the last check: the tracker shows you the whole issue before you
+        create it.</small>
       </div>
     </div>
     <div class="cpr-pad cpr-bulkbar" style="border-top:1px solid var(--line)">
@@ -55,7 +57,8 @@
   </div>
   <div class="cpr-pad">
     <textarea rows="18" readonly class="cpr-mono" aria-label="The whole report">{{$data.Preview}}</textarea>
-    <small class="cpr-help">Download this and attach it to the issue, or paste it in.</small>
+    <small class="cpr-help">This is what <b>File it</b> carries, uncut. A long log is trimmed to
+    fit in a link, so attach this file to the issue when the log matters.</small>
   </div>
 </div>
 {{end}}

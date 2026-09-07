@@ -13,14 +13,16 @@ those lines first, and each section is capped so a noisy week does not become
 a report nobody reads.
 
 Nothing is transmitted from the server. **File it** opens
-<https://github.com/shukiv/gniza/issues> in a new tab with the subject and
-the description already in the form; you press GitHub's own button to send
-it. **Download it** hands the diagnostics over as `gniza-report-<when>.md`
-to attach to that issue, or to paste into it.
+<https://github.com/shukiv/gniza/issues> in a new tab with the whole report
+already in the form — what you typed and every section above it — and you
+press GitHub's own button to send it. You see the issue before you create
+it, which is where to check it one last time.
 
-A link cannot carry the whole report — browsers and servers each stop
-reading a URL somewhere — so a long description is cut short in the link and
-says where it was cut. The file is the whole of it.
+A link cannot carry every line of a log: browsers and servers each stop
+reading a URL somewhere. So the report is cut down until it fits, longest
+section first and oldest lines first, because what matters is nearest the
+failure. **Download it** hands over the uncut report as
+`gniza-report-<when>.md`; attach that to the issue when the log matters.
 
 There is nothing to configure and no credential to install. A plugin that is
 published to every cPanel server cannot hold a key to an authenticated

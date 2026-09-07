@@ -145,8 +145,17 @@ func TestFilingCarriesWhatWasTyped(t *testing.T) {
 	if got := target.Query().Get("title"); got != "Restore failed on studio" {
 		t.Errorf("the tracker's form opens with title %q", got)
 	}
-	if got := target.Query().Get("body"); !strings.Contains(got, "exit status 2") {
-		t.Errorf("the tracker's form opens with body %q", got)
+	body := target.Query().Get("body")
+	if !strings.Contains(body, "exit status 2") {
+		t.Errorf("the tracker's form opens with body %q", body)
+	}
+	// And with what this server knows, because filing is one action: an
+	// issue holding only the description asks the maintainer the three
+	// questions the report exists to answer.
+	for _, want := range []string{"Versions and environment", "cp01.example.com"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the issue does not carry the diagnostics: %q missing", want)
+		}
 	}
 
 	// What the operator reviewed is redacted, so what the link carries to

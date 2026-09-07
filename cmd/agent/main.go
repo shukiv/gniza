@@ -23,7 +23,9 @@ import (
 
 	"github.com/shukiv/gniza/internal/agent"
 	"github.com/shukiv/gniza/internal/cpanel"
+	"github.com/shukiv/gniza/internal/directadmin"
 	"github.com/shukiv/gniza/internal/hookspool"
+	"github.com/shukiv/gniza/internal/layout/dabackup"
 	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/resticrun"
 	"github.com/shukiv/gniza/internal/staging"
@@ -46,6 +48,7 @@ type config struct {
 	hostname      string
 	logLevel      string
 	fakeRoot      string
+	panelName     string
 	preflightOnly bool
 
 	standalone          bool
@@ -196,6 +199,9 @@ func parseFlags() config {
 		"how long one repository upload may take before it is abandoned")
 	flag.StringVar(&cfg.hostname, "hostname", hostname, "hostname reported to the controller")
 	flag.StringVar(&cfg.logLevel, "log-level", "info", "debug, info, warn or error")
+	flag.StringVar(&cfg.panelName, "panel", "cpanel",
+		"the hosting panel this server runs: cpanel, or directadmin, which is "+
+			"unfinished and refuses what it cannot do (see ADR 0019)")
 	flag.StringVar(&cfg.fakeRoot, "fake-cpanel-root", "",
 		"use a synthetic cPanel provider rooted here, for development without cPanel")
 	flag.BoolVar(&cfg.preflightOnly, "preflight", false, "check local prerequisites and exit")
@@ -362,6 +368,19 @@ func run(ctx context.Context, cfg config, log *slog.Logger) error {
 }
 
 func buildProvider(cfg config, log *slog.Logger) (panel.Provider, error) {
+	if cfg.panelName == "directadmin" {
+		if cfg.fakeRoot != "" {
+			return nil, fmt.Errorf("there is no synthetic DirectAdmin to run against")
+		}
+		// Said once, loudly, where an operator setting this up will see
+		// it: the layout was read out of documentation, and the restore
+		// path has never been run against a DirectAdmin server.
+		log.Warn("the DirectAdmin provider is unfinished", "detail", dabackup.Provisional)
+		return &directadmin.Real{Log: log}, nil
+	}
+	if cfg.panelName != "" && cfg.panelName != "cpanel" {
+		return nil, fmt.Errorf("unknown panel %q: cpanel or directadmin", cfg.panelName)
+	}
 	if cfg.fakeRoot == "" {
 		// The provider writes only at debug, so this costs nothing until
 		// somebody turns the level up -- and then it is the commands

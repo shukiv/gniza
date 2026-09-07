@@ -10,6 +10,7 @@ import (
 
 	"github.com/shukiv/gniza/internal/cpanel"
 	"github.com/shukiv/gniza/internal/granular"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/protocol"
 	"github.com/shukiv/gniza/internal/reassemble"
 )
@@ -38,7 +39,7 @@ func restoredTree(t *testing.T) string {
 	return out
 }
 
-func quietAgent(provider cpanel.Provider) *Agent {
+func quietAgent(provider panel.Provider) *Agent {
 	return &Agent{
 		provider: provider,
 		log:      slog.New(slog.DiscardHandler),

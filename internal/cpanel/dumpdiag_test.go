@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/pkgacct"
 )
 
@@ -52,7 +53,7 @@ func TestAFailedDumpSaysWhatMysqldumpSaid(t *testing.T) {
 
 	dir := t.TempDir()
 	missing, err := host.dumpDatabases(context.Background(),
-		StageRequest{StagingDir: dir, Account: AccountInfo{User: "customer1"}},
+		panel.StageRequest{StagingDir: dir, Account: panel.AccountInfo{User: "customer1"}},
 		pkgacct.Payload{DumpPaths: map[string]string{
 			"customer1_wp": filepath.Join(dir, "databases", "customer1_wp.sql"),
 		}})
@@ -82,7 +83,7 @@ func TestWhatWasRunIsInTheLogAtDebug(t *testing.T) {
 
 	dir := t.TempDir()
 	if _, err := host.dumpDatabases(context.Background(),
-		StageRequest{StagingDir: dir, Account: AccountInfo{User: "customer1"}},
+		panel.StageRequest{StagingDir: dir, Account: panel.AccountInfo{User: "customer1"}},
 		pkgacct.Payload{DumpPaths: map[string]string{
 			"customer1_wp": filepath.Join(dir, "databases", "customer1_wp.sql"),
 		}}); err != nil {
@@ -108,7 +109,7 @@ func TestNothingIsWrittenWhenTheLevelIsNotDebug(t *testing.T) {
 
 	dir := t.TempDir()
 	if _, err := host.dumpDatabases(context.Background(),
-		StageRequest{StagingDir: dir, Account: AccountInfo{User: "customer1"}},
+		panel.StageRequest{StagingDir: dir, Account: panel.AccountInfo{User: "customer1"}},
 		pkgacct.Payload{DumpPaths: map[string]string{
 			"customer1_wp": filepath.Join(dir, "databases", "customer1_wp.sql"),
 		}}); err != nil {

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/shukiv/gniza/internal/granular"
+	"github.com/shukiv/gniza/internal/panel"
 )
 
 // PutHomeDir copies a restored tree into an account's home directory.
@@ -344,7 +345,7 @@ func (r *Real) crontab() string {
 // request rather than being skipped: a restore that quietly left out the
 // grant an application connects with is a restore that reports success and
 // leaves the site down.
-func (r *Real) PutDatabaseUsers(ctx context.Context, user string, users []DatabaseUser) error {
+func (r *Real) PutDatabaseUsers(ctx context.Context, user string, users []panel.DatabaseUser) error {
 	if !plainAccountName(user) {
 		return fmt.Errorf("cpanel: %q is not a cPanel account name", user)
 	}
@@ -423,7 +424,7 @@ func (r *Real) PutDatabaseUsers(ctx context.Context, user string, users []Databa
 	// so it is created and granted directly instead. Every account on a
 	// cPanel server has one, so this is the common case rather than an
 	// edge.
-	var owner, mapped, fresh, known []DatabaseUser
+	var owner, mapped, fresh, known []panel.DatabaseUser
 	for _, account := range users {
 		if account.Name == user {
 			owner = append(owner, account)
@@ -466,7 +467,7 @@ func (r *Real) PutDatabaseUsers(ctx context.Context, user string, users []Databa
 // an entry in it, and its access to the account's own databases is not
 // something the panel tracks per database. The grant is still confined to
 // databases PutDatabaseUsers has already checked are this account's.
-func (r *Real) grantOwnerDatabases(ctx context.Context, owner []DatabaseUser) error {
+func (r *Real) grantOwnerDatabases(ctx context.Context, owner []panel.DatabaseUser) error {
 	var script strings.Builder
 	for _, account := range owner {
 		for _, grant := range account.Grants {
@@ -512,11 +513,11 @@ func (r *Real) grantOwnerDatabases(ctx context.Context, owner []DatabaseUser) er
 // two out of step -- and would undo a password change made because the old
 // one leaked, which is exactly what a restore must not quietly do. That
 // user is created if it is somehow missing and otherwise left as it is.
-func (r *Real) createDatabaseUsers(ctx context.Context, users []DatabaseUser, setPassword bool) error {
+func (r *Real) createDatabaseUsers(ctx context.Context, users []panel.DatabaseUser, setPassword bool) error {
 	return r.writeDatabaseUsers(ctx, users, setPassword, true)
 }
 
-func (r *Real) writeDatabaseUsers(ctx context.Context, users []DatabaseUser, setPassword, allowExisting bool) error {
+func (r *Real) writeDatabaseUsers(ctx context.Context, users []panel.DatabaseUser, setPassword, allowExisting bool) error {
 	if len(users) == 0 {
 		return nil
 	}
@@ -553,7 +554,7 @@ func (r *Real) writeDatabaseUsers(ctx context.Context, users []DatabaseUser, set
 // appear under MySQL Databases, the customer cannot change their password
 // or delete them, and the next thing that rebuilds the account leaves them
 // behind.
-func (r *Real) mapDatabaseUsers(ctx context.Context, user string, users []DatabaseUser) error {
+func (r *Real) mapDatabaseUsers(ctx context.Context, user string, users []panel.DatabaseUser) error {
 	names := make([]string, 0, len(users))
 	for _, account := range users {
 		names = append(names, account.Name)
@@ -586,7 +587,7 @@ func (r *Real) mapDatabaseUsers(ctx context.Context, user string, users []Databa
 // database, the panel's interface is drawn from that record rather than
 // from MySQL, and running as the account means cPanel refuses a database
 // that is not the account's whatever this program believed.
-func (r *Real) grantDatabaseUsers(ctx context.Context, user string, users []DatabaseUser) error {
+func (r *Real) grantDatabaseUsers(ctx context.Context, user string, users []panel.DatabaseUser) error {
 	for _, account := range users {
 		for _, grant := range account.Grants {
 			privileges := "ALL PRIVILEGES"

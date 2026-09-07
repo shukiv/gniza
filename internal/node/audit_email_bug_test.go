@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/shukiv/gniza/internal/cpanel"
 	"github.com/shukiv/gniza/internal/nodestore"
+	"github.com/shukiv/gniza/internal/panel"
 )
 
 // TestSkipEmailLeavesOutTheMailboxPasswordsToo covers what "leave email
@@ -19,7 +19,7 @@ import (
 // all of it -- on a destination chosen because it does not hold email.
 func TestSkipEmailLeavesOutTheMailboxPasswordsToo(t *testing.T) {
 	home := filepath.Join(string(filepath.Separator), "home", "customer1")
-	excludes := excludesFor(nodestore.Policy{SkipEmail: true}, cpanel.AccountInfo{
+	excludes := excludesFor(nodestore.Policy{SkipEmail: true}, panel.AccountInfo{
 		HomeDir: home,
 	}, nil)
 
@@ -40,7 +40,7 @@ func TestSkipEmailLeavesOutTheMailboxPasswordsToo(t *testing.T) {
 
 	// And a schedule that keeps email keeps all of it: ~/etc is only
 	// dropped because the operator asked for a backup without email.
-	full := excludesFor(nodestore.Policy{}, cpanel.AccountInfo{HomeDir: home}, nil)
+	full := excludesFor(nodestore.Policy{}, panel.AccountInfo{HomeDir: home}, nil)
 	for _, exclude := range full {
 		if exclude == wantMail || exclude == wantEtc {
 			t.Errorf("a schedule that keeps email excluded %s", exclude)

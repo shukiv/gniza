@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/pkgacct"
 )
 
@@ -56,7 +57,7 @@ func TestOneBadDatabaseDoesNotCostTheAccountItsBackup(t *testing.T) {
 	}}
 
 	missing, err := host.dumpDatabases(context.Background(),
-		StageRequest{StagingDir: dir, Account: AccountInfo{User: "customer1"}}, payload)
+		panel.StageRequest{StagingDir: dir, Account: panel.AccountInfo{User: "customer1"}}, payload)
 	if err != nil {
 		t.Fatalf("one bad database failed the whole account: %v", err)
 	}

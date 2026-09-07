@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/shukiv/gniza/internal/panel"
 )
 
 // A set-user-ID bit that was on a file when the backup was taken must not
@@ -124,10 +126,10 @@ func TestADatabaseUserIsNotRecreatedForAnAccountThatLostTheName(t *testing.T) {
 		Databases:    map[string][]string{"c1": {"c1_shop"}},
 		DBUserOwners: map[string]string{"c1_shop": "c2"},
 	}
-	err := fake.PutDatabaseUsers(context.Background(), "c1", []DatabaseUser{{
+	err := fake.PutDatabaseUsers(context.Background(), "c1", []panel.DatabaseUser{{
 		Name: "c1_shop", Host: "localhost", Plugin: "mysql_native_password",
 		Hash:   "2A46",
-		Grants: []DatabaseGrant{{Database: "c1_shop", Privileges: []string{"ALL PRIVILEGES"}}},
+		Grants: []panel.DatabaseGrant{{Database: "c1_shop", Privileges: []string{"ALL PRIVILEGES"}}},
 	}})
 	if err == nil {
 		t.Fatal("a user another account holds was recreated")
@@ -141,10 +143,10 @@ func TestADatabaseUserIsNotRecreatedForAnAccountThatLostTheName(t *testing.T) {
 // names what it had then, and that is not the same question.
 func TestAGrantIsOnlyGivenOnTheAccountsOwnDatabase(t *testing.T) {
 	fake := &Fake{Databases: map[string][]string{"c1": {"c1_shop"}, "c2": {"c2_secret"}}}
-	err := fake.PutDatabaseUsers(context.Background(), "c1", []DatabaseUser{{
+	err := fake.PutDatabaseUsers(context.Background(), "c1", []panel.DatabaseUser{{
 		Name: "c1_shop", Host: "localhost", Plugin: "mysql_native_password",
 		Hash:   "2A46",
-		Grants: []DatabaseGrant{{Database: "c2_secret", Privileges: []string{"ALL PRIVILEGES"}}},
+		Grants: []panel.DatabaseGrant{{Database: "c2_secret", Privileges: []string{"ALL PRIVILEGES"}}},
 	}})
 	if err == nil {
 		t.Fatal("a grant on another account's database was accepted")

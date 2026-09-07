@@ -24,6 +24,7 @@ import (
 	"github.com/shukiv/gniza/internal/agent"
 	"github.com/shukiv/gniza/internal/cpanel"
 	"github.com/shukiv/gniza/internal/hookspool"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/resticrun"
 	"github.com/shukiv/gniza/internal/staging"
 )
@@ -257,7 +258,7 @@ func runLiveCertification(ctx context.Context, cfg config, log *slog.Logger) (re
 	if err != nil {
 		return report, err
 	}
-	certifier, ok := provider.(cpanel.Certifier)
+	certifier, ok := provider.(panel.Certifier)
 	if !ok {
 		return report, errors.New("this cPanel provider cannot certify restores")
 	}
@@ -360,7 +361,7 @@ func run(ctx context.Context, cfg config, log *slog.Logger) error {
 	return worker.Run(ctx)
 }
 
-func buildProvider(cfg config, log *slog.Logger) (cpanel.Provider, error) {
+func buildProvider(cfg config, log *slog.Logger) (panel.Provider, error) {
 	if cfg.fakeRoot == "" {
 		// The provider writes only at debug, so this costs nothing until
 		// somebody turns the level up -- and then it is the commands

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/pkgacct"
 )
 
@@ -130,8 +131,8 @@ func TestAccountFailsLoudlyWhenDatabasesCannotBeListed(t *testing.T) {
 }
 
 func TestPostgreSQLCannotFallThroughTheMySQLOnlySplitPath(t *testing.T) {
-	request := StageRequest{
-		Account: AccountInfo{User: "customer1", HasPostgreSQL: true},
+	request := panel.StageRequest{
+		Account: panel.AccountInfo{User: "customer1", HasPostgreSQL: true},
 		Mode:    pkgacct.ModeSplit,
 	}
 	mode, reason, err := safeDatabaseMode(request)

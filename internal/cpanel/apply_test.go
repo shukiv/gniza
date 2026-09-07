@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/shukiv/gniza/internal/panel"
 )
 
 // fakeRestorepkg is a stand-in for cPanel's script that records the
@@ -36,7 +38,7 @@ func TestApplyAsksForARestrictedRestore(t *testing.T) {
 	}
 	host := &Real{RestorepkgPath: script}
 
-	if _, err := host.Apply(context.Background(), archive, ApplyOptions{}); err != nil {
+	if _, err := host.Apply(context.Background(), archive, panel.ApplyOptions{}); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	args := readArgs(t, record)
@@ -60,7 +62,7 @@ func TestApplyAsksForARestrictedRestore(t *testing.T) {
 	// restore proved this: --restricted --force failed outright, so every
 	// apply would have.
 	if _, err := host.Apply(context.Background(), archive,
-		ApplyOptions{Overwrite: true}); err != nil {
+		panel.ApplyOptions{Overwrite: true}); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	args = readArgs(t, record)
@@ -84,7 +86,7 @@ func TestAnOperatorCanStillAskForAnUnrestrictedRestore(t *testing.T) {
 	host := &Real{RestorepkgPath: script}
 
 	if _, err := host.Apply(context.Background(), archive,
-		ApplyOptions{Unrestricted: true}); err != nil {
+		panel.ApplyOptions{Unrestricted: true}); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	args := readArgs(t, record)
@@ -95,7 +97,7 @@ func TestAnOperatorCanStillAskForAnUnrestrictedRestore(t *testing.T) {
 	// --force is only available in unrestricted mode, so that is where
 	// an overwrite has to use it.
 	if _, err := host.Apply(context.Background(), archive,
-		ApplyOptions{Unrestricted: true, Overwrite: true}); err != nil {
+		panel.ApplyOptions{Unrestricted: true, Overwrite: true}); err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
 	if args := readArgs(t, record); !args["--force"] {

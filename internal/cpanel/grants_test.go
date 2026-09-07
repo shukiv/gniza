@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/shukiv/gniza/internal/panel"
 )
 
 // fakeMysql is a stand-in for the mysql client that answers the two
@@ -67,7 +69,7 @@ func TestTheGrantsFileIsTheOneRestorepkgReads(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := host.dumpDatabaseUsers(context.Background(),
-		StageRequest{Account: AccountInfo{User: "cprtest1"}}, out); err != nil {
+		panel.StageRequest{Account: panel.AccountInfo{User: "cprtest1"}}, out); err != nil {
 		t.Fatalf("dumpDatabaseUsers: %v", err)
 	}
 

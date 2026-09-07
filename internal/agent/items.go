@@ -11,10 +11,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/shukiv/gniza/internal/cpanel"
 	"github.com/shukiv/gniza/internal/granular"
 	"github.com/shukiv/gniza/internal/inventory"
 	"github.com/shukiv/gniza/internal/job"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/protocol"
 	"github.com/shukiv/gniza/internal/reassemble"
 	"github.com/shukiv/gniza/internal/resticrun"
@@ -405,7 +405,7 @@ func (a *Agent) applyItems(ctx context.Context, log *slog.Logger,
 			present[name] = true
 		}
 	}
-	var users []cpanel.DatabaseUser
+	var users []panel.DatabaseUser
 	if wantUsers {
 		if users, hint, err = checkDatabaseUsers(
 			assignment.CPanelUser, userNames, present, databases); err != nil {
@@ -590,7 +590,7 @@ func checkDatabaseDumps(names []string, present map[string]bool,
 // MySQL, and it takes checked values rather than a file whose contents
 // nobody has looked at.
 func checkDatabaseUsers(account string, wanted []string, present map[string]bool,
-	databases string) (users []cpanel.DatabaseUser, hint string, err error) {
+	databases string) (users []panel.DatabaseUser, hint string, err error) {
 
 	users, err = readStagedDatabaseUsers(databases)
 	if err != nil {
@@ -610,7 +610,7 @@ func checkDatabaseUsers(account string, wanted []string, present map[string]bool
 	// hosts, and all of its hosts come back: a grant put back against
 	// some of them is an application that connects and is refused.
 	if len(wanted) > 0 {
-		var chosen []cpanel.DatabaseUser
+		var chosen []panel.DatabaseUser
 		for _, user := range users {
 			if contains(wanted, user.Name) {
 				chosen = append(chosen, user)
@@ -670,7 +670,7 @@ func checkDatabaseUsers(account string, wanted []string, present map[string]bool
 // distinctUserNames names each user once, however many hosts it exists on.
 // Naming it once per host is what the operator's log and the customer's
 // page would otherwise both say.
-func distinctUserNames(users []cpanel.DatabaseUser) []string {
+func distinctUserNames(users []panel.DatabaseUser) []string {
 	var names []string
 	seen := map[string]bool{}
 	for _, user := range users {
@@ -694,7 +694,7 @@ func contains(values []string, want string) bool {
 
 // readStagedDatabaseUsers reads the users, their stored passwords and their
 // grants out of a restored databases directory.
-func readStagedDatabaseUsers(databases string) ([]cpanel.DatabaseUser, error) {
+func readStagedDatabaseUsers(databases string) ([]panel.DatabaseUser, error) {
 	raw, err := os.ReadFile(filepath.Join(databases, granular.DatabaseUsersAuthFile))
 	if err != nil {
 		return nil, fmt.Errorf("agent: read the database users in this backup: %w", err)
@@ -712,17 +712,17 @@ func readStagedDatabaseUsers(databases string) ([]cpanel.DatabaseUser, error) {
 		return nil, err
 	}
 
-	var users []cpanel.DatabaseUser
+	var users []panel.DatabaseUser
 	for name, hosts := range auth {
 		for host, credentials := range hosts {
-			user := cpanel.DatabaseUser{
+			user := panel.DatabaseUser{
 				Name:   name,
 				Host:   host,
 				Plugin: credentials.Plugin,
 				Hash:   credentials.Hash,
 			}
 			for _, grant := range grants[name+"@"+host] {
-				user.Grants = append(user.Grants, cpanel.DatabaseGrant{
+				user.Grants = append(user.Grants, panel.DatabaseGrant{
 					Database:   grant.Database,
 					Privileges: grant.Privileges,
 				})

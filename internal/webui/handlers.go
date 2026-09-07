@@ -26,6 +26,7 @@ import (
 	"github.com/shukiv/gniza/internal/node"
 	"github.com/shukiv/gniza/internal/nodestore"
 	"github.com/shukiv/gniza/internal/notify"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/pkgacct"
 	"github.com/shukiv/gniza/internal/protocol"
 	"github.com/shukiv/gniza/internal/reassemble"
@@ -1455,7 +1456,7 @@ func (s *Server) handleDeleteSchedule(w http.ResponseWriter, r *http.Request) {
 // --- accounts ---
 
 type accountView struct {
-	cpanel.AccountInfo
+	panel.AccountInfo
 	LastBackup *time.Time
 	LastStatus job.Status
 	Running    bool
@@ -1720,7 +1721,7 @@ func (s *Server) longRunThreshold() (time.Duration, error) {
 // The interval is read off the cron expression by asking it when it fires
 // twice, rather than by interpreting the fields: the parser is the
 // authority on what an expression means.
-func (s *Server) expectedIntervals(accounts []cpanel.AccountInfo) (map[string]time.Duration, map[string]time.Duration, error) {
+func (s *Server) expectedIntervals(accounts []panel.AccountInfo) (map[string]time.Duration, map[string]time.Duration, error) {
 	policies, err := s.engine.Store().Policies()
 	if err != nil {
 		return nil, nil, err
@@ -1772,7 +1773,7 @@ func (s *Server) expectedIntervals(accounts []cpanel.AccountInfo) (map[string]ti
 // expectedTargetIntervals says how fresh each promised destination copy
 // must be for each account. It is per target rather than per account because
 // a daily local copy and a weekly off-site copy have different due dates.
-func (s *Server) expectedTargetIntervals(accounts []cpanel.AccountInfo) (map[string]map[string]time.Duration, error) {
+func (s *Server) expectedTargetIntervals(accounts []panel.AccountInfo) (map[string]map[string]time.Duration, error) {
 	policies, err := s.engine.Store().Policies()
 	if err != nil {
 		return nil, err

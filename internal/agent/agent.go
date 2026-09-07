@@ -12,6 +12,7 @@ import (
 	"github.com/shukiv/gniza/internal/cpanel"
 	"github.com/shukiv/gniza/internal/destination"
 	"github.com/shukiv/gniza/internal/job"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/pkgacct"
 	"github.com/shukiv/gniza/internal/protocol"
 	"github.com/shukiv/gniza/internal/resticrun"
@@ -48,7 +49,7 @@ func Built() (time.Time, bool) {
 // Agent executes backup jobs on one cPanel server.
 type Agent struct {
 	client   *Client
-	provider cpanel.Provider
+	provider panel.Provider
 	staging  *staging.Manager
 	runner   *resticrun.Runner
 	log      *slog.Logger
@@ -86,7 +87,7 @@ type Agent struct {
 // Config assembles an Agent.
 type Config struct {
 	Client        *Client
-	Provider      cpanel.Provider
+	Provider      panel.Provider
 	Staging       *staging.Manager
 	Runner        *resticrun.Runner
 	Log           *slog.Logger
@@ -336,7 +337,7 @@ func (a *Agent) RunJob(ctx context.Context, assignment protocol.JobAssignment) p
 	log := a.log.With("job_id", assignment.JobID, "account", assignment.CPanelUser)
 
 	system := assignment.CPanelUser == cpanel.SystemAccount
-	var account cpanel.AccountInfo
+	var account panel.AccountInfo
 	if !system {
 		found, err := a.provider.Account(ctx, assignment.CPanelUser)
 		if err != nil {
@@ -385,7 +386,7 @@ func (a *Agent) RunJob(ctx context.Context, assignment protocol.JobAssignment) p
 		mode = pkgacct.ModeSystem
 		payload, err = a.provider.StageSystem(ctx, dir.Path)
 	} else {
-		payload, err = a.provider.Stage(ctx, cpanel.StageRequest{
+		payload, err = a.provider.Stage(ctx, panel.StageRequest{
 			Account: account, StagingDir: dir.Path, Mode: mode,
 			SkipHomedir:   assignment.SkipHomedir,
 			SkipDatabases: assignment.SkipDatabases,

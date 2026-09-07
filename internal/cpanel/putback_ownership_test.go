@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/shukiv/gniza/internal/panel"
 )
 
 func databaseUserRestoreHost(t *testing.T) (*Real, string) {
@@ -27,7 +29,7 @@ func TestRestoringDatabaseUsersCannotTakeOverUnmappedServerLogins(t *testing.T) 
 	for _, name := range []string{"root", "service"} {
 		t.Run(name, func(t *testing.T) {
 			r, mutations := databaseUserRestoreHost(t)
-			err := r.PutDatabaseUsers(t.Context(), "customer1", []DatabaseUser{{Name: name, Host: "localhost", Plugin: "mysql_native_password", Hash: "2A46"}})
+			err := r.PutDatabaseUsers(t.Context(), "customer1", []panel.DatabaseUser{{Name: name, Host: "localhost", Plugin: "mysql_native_password", Hash: "2A46"}})
 			if err == nil {
 				t.Fatal("unmapped server login was accepted")
 			}
@@ -43,7 +45,7 @@ func TestDatabaseUserRestoreFailsClosedOnUnreadableOwnership(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(r.DatabasesDir, "customer2.json"), []byte("broken"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	err := r.PutDatabaseUsers(t.Context(), "customer1", []DatabaseUser{{Name: "newuser", Host: "localhost", Plugin: "mysql_native_password", Hash: "2A46"}})
+	err := r.PutDatabaseUsers(t.Context(), "customer1", []panel.DatabaseUser{{Name: "newuser", Host: "localhost", Plugin: "mysql_native_password", Hash: "2A46"}})
 	if err == nil {
 		t.Fatal("a partial ownership index authorized a restore")
 	}
@@ -54,7 +56,7 @@ func TestDatabaseUserRestoreFailsClosedOnUnreadableOwnership(t *testing.T) {
 
 func TestDeletedDatabaseUserMustBeCreatedWithoutAlteringACollidingLogin(t *testing.T) {
 	r, mutations := databaseUserRestoreHost(t)
-	err := r.PutDatabaseUsers(t.Context(), "customer1", []DatabaseUser{{Name: "newuser", Host: "localhost", Plugin: "mysql_native_password", Hash: "2A46"}})
+	err := r.PutDatabaseUsers(t.Context(), "customer1", []panel.DatabaseUser{{Name: "newuser", Host: "localhost", Plugin: "mysql_native_password", Hash: "2A46"}})
 	if err != nil {
 		t.Fatal(err)
 	}

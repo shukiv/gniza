@@ -19,6 +19,7 @@ import (
 	"github.com/shukiv/gniza/internal/job"
 	"github.com/shukiv/gniza/internal/nodestore"
 	"github.com/shukiv/gniza/internal/notify"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/protocol"
 	"github.com/shukiv/gniza/internal/reassemble"
 	"github.com/shukiv/gniza/internal/resticrun"
@@ -262,11 +263,11 @@ func (e *Engine) runBackup(ctx context.Context, stored nodestore.Job) error {
 	if err != nil {
 		return e.failJob(stored, fmt.Sprintf("policy: %v", err))
 	}
-	var account cpanel.AccountInfo
+	var account panel.AccountInfo
 	if stored.Account == cpanel.SystemAccount {
 		// Not an account: cPanel has never heard of it, and the worker
 		// knows to stage the server's configuration instead.
-		account = cpanel.AccountInfo{User: cpanel.SystemAccount}
+		account = panel.AccountInfo{User: cpanel.SystemAccount}
 	} else {
 		account, err = e.provider.Account(ctx, stored.Account)
 		if err != nil {
@@ -511,11 +512,11 @@ func (e *Engine) runRestore(ctx context.Context, stored nodestore.Restore) error
 	if err != nil {
 		return e.failRestore(stored, err.Error())
 	}
-	var account cpanel.AccountInfo
+	var account panel.AccountInfo
 	if stored.Account == cpanel.SystemAccount {
 		// The server's own settings are not an account, and asking cPanel
 		// about them fails on the name alone.
-		account = cpanel.AccountInfo{User: cpanel.SystemAccount}
+		account = panel.AccountInfo{User: cpanel.SystemAccount}
 	} else if found, lookupErr := e.provider.Account(ctx, stored.Account); lookupErr == nil {
 		account = found
 	} else {
@@ -529,7 +530,7 @@ func (e *Engine) runRestore(ctx context.Context, stored nodestore.Restore) error
 		// the snapshot turns out to hold.
 		e.log.Info("restoring an account this server does not have",
 			"account", stored.Account, "detail", lookupErr)
-		account = cpanel.AccountInfo{User: stored.Account}
+		account = panel.AccountInfo{User: stored.Account}
 	}
 
 	// The live account is not an estimate of a historical backup. It may

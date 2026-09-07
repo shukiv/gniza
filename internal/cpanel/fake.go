@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/shukiv/gniza/internal/granular"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/pkgacct"
 )
 
@@ -36,7 +37,7 @@ type Fake struct {
 	// Applied records the archives Apply was called with.
 	Applied []string
 	// AppliedWith records the options each of those was applied under.
-	AppliedWith []ApplyOptions
+	AppliedWith []panel.ApplyOptions
 	// AppliedDirectory records, for each of those, whether what cPanel
 	// was handed was a directory at the moment it was handed over. A test
 	// cannot ask afterwards: staging is swept as soon as the restore
@@ -103,10 +104,10 @@ type PutBackCrontab struct {
 // RestoredDBUsers is one set of database users written back into an account.
 type RestoredDBUsers struct {
 	User  string
-	Users []DatabaseUser
+	Users []panel.DatabaseUser
 }
 
-var _ Provider = (*Fake)(nil)
+var _ panel.Provider = (*Fake)(nil)
 
 // DefaultFakeCaps is a modern cPanel: every flag we care about is present.
 var DefaultFakeCaps = pkgacct.Capabilities{
@@ -127,42 +128,42 @@ func (f *Fake) Capabilities(context.Context) (pkgacct.Capabilities, error) {
 // Accounts lists the synthetic accounts, creating their home directories on
 // first sight. Like the real provider it reports names and home directories
 // only; sizes and databases cost too much to gather for a listing.
-func (f *Fake) Accounts(_ context.Context) ([]AccountInfo, error) {
+func (f *Fake) Accounts(_ context.Context) ([]panel.AccountInfo, error) {
 	names := make([]string, 0, len(f.Databases))
 	for user := range f.Databases {
 		names = append(names, user)
 	}
 	sort.Strings(names)
 
-	accounts := make([]AccountInfo, 0, len(names))
+	accounts := make([]panel.AccountInfo, 0, len(names))
 	for _, user := range names {
 		home := filepath.Join(f.Root, "home", user)
 		if err := f.populateHome(home, user); err != nil {
 			return nil, err
 		}
-		accounts = append(accounts, AccountInfo{User: user, HomeDir: home})
+		accounts = append(accounts, panel.AccountInfo{User: user, HomeDir: home})
 	}
 	return accounts, nil
 }
 
 // Account creates the account's home directory if it does not exist yet and
 // reports its contents.
-func (f *Fake) Account(_ context.Context, user string) (AccountInfo, error) {
+func (f *Fake) Account(_ context.Context, user string) (panel.AccountInfo, error) {
 	if err := validateUser(user); err != nil {
-		return AccountInfo{}, err
+		return panel.AccountInfo{}, err
 	}
 	if f.Gone[user] {
-		return AccountInfo{}, fmt.Errorf("cpanel: account home for %s: no such directory", user)
+		return panel.AccountInfo{}, fmt.Errorf("cpanel: account home for %s: no such directory", user)
 	}
 	home := filepath.Join(f.Root, "home", user)
 	if err := f.populateHome(home, user); err != nil {
-		return AccountInfo{}, err
+		return panel.AccountInfo{}, err
 	}
 	size, err := directorySize(home)
 	if err != nil {
-		return AccountInfo{}, err
+		return panel.AccountInfo{}, err
 	}
-	return AccountInfo{
+	return panel.AccountInfo{
 		User:      user,
 		HomeDir:   home,
 		Databases: f.Databases[user],
@@ -172,7 +173,7 @@ func (f *Fake) Account(_ context.Context, user string) (AccountInfo, error) {
 
 // Stage writes a metadata archive and per-database dumps, mirroring what
 // pkgacct and mysqldump would leave behind.
-func (f *Fake) Stage(ctx context.Context, req StageRequest) (pkgacct.Payload, error) {
+func (f *Fake) Stage(ctx context.Context, req panel.StageRequest) (pkgacct.Payload, error) {
 	caps, err := f.Capabilities(ctx)
 	if err != nil {
 		return pkgacct.Payload{}, err
@@ -240,7 +241,7 @@ func (f *Fake) NativeExcludes(string) []string { return f.Excludes }
 // directory is checked for the cpuser file restorepkg reads to know whose
 // account it is, because a directory without one is what restorepkg
 // refuses.
-func (f *Fake) Apply(_ context.Context, archivePath string, options ApplyOptions) (string, error) {
+func (f *Fake) Apply(_ context.Context, archivePath string, options panel.ApplyOptions) (string, error) {
 	info, err := os.Stat(archivePath)
 	if err != nil {
 		return "", fmt.Errorf("cpanel: restore archive: %w", err)
@@ -333,7 +334,7 @@ func (f *Fake) PutCrontab(_ context.Context, user, from string) error {
 // It makes the same two checks the real provider makes -- that no other
 // account holds the user, and that every database granted is this
 // account's -- so a caller that fails to confine a request fails here too.
-func (f *Fake) PutDatabaseUsers(_ context.Context, user string, users []DatabaseUser) error {
+func (f *Fake) PutDatabaseUsers(_ context.Context, user string, users []panel.DatabaseUser) error {
 	if len(users) == 0 {
 		return errors.New("cpanel: no database user was named to restore")
 	}
@@ -363,7 +364,7 @@ func (f *Fake) owns(user, database string) bool {
 }
 
 func (f *Fake) Certify(ctx context.Context, archivePath, disposableUser string) error {
-	_, err := f.Apply(ctx, archivePath, ApplyOptions{NewUser: disposableUser, SkipDNS: true})
+	_, err := f.Apply(ctx, archivePath, panel.ApplyOptions{NewUser: disposableUser, SkipDNS: true})
 	return err
 }
 

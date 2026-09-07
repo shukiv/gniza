@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/shukiv/gniza/internal/agent"
-	"github.com/shukiv/gniza/internal/cpanel"
 	"github.com/shukiv/gniza/internal/destination"
 	"github.com/shukiv/gniza/internal/granular"
 	"github.com/shukiv/gniza/internal/hookspool"
@@ -30,6 +29,7 @@ import (
 	"github.com/shukiv/gniza/internal/job"
 	"github.com/shukiv/gniza/internal/nodestore"
 	"github.com/shukiv/gniza/internal/notify"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/protocol"
 	"github.com/shukiv/gniza/internal/reassemble"
 	"github.com/shukiv/gniza/internal/resticrun"
@@ -41,7 +41,7 @@ import (
 type Engine struct {
 	store    *nodestore.Store
 	vault    *vault.Vault
-	provider cpanel.Provider
+	provider panel.Provider
 	runner   *resticrun.Runner
 	worker   *agent.Agent
 	// workMu makes the "is this account busy?" check and enqueue one
@@ -100,7 +100,7 @@ type Engine struct {
 type Config struct {
 	Store    *nodestore.Store
 	Vault    *vault.Vault
-	Provider cpanel.Provider
+	Provider panel.Provider
 	Log      *slog.Logger
 	// Exec runs restic. Nil means real child processes; a test
 	// substitutes one so the paths that only happen when restic fails
@@ -321,7 +321,7 @@ func (e *Engine) Vault() *vault.Vault { return e.vault }
 func (e *Engine) Settings() nodestore.Settings { return e.settings }
 
 // Accounts lists the cPanel accounts on this server.
-func (e *Engine) Accounts(ctx context.Context) ([]cpanel.AccountInfo, error) {
+func (e *Engine) Accounts(ctx context.Context) ([]panel.AccountInfo, error) {
 	return e.provider.Accounts(ctx)
 }
 
@@ -581,7 +581,7 @@ func (e *Engine) Items(ctx context.Context, repositoryID, snapshotID string,
 // assignmentFor turns a stored job into the assignment the fleet agent
 // already knows how to execute.
 func (e *Engine) assignmentFor(j nodestore.Job, policy nodestore.Policy,
-	account cpanel.AccountInfo) (protocol.JobAssignment, error) {
+	account panel.AccountInfo) (protocol.JobAssignment, error) {
 
 	assignment := protocol.JobAssignment{
 		JobID:          j.ID,
@@ -632,7 +632,7 @@ func (e *Engine) assignmentFor(j nodestore.Job, policy nodestore.Policy,
 // backup; the same configuration is inside pkgacct's own archive, where
 // no exclude here can reach, so the schedule's choice is passed to
 // pkgacct as well.
-func excludesFor(policy nodestore.Policy, account cpanel.AccountInfo, native []string) []string {
+func excludesFor(policy nodestore.Policy, account panel.AccountInfo, native []string) []string {
 	excludes := append([]string(nil), policy.Excludes...)
 	if policy.SkipEmail && account.HomeDir != "" {
 		excludes = append(excludes,

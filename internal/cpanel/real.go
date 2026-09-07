@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/shukiv/gniza/internal/granular"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/pkgacct"
 )
 
@@ -83,7 +84,7 @@ type Real struct {
 	ReplacedDir string
 }
 
-var _ Provider = (*Real)(nil)
+var _ panel.Provider = (*Real)(nil)
 
 func (r *Real) pkgacct() string {
 	if r.PkgacctPath != "" {
@@ -174,13 +175,13 @@ func (r *Real) Capabilities(ctx context.Context) (pkgacct.Capabilities, error) {
 // It also never drops an account because some subsystem is unhappy. An
 // account whose databases cannot be listed is still an account, and hiding
 // it would tell an operator they have nothing to back up.
-func (r *Real) Accounts(_ context.Context) ([]AccountInfo, error) {
+func (r *Real) Accounts(_ context.Context) ([]panel.AccountInfo, error) {
 	entries, err := os.ReadDir(r.usersDir())
 	if err != nil {
 		return nil, fmt.Errorf("cpanel: list accounts: %w", err)
 	}
 
-	var accounts []AccountInfo
+	var accounts []panel.AccountInfo
 	for _, entry := range entries {
 		user := entry.Name()
 		if entry.IsDir() || strings.HasPrefix(user, ".") || user == "system" {
@@ -198,10 +199,10 @@ func (r *Real) Accounts(_ context.Context) ([]AccountInfo, error) {
 			// Still listed. An account cPanel knows about whose home is
 			// missing is a problem to be shown, not one to be hidden by
 			// leaving it off the page that says what gets backed up.
-			accounts = append(accounts, AccountInfo{User: user, HomeDir: home, Missing: true})
+			accounts = append(accounts, panel.AccountInfo{User: user, HomeDir: home, Missing: true})
 			continue
 		}
-		accounts = append(accounts, AccountInfo{User: user, HomeDir: home})
+		accounts = append(accounts, panel.AccountInfo{User: user, HomeDir: home})
 	}
 	sort.Slice(accounts, func(i, j int) bool { return accounts[i].User < accounts[j].User })
 	return accounts, nil
@@ -215,22 +216,22 @@ func (r *Real) usersDir() string {
 }
 
 // Account reads an account's home directory and database list.
-func (r *Real) Account(ctx context.Context, user string) (AccountInfo, error) {
+func (r *Real) Account(ctx context.Context, user string) (panel.AccountInfo, error) {
 	if err := validateUser(user); err != nil {
-		return AccountInfo{}, err
+		return panel.AccountInfo{}, err
 	}
 	home := r.homeFor(user)
 	info, err := os.Stat(home)
 	if err != nil {
-		return AccountInfo{}, fmt.Errorf("cpanel: account home %s: %w", home, err)
+		return panel.AccountInfo{}, fmt.Errorf("cpanel: account home %s: %w", home, err)
 	}
 	if !info.IsDir() {
-		return AccountInfo{}, fmt.Errorf("cpanel: account home %s is not a directory", home)
+		return panel.AccountInfo{}, fmt.Errorf("cpanel: account home %s is not a directory", home)
 	}
 
 	databases, err := r.databases(ctx, user)
 	if err != nil {
-		return AccountInfo{}, err
+		return panel.AccountInfo{}, err
 	}
 	hasPostgreSQL, postgresRecorded := r.recordedPostgreSQL(user)
 	if !postgresRecorded {
@@ -243,9 +244,9 @@ func (r *Real) Account(ctx context.Context, user string) (AccountInfo, error) {
 	}
 	size, err := directorySize(home)
 	if err != nil {
-		return AccountInfo{}, err
+		return panel.AccountInfo{}, err
 	}
-	return AccountInfo{
+	return panel.AccountInfo{
 		User: user, HomeDir: home, Databases: databases,
 		HasPostgreSQL: hasPostgreSQL, SizeBytes: size,
 	}, nil
@@ -344,7 +345,7 @@ func (r *Real) qualifyDatabaseUsers(ctx context.Context, names []string) ([]stri
 }
 
 // Stage runs pkgacct and, in split mode, dumps each database separately.
-func (r *Real) Stage(ctx context.Context, req StageRequest) (pkgacct.Payload, error) {
+func (r *Real) Stage(ctx context.Context, req panel.StageRequest) (pkgacct.Payload, error) {
 	caps, err := r.Capabilities(ctx)
 	if err != nil {
 		return pkgacct.Payload{}, err
@@ -438,7 +439,7 @@ func (r *Real) Stage(ctx context.Context, req StageRequest) (pkgacct.Payload, er
 // PostgreSQL databases. A complete account can fall back to pkgacct's own
 // archive. A request that deliberately omitted the home directory cannot:
 // monolithic pkgacct would violate that request, so it fails explicitly.
-func safeDatabaseMode(req StageRequest) (pkgacct.Mode, string, error) {
+func safeDatabaseMode(req panel.StageRequest) (pkgacct.Mode, string, error) {
 	if req.Mode != pkgacct.ModeSplit || req.SkipDatabases || !req.Account.HasPostgreSQL {
 		return req.Mode, "", nil
 	}
@@ -457,7 +458,7 @@ func safeDatabaseMode(req StageRequest) (pkgacct.Mode, string, error) {
 // pkgacct puts them in the archive it builds — but only when it is also
 // dumping the databases, which in split mode it is not. Without this a
 // restore brings back every table and nothing that can read them.
-func (r *Real) dumpDatabaseUsers(ctx context.Context, req StageRequest, dir string) error {
+func (r *Real) dumpDatabaseUsers(ctx context.Context, req panel.StageRequest, dir string) error {
 	account := req.Account.User
 	if !plainAccountName(account) {
 		return fmt.Errorf("cpanel: %q is not a cPanel account name", account)
@@ -742,7 +743,7 @@ func plainDatabaseUser(name string) bool { return plainAccountName(name) }
 // empty file that would restore as a database with no tables, and every
 // database not taken is returned to the caller to be recorded against the
 // run.
-func (r *Real) dumpDatabases(ctx context.Context, req StageRequest, payload pkgacct.Payload) ([]pkgacct.Omission, error) {
+func (r *Real) dumpDatabases(ctx context.Context, req panel.StageRequest, payload pkgacct.Payload) ([]pkgacct.Omission, error) {
 	if len(payload.DumpPaths) == 0 {
 		return nil, nil
 	}
@@ -802,7 +803,7 @@ func (r *Real) dumpDatabases(ctx context.Context, req StageRequest, payload pkga
 
 // dumpOneDatabase writes one database's dump, and says what mysqldump said
 // when it could not.
-func (r *Real) dumpOneDatabase(ctx context.Context, req StageRequest, name, path string) error {
+func (r *Real) dumpOneDatabase(ctx context.Context, req panel.StageRequest, name, path string) error {
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("cpanel: create dump %s: %w", path, err)
@@ -901,7 +902,7 @@ func (r *Real) removeacct() string {
 // have left something in there for this moment. Restricted mode is
 // cPanel's answer to exactly that, and an operator who needs the archive
 // restored whole can say so.
-func (r *Real) Apply(ctx context.Context, archivePath string, options ApplyOptions) (string, error) {
+func (r *Real) Apply(ctx context.Context, archivePath string, options panel.ApplyOptions) (string, error) {
 	info, err := os.Stat(archivePath)
 	if err != nil {
 		return "", fmt.Errorf("cpanel: restore archive: %w", err)
@@ -969,7 +970,7 @@ func (r *Real) Certify(ctx context.Context, archivePath, disposableUser string) 
 		return fmt.Errorf("cpanel: certification account %s already exists", disposableUser)
 	}
 
-	_, applyErr := r.Apply(ctx, archivePath, ApplyOptions{
+	_, applyErr := r.Apply(ctx, archivePath, panel.ApplyOptions{
 		NewUser: disposableUser, SkipDNS: true,
 	})
 	created := r.accountRegistered(disposableUser)

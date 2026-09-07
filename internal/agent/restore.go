@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shukiv/gniza/internal/cpanel"
 	"github.com/shukiv/gniza/internal/destination"
 	"github.com/shukiv/gniza/internal/job"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/protocol"
 	"github.com/shukiv/gniza/internal/reassemble"
 	"github.com/shukiv/gniza/internal/resticrun"
@@ -226,7 +226,7 @@ func (a *Agent) restoreAccount(ctx context.Context, log *slog.Logger,
 	// this program exists for -- tells cPanel to skip creating it, and
 	// nothing is restored into nothing.
 	_, lookupErr := a.provider.Account(ctx, assignment.CPanelUser)
-	options := cpanel.ApplyOptions{
+	options := panel.ApplyOptions{
 		Unrestricted: assignment.Unrestricted,
 		Overwrite:    lookupErr == nil,
 	}

@@ -298,6 +298,11 @@ func buildHomedir(parts reassemble.Parts, req Request, relative []string, descri
 }
 
 func buildMailbox(layout panel.ItemLayout, parts reassemble.Parts, req Request) (Plan, error) {
+	for _, name := range req.Names {
+		if err := usableMailboxName(name); err != nil {
+			return Plan{}, err
+		}
+	}
 	plan, err := buildHomedir(parts, req, layout.MailboxPaths(req.Names),
 		"the mail for "+strings.Join(req.Names, ", "))
 	if err != nil {
@@ -428,6 +433,38 @@ func underHome(home, name string) (string, error) {
 		return "", fmt.Errorf("granular: %s is not inside %s", name, home)
 	}
 	return full, nil
+}
+
+// usableMailboxName rejects anything that is not a mailbox or a domain.
+//
+// The shape a mailbox is named in is the panel's: cPanel keeps them as
+// <domain>/<mailbox> under mail/, DirectAdmin as <mailbox>@<domain>, and
+// a whole domain's mail is named by the domain alone. What all of them
+// need is that the name is a name -- one domain, and at most one mailbox
+// inside it.
+//
+// "../" is the case that made this necessary. Joined under mail/ it
+// resolves to the home directory itself, which is inside the account and
+// so passed every check there was -- and a request to restore one mailbox
+// put back every file the account owns.
+func usableMailboxName(name string) error {
+	refuse := fmt.Errorf("granular: %q is not a mailbox", name)
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return fmt.Errorf("granular: empty mailbox name")
+	}
+	if strings.ContainsAny(trimmed, "\\\x00") || strings.Contains(trimmed, "..") {
+		return refuse
+	}
+	if strings.Count(trimmed, "@") > 1 || strings.Count(trimmed, "/") > 1 {
+		return refuse
+	}
+	for _, element := range strings.Split(trimmed, "/") {
+		if strings.TrimSpace(element) == "" {
+			return refuse
+		}
+	}
+	return nil
 }
 
 // plainName rejects anything that is not simply a name, so a database

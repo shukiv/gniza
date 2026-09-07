@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/shukiv/gniza/internal/layout/cpmove"
+	"github.com/shukiv/gniza/internal/layout/dabackup"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/reassemble"
 )
 
@@ -288,5 +290,31 @@ func TestABasketWithOneImpossiblePartFailsWhole(t *testing.T) {
 	}
 	if _, err := BuildAll(cpmove.Layout{}, split, nil); err == nil {
 		t.Error("an empty basket was accepted")
+	}
+}
+
+// TestAMailboxNameCannotReachOutsideTheAccount.
+//
+// The name is typed by an operator and becomes a path inside a snapshot.
+// Each panel spells a mailbox differently -- mail/<address> on cPanel,
+// imap/<domain>/<mailbox> on DirectAdmin -- and neither layout validates
+// the name, because the clamp belongs here, where the home directory is
+// known.
+func TestAMailboxNameCannotReachOutsideTheAccount(t *testing.T) {
+	parts := reassemble.Parts{
+		Metadata:  "/stage/metadata",
+		Homedir:   "/home/customer1",
+		Databases: "/stage/databases",
+	}
+	for _, layout := range []panel.ItemLayout{cpmove.Layout{}, dabackup.Layout{}} {
+		for _, name := range []string{"../../etc/shadow", "/etc/shadow", "../"} {
+			plan, err := Build(layout, parts, Request{
+				Kind: KindMailbox, Account: "customer1", Names: []string{name},
+			})
+			if err == nil {
+				t.Errorf("%s: %q was accepted as a mailbox: %v",
+					layout.(interface{ Panel() string }).Panel(), name, plan.Include)
+			}
+		}
 	}
 }

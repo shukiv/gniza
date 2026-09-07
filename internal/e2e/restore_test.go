@@ -254,8 +254,10 @@ func TestRestoreAppliesWhenAsked(t *testing.T) {
 	if filepath.Base(handed) != "cpmove-customer1" {
 		t.Errorf("restorepkg was handed %q, want the extracted account directory", handed)
 	}
-	if info, err := os.Stat(handed); err != nil || !info.IsDir() {
-		t.Errorf("restorepkg was handed something that is not a directory: %q (%v)", handed, err)
+	// Asked at hand-over time, because staging is swept the moment the
+	// restore finishes and by now the path is gone whatever it was.
+	if !h.provider.AppliedDirectory[0] {
+		t.Errorf("restorepkg was handed %q, which was not a directory", handed)
 	}
 }
 

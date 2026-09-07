@@ -37,6 +37,11 @@ type Fake struct {
 	Applied []string
 	// AppliedWith records the options each of those was applied under.
 	AppliedWith []ApplyOptions
+	// AppliedDirectory records, for each of those, whether what cPanel
+	// was handed was a directory at the moment it was handed over. A test
+	// cannot ask afterwards: staging is swept as soon as the restore
+	// finishes, so by then the path is gone either way.
+	AppliedDirectory []bool
 	// Excludes is what NativeExcludes returns, for a test that needs the
 	// account to have some.
 	Excludes []string
@@ -248,6 +253,7 @@ func (f *Fake) Apply(_ context.Context, archivePath string, options ApplyOptions
 	}
 	f.AppliedWith = append(f.AppliedWith, options)
 	f.Applied = append(f.Applied, archivePath)
+	f.AppliedDirectory = append(f.AppliedDirectory, info.IsDir())
 	return f.ApplyOutput, nil
 }
 

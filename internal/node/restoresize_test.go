@@ -86,3 +86,26 @@ func TestFilesAreSizedByWhatTheyHold(t *testing.T) {
 		t.Errorf("two database dumps sized at %d, want %d", got, want)
 	}
 }
+
+// TestPickedFilesAreNotSizedAsAWholeAccount.
+//
+// v0.2.8 taught itemBytes to size a files restore and then never asked
+// it: the estimate gated on RestoreItems alone, so picking three files
+// out of a 48.7 GiB account still reserved the whole account and was
+// still refused. The listing was fetched over the network and thrown
+// away.
+func TestPickedFilesAreNotSizedAsAWholeAccount(t *testing.T) {
+	const account = 48 << 30
+	const threeFiles = 12 << 20
+
+	whole := restoreStagingEstimate(protocol.RestoreAccount, account, account, 0)
+	picked := restoreStagingEstimate(protocol.RestoreFiles, account, account, threeFiles)
+
+	if picked >= whole {
+		t.Errorf("picked files need %d, a whole account %d: the files are not sized by what they are",
+			picked, whole)
+	}
+	if picked <= threeFiles {
+		t.Errorf("a files restore is sized at %d, which does not hold what it restores", picked)
+	}
+}

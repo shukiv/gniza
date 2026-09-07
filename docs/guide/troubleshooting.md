@@ -150,7 +150,7 @@ in that moment fails for a reason that has nothing to do with the database
 being dumped. Gniza waits for the server to answer again and tries that
 database once more, rather than recording the rest of the account's databases
 as missing. cPanel's own `pkgacct` does not: measured on such an account, it
-dumped 16 of 47 databases, lost the other 31 to `Can'''t connect`, and exited
+dumped 16 of 47 databases, lost the other 31 to `Can't connect`, and exited
 zero saying `pkgacct completed`.
 
 ## A restore says there is not enough room
@@ -169,7 +169,8 @@ If the account will not fit even once, the answer is room — a bigger
 staging volume, or Settings → Staging pointed at one. Restoring one
 database or a few files out of it needs only what those come to, and is
 refused only when what you picked includes a folder, whose size the
-backup cannot state.
+backup cannot state — a mailbox is a folder of messages, so it counts as
+one.
 
 ## A destination stops answering
 

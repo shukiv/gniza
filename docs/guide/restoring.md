@@ -47,9 +47,11 @@ over. The safety margin in Settings is added on top of all of these.
 A restore of a folder is sized as a whole account, not as the folder: the
 backup can say what a list of files comes to, but not what is under a
 directory, and a guess that came out low would fill the volume halfway
-through. Databases, mailboxes, DNS zones and certificates are files, so
-those are sized exactly — which is what makes *Restore one thing*
-possible on an account far larger than the free disk.
+through. Databases, DNS zones, certificates, cron jobs and FTP settings
+are files, so those are sized exactly — which is what makes *Restore one
+thing* possible on an account far larger than the free disk. A mailbox is
+a folder of messages, so it falls back to the account's figure like any
+other folder.
 
 ## Restore account(s)
 

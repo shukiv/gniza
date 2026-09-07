@@ -753,8 +753,11 @@ func restoreStagingEstimate(kind string, liveBytes, snapshotBytes, itemBytes uin
 	if snapshotBytes == 0 {
 		return 0
 	}
-	if kind == protocol.RestoreItems && itemBytes > 0 {
-		return reassemble.ArchiveBytes(itemBytes)
+	switch kind {
+	case protocol.RestoreItems, protocol.RestoreFiles:
+		if itemBytes > 0 {
+			return reassemble.ArchiveBytes(itemBytes)
+		}
 	}
 	return reassemble.ArchiveBytes(max(liveBytes, snapshotBytes))
 }

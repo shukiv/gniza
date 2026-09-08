@@ -155,6 +155,40 @@ validated. The database `.conf` contents were not published. The inspected
 per-user SQLite database listed `git`, `cpanel_import`, `cpanel_import_log` and
 `resource_metrics` tables; this does not settle every database-ownership rule.
 
+## What the nested home archive holds — read 2026-09-08
+
+Read from the retained fixture archive on `.10`, streamed rather than
+extracted, with no new backup run:
+
+```
+tar --use-compress-program=unzstd -xOf <archive> backup/home.tar.zst \
+  | tar --use-compress-program=unzstd -tvf -
+```
+
+- The outer archive has exactly three roots: `backup/`, `domains/`,
+  `imap/`.
+- `backup/home.tar.zst` holds the **complement** of `domains/` and
+  `imap/`, not a second copy of them: dotfiles (`.bashrc`,
+  `.bash_profile`), the account's own `Maildir/`, `.php/`, and whatever
+  else is in the home directory. Nothing is stored twice.
+- Its entries are relative to the home directory with no leading `./`
+  and no wrapping directory.
+- Ownership is recorded as **names, not numbers** — `gzv0908a/gzv0908a`,
+  and also `gzv0908a/apache`, `gzv0908a/mail`, `gzv0908a/access`. The
+  group is not always the account's own, and the modes that go with
+  those groups are meaningful (`drwxrwx--- gzv0908a/apache` for
+  `.php/`). Anything that rebuilds this archive has to carry the group
+  and mode per entry, not assume the account owns everything.
+
+This is the groundwork for staging a DirectAdmin account in parts.
+Gniza does not need an undocumented `admin-backup` option to do it: it
+can take the whole archive DirectAdmin already produces, unpack the
+outer tree and the nested home archive, and store the parts, then
+rebuild both on the way back. What is not yet established is whether a
+rebuilt archive restores byte-for-identically enough for DirectAdmin's
+own restore to accept it, which is a round trip on the fixture and not a
+source question.
+
 ## What remains unverified
 
 - Split/no-compression backup behavior. `admin-backup --help` on this host only

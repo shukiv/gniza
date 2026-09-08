@@ -526,3 +526,29 @@ and `installed=yes` as well as `active=yes`; the entry point DirectAdmin
 serves is `index.html` in each level directory, not `index.raw`; and the
 menu entry comes from `hooks/admin_txt.html` and `hooks/user_txt.html`.
 Without those the page is a 404 with the plugin sitting right there.
+
+## Split mode does not need an option DirectAdmin never documented — 2026-09-08
+
+`Stage` refuses split mode because backing an account up in parts was
+taken to need `admin-backup` options that are not documented, and
+guessing at them would produce the kind of backup that looks fine until
+it is needed.
+
+Reading the retained fixture archive settles that it does not need them.
+The outer archive has three roots — `backup/`, `domains/`, `imap/` — and
+`backup/home.tar.zst` carries the rest of the home directory, with no
+overlap between them. So Gniza can ask DirectAdmin for exactly the
+archive it already knows how to produce, then unpack that archive itself
+into the parts restic wants to see, and rebuild it on the way back.
+DirectAdmin is never asked to do anything it has not documented.
+
+What that costs is a repack that DirectAdmin's own restore will accept.
+The fixture's entries carry owners and groups as names rather than
+numbers, and not always the account's own group — `gzv0908a/apache` on
+`.php/`, `gzv0908a/mail` on `Maildir/` — with modes that go with those
+groups. A rebuild that flattens ownership would restore an account whose
+mail directory the mail server cannot write. That is a round trip on the
+fixture to answer, not a source question, and it is what stands between
+this and split mode on DirectAdmin.
+
+See docs/directadmin-validation-2026-09-08.md for the listing.

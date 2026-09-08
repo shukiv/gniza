@@ -56,8 +56,10 @@ before the handler runs:
    rather than about the session, which is the opposite of what this is
    for.
 2. DirectAdmin answers with the session's own `username` and `usertype`.
-   Anything else — a redirect to the login page, an `error=1`, an HTML
-   page, two names, a type DirectAdmin does not have — is a refusal.
+   Anything else — a status that is not 200, an `error=1`, an HTML page,
+   two names, a type DirectAdmin does not have — is a refusal. On the
+   1.709 host a session it does not know is answered `401
+   Unauthorized`, not with the login page a browser gets.
 3. The handler runs only when `usertype` is `admin`. A reseller session
    is refused by the daemon, not by the page.
 
@@ -103,3 +105,26 @@ The service account is created at install time and is not removed at
 uninstall. Removing an account that may own files elsewhere is a
 decision for the host's administrator, in the same way the master key is
 left behind.
+
+## What the live panel answered — 2026-09-08
+
+Run against DirectAdmin 1.709 on the production host, read-only, asking
+about a session that does not exist. Nothing was installed and no
+account was touched.
+
+- `PanelURL` read `https://uscp.linux-hosting.network:2222` out of
+  `directadmin.conf`, which is the name on the panel's own certificate.
+- A session DirectAdmin does not know was answered `401 Unauthorized`,
+  and read as a refusal rather than as an outage — which is the
+  distinction that matters, because an outage is what a wrong address or
+  an unverifiable certificate would look like.
+- The same request to `https://127.0.0.1:2222`, which reaches the same
+  panel, failed verification: "cannot validate certificate for 127.0.0.1
+  because it doesn't contain any IP SANs". The certificate is being
+  checked, which is why the address is read from DirectAdmin's
+  configuration rather than assumed to be loopback.
+
+What this does not establish is the accepting path: that an
+administrator's live session is answered with their name and
+`usertype=admin`. That needs somebody logged into the panel, and the
+page installed for them to open.

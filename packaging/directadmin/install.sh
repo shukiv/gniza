@@ -46,6 +46,57 @@ for dir in "$CONFIG_DIR" "$STATE_DIR" "$STAGING_DIR" "$HOOK_SPOOL_DIR" "$CACHE_D
 	chmod 0700 "$dir"
 done
 
+# Gniza drives restic; it does not carry a copy of it. Telling an
+# administrator to go and fetch one is a step they have to get right on a
+# machine that is not yet doing backups, so this installs the version
+# Gniza is built against -- checked against restic's own published
+# checksum before anything becomes executable, because a backup program
+# that installs an unverified binary as root is not a backup program
+# worth having.
+RESTIC_VERSION=0.19.1
+case "$(uname -m)" in
+	x86_64)  RESTIC_ARCH=amd64 ;;
+	aarch64) RESTIC_ARCH=arm64 ;;
+	*)       RESTIC_ARCH="" ;;
+esac
+
+install_restic() {
+	[ -n "$RESTIC_ARCH" ] || die "there is no restic build for $(uname -m); install restic yourself and run this again"
+	for tool in curl bunzip2 sha256sum; do
+		command -v "$tool" >/dev/null 2>&1 || die "$tool is needed to install restic; install it and run this again"
+	done
+
+	restic_base=https://github.com/restic/restic/releases/download/v$RESTIC_VERSION
+	restic_file=restic_${RESTIC_VERSION}_linux_${RESTIC_ARCH}.bz2
+	RESTIC_TMP=$(mktemp -d /var/tmp/gniza-restic.XXXXXX)
+	trap 'if [ -n "${RESTIC_TMP:-}" ]; then rm -rf -- "$RESTIC_TMP"; fi' 0 1 2 15
+
+	say "downloading restic $RESTIC_VERSION ($RESTIC_ARCH)"
+	curl -fsSL -o "$RESTIC_TMP/$restic_file" "$restic_base/$restic_file" \
+		|| die "could not download $restic_base/$restic_file; install restic yourself and run this again"
+	curl -fsSL -o "$RESTIC_TMP/SHA256SUMS" "$restic_base/SHA256SUMS" \
+		|| die "could not download restic's checksums from $restic_base; install restic yourself and run this again"
+
+	# Only the one line for the file actually downloaded: the rest of
+	# that file names builds for platforms this machine does not have.
+	grep " $restic_file\$" "$RESTIC_TMP/SHA256SUMS" > "$RESTIC_TMP/expected" \
+		|| die "restic's checksum file does not mention $restic_file"
+	( cd "$RESTIC_TMP" && sha256sum -c expected ) >/dev/null \
+		|| die "the restic download does not match its published checksum; nothing was installed"
+
+	bunzip2 -c "$RESTIC_TMP/$restic_file" > "$RESTIC_TMP/restic" || die "could not unpack restic"
+	install -m 0755 "$RESTIC_TMP/restic" "$PREFIX/restic"
+	rm -rf -- "$RESTIC_TMP"
+	RESTIC_TMP=""
+	trap - 0 1 2 15
+	say "installed $PREFIX/restic"
+}
+
+if ! command -v restic >/dev/null 2>&1 && [ ! -x /usr/local/bin/restic ]; then
+	install_restic
+fi
+say "restic: $(restic version 2>/dev/null | head -1)"
+
 install -m 0755 "$SOURCE_DIR/gniza-agent" "$PREFIX/gniza-agent"
 # The hook is the same program under the name the hook scripts call. It
 # is a copy rather than a symlink for the same reason it is on cPanel:

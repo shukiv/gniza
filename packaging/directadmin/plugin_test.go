@@ -147,3 +147,42 @@ func stripComments(script string) string {
 	}
 	return strings.Join(kept, "\n")
 }
+
+// Gniza drives restic and does not carry a copy of it, so an installer
+// that does not put one there leaves a service that cannot start: on a
+// real 1.709 host the unit came up and died on
+// `run restic version: exec: "restic": executable file not found in
+// $PATH`, once every five seconds. WHM's installer has fetched and
+// verified one since the beginning; this one has to do the same, and it
+// has to check the download against restic's own published checksum
+// before anything becomes executable.
+func TestTheInstallerPutsResticThereBecauseNothingWorksWithoutIt(t *testing.T) {
+	script := read(t, "install.sh")
+	for _, want := range []string{
+		"restic",
+		"SHA256SUMS",
+		"sha256sum -c",
+		"install -m 0755",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("the installer does not mention %q", want)
+		}
+	}
+	// The same version the rest of Gniza is built against. A different
+	// one would be a repository format nothing else on the server reads.
+	version := regexp.MustCompile(`RESTIC_VERSION=([0-9.]+)`).FindStringSubmatch(script)
+	if version == nil {
+		t.Fatal("the installer does not pin a restic version")
+	}
+	whm := read(t, "../whm/install.sh")
+	if want := "RESTIC_VERSION=" + version[1]; !strings.Contains(whm, want) {
+		t.Errorf("this installs restic %s and WHM's installs another", version[1])
+	}
+	// And it does not fetch one over a plaintext connection, or from
+	// anywhere but restic's own releases.
+	for _, url := range regexp.MustCompile(`https?://\S+`).FindAllString(script, -1) {
+		if !strings.HasPrefix(url, "https://github.com/restic/restic/releases/") {
+			t.Errorf("the installer downloads from %s", url)
+		}
+	}
+}

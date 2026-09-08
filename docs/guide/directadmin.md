@@ -58,8 +58,16 @@ Gniza refuses these rather than guessing, and says so by name:
   deduplicate, and the reason a nightly backup costs a fraction of the
   account's size;
 - backing up **less than the whole account** — a schedule that excludes
-  the databases or the mail;
-- **granular restoring**: one database, mailbox, file, or selected component;
+  the databases or the mail. `directadmin admin-backup` takes a
+  destination and a user and nothing else, so this is not a gap in Gniza
+  to be filled in later: DirectAdmin has no such flag;
+- **granular restoring**: one database, mailbox, file, or selected
+  component. The paths these would use are now taken from a real archive
+  rather than from documentation, and are checked against its listing, but
+  a DirectAdmin backup is one archive rather than separate parts, so there
+  is nothing for a granular restore to reach into yet. One domain's FTP
+  logins and one domain's mail configuration cannot be asked for at all --
+  see question 9 in ADR 0019;
 - restricted restore, new-account disaster recovery, account renaming,
   certificate-isolated certification, or applying archives as admin/reseller accounts;
 - backing up **the server's own configuration**.

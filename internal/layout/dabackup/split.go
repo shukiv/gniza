@@ -5,8 +5,10 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -163,8 +165,16 @@ func (Layout) UnpackArchive(ctx context.Context, archivePath, account, dir strin
 	}
 	// Both parts are made whether or not the archive has anything to put
 	// in them, because a part that is not there is a backup that is
-	// missing one.
+	// missing one. A part already there is a tree from a previous run:
+	// writing into it would keep files the account has since deleted and
+	// would fail wherever a directory has become a file, so it is
+	// refused rather than merged into.
 	for _, part := range []string{MetadataPart(dir), HomedirPart(dir)} {
+		if _, err := os.Lstat(part); err == nil {
+			return fmt.Errorf("dabackup: %s already holds a %s tree", dir, filepath.Base(part))
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("dabackup: %s: %w", part, err)
+		}
 		if err := os.MkdirAll(part, 0o700); err != nil {
 			return fmt.Errorf("dabackup: create %s: %w", part, err)
 		}

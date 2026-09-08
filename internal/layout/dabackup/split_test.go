@@ -782,3 +782,27 @@ func TestTheHomeDirectoryTheLayoutNamesIsTheWholeHomeDirectory(t *testing.T) {
 		}
 	}
 }
+
+// Staging allocates a fresh directory per run and refuses one that is
+// already there, so a tree from a previous night should never be under a
+// new unpack. Should is not a guarantee, and writing into one that is
+// there would leave last night's deleted files in tonight's backup and
+// would fail halfway through wherever a directory has become a file. So
+// it is refused, and the refusal names the part that was in the way.
+func TestATreeThatIsAlreadyThereIsNotWrittenOver(t *testing.T) {
+	account := "gzv0908a"
+	for _, part := range []func(string) string{MetadataPart, HomedirPart} {
+		dir := t.TempDir()
+		if err := os.MkdirAll(part(dir), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		err := (Layout{}).UnpackArchive(context.Background(),
+			buildSplitFixture(t, account), account, dir)
+		if err == nil {
+			t.Fatalf("unpacked over the tree already in %s", part(dir))
+		}
+		if !strings.Contains(err.Error(), filepath.Base(part(dir))) {
+			t.Errorf("the refusal does not say what was in the way: %v", err)
+		}
+	}
+}

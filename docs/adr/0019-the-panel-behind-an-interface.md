@@ -437,11 +437,29 @@ SESSION_ID=<39 characters>
 
 DirectAdmin changed the user *and still handed over the session*. That
 was the assumption the second design rested on and the only thing that
-could have sunk it. So the design is now the decision: DirectAdmin runs
-Gniza's admin page as an account Gniza installs for it, the
-administrative socket is owned by that account rather than by root, and
-no setuid-root binary is installed anywhere. ADR 0012 has a change to
-record.
+could have sunk it. No setuid-root binary needs to be installed
+anywhere.
+
+What does not follow, and what an earlier draft of this section said
+anyway, is that the administrative socket should become owned by that
+account. It should not. Today that socket is root-only, and a connection
+to it means an operator with a root shell. Give it to `gniza`'s uid and
+a connection means *DirectAdmin's plugin runner* -- a service account,
+acting for whoever DirectAdmin let through to the page. The uid stops
+being a person. That is ADR 0013's lesson arriving on the administrative
+side: a unix uid is not a login.
+
+So the socket is not widened, it is joined. `/var/run/gniza/admin/ui.sock`
+stays exactly as it is, root-only, for the command line and for
+standalone mode. DirectAdmin gets a second one of its own, owned by the
+dedicated account, whose handler does nothing at all until the session
+carried with the request has been put to DirectAdmin and come back
+naming an administrator. On that socket the verified session is the
+whole authorization, in the way ADR 0013 made it the whole authorization
+on the account side; the uid only says which door was used.
+
+ADR 0020 records that, because it is a decision about who may read every
+customer's backups rather than a note on this one.
 
 The account page reported `uid=1000 user=admin` with no `user_run_as`
 set, which is DirectAdmin running it as whoever is logged in, as its

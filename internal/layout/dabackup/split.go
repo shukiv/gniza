@@ -43,25 +43,31 @@ import (
 // manifest alone, and the repack is driven entirely by it.
 
 const (
-	// ManifestFile is where the headers of both archives are written,
-	// beside the tree rather than in it, so no archive member can be
-	// named the same thing.
-	ManifestFile = "manifest.json"
-	// TreeDirName is the directory the file bodies go in. It is what a
-	// split payload points restic at.
-	TreeDirName = "tree"
-	// HomeTreeDir is the account's home directory inside that tree.
-	// domains/, imap/ and the nested archive are three views of one
-	// directory, and this is where they are put back together.
-	HomeTreeDir = "home"
+	// MetadataTreeDir and HomeTreeDir are the two directories an
+	// unpacked archive becomes. They are the two parts restic is pointed
+	// at, and they are named for what reassemble.Classify reads a
+	// snapshot's paths as: the metadata part is recognised by its name,
+	// and the other one is the home directory.
+	//
+	// HomeTreeDir is where domains/, imap/ and the nested archive are put
+	// back together, because they are three views of one directory.
+	MetadataTreeDir = "metadata"
+	HomeTreeDir     = "home"
+	// ManifestFile is where the headers of both archives are written. It
+	// lives in the metadata part rather than beside it because a part is
+	// one path handed to restic, and a manifest outside both parts would
+	// not be backed up at all -- leaving a tree that cannot be repacked
+	// into anything DirectAdmin would restore.
+	ManifestFile = ".gniza-manifest.json"
 
 	// manifestVersion is what the reader checks. A tree written by a
 	// later Gniza is refused rather than misread.
 	manifestVersion = 1
-	// reservedDir is the one name in the tree that is Gniza's rather than
-	// DirectAdmin's. An archive whose own members would land in it is
-	// refused; see reserveBody for what it is for.
-	reservedDir = ".gniza"
+	// reservedPrefix is what everything in the tree that is Gniza's
+	// rather than DirectAdmin's is named. An archive whose own members
+	// would land there is refused; see reserveBody for the other thing
+	// kept under it.
+	reservedPrefix = MetadataTreeDir + "/.gniza-"
 	// maxMemberSize bounds one file taken out of the archive, for the
 	// same reason reassemble bounds one: the archive is only as
 	// trustworthy as the machine that wrote it.
@@ -142,18 +148,22 @@ func (Layout) UnpackArchive(ctx context.Context, archivePath, account, dir strin
 	if err != nil || !info.Mode().IsRegular() {
 		return fmt.Errorf("dabackup: account archive is not a regular file")
 	}
-	tree := filepath.Join(dir, TreeDirName)
-	if err := os.MkdirAll(tree, 0o700); err != nil {
-		return fmt.Errorf("dabackup: create %s: %w", tree, err)
+	// Both parts are made whether or not the archive has anything to put
+	// in them, because a part that is not there is a backup that is
+	// missing one.
+	for _, part := range []string{MetadataPart(dir), HomedirPart(dir)} {
+		if err := os.MkdirAll(part, 0o700); err != nil {
+			return fmt.Errorf("dabackup: create %s: %w", part, err)
+		}
 	}
 	// Every body below is written through this. os.Root resolves each
 	// path against the directory itself rather than against the string,
 	// so a member that walks out through a symlink an account planted in
 	// its own home is refused by the operating system -- which matters,
 	// because this runs as root on an archive a customer can influence.
-	root, err := os.OpenRoot(tree)
+	root, err := os.OpenRoot(dir)
 	if err != nil {
-		return fmt.Errorf("dabackup: open %s: %w", tree, err)
+		return fmt.Errorf("dabackup: open %s: %w", dir, err)
 	}
 	defer func() { _ = root.Close() }()
 
@@ -175,7 +185,7 @@ func (Layout) UnpackArchive(ctx context.Context, archivePath, account, dir strin
 	if err != nil {
 		return fmt.Errorf("dabackup: write the archive manifest: %w", err)
 	}
-	return os.WriteFile(filepath.Join(dir, ManifestFile), append(body, '\n'), 0o600)
+	return os.WriteFile(filepath.Join(MetadataPart(dir), ManifestFile), append(body, '\n'), 0o600)
 }
 
 // unpacker carries the state one archive is taken apart with.
@@ -265,8 +275,8 @@ func (u *unpacker) place(member *Member, tr *tar.Reader, clean string, size int6
 		return nil
 	}
 	target := treePath(clean, home)
-	if target == reservedDir || strings.HasPrefix(target, reservedDir+"/") {
-		return fmt.Errorf("dabackup: archive member %q is named the same as Gniza's own directory", member.Name)
+	if strings.HasPrefix(target, reservedPrefix) {
+		return fmt.Errorf("dabackup: archive member %q is named the same as one of Gniza's own files", member.Name)
 	}
 	switch member.Typeflag {
 	case tar.TypeDir:
@@ -319,7 +329,7 @@ func (u *unpacker) reserveBody(preferred string) string {
 		u.bodies[preferred] = true
 		return preferred
 	}
-	duplicate := path.Join(reservedDir, "duplicate", strconv.Itoa(u.ordinal))
+	duplicate := reservedPrefix + "duplicate/" + strconv.Itoa(u.ordinal)
 	u.bodies[duplicate] = true
 	return duplicate
 }
@@ -339,10 +349,9 @@ func (Layout) PackArchive(ctx context.Context, dir, account, archivePath string)
 		return fmt.Errorf("dabackup: this tree was taken from %s, not from %s",
 			manifest.Account, account)
 	}
-	tree := filepath.Join(dir, TreeDirName)
-	root, err := os.OpenRoot(tree)
+	root, err := os.OpenRoot(dir)
 	if err != nil {
-		return fmt.Errorf("dabackup: open %s: %w", tree, err)
+		return fmt.Errorf("dabackup: open %s: %w", dir, err)
 	}
 	defer func() { _ = root.Close() }()
 
@@ -521,7 +530,7 @@ func (m Member) header() *tar.Header {
 
 // readManifest reads what UnpackArchive wrote.
 func readManifest(dir string) (Manifest, error) {
-	body, err := os.ReadFile(filepath.Join(dir, ManifestFile))
+	body, err := os.ReadFile(filepath.Join(MetadataPart(dir), ManifestFile))
 	if err != nil {
 		return Manifest{}, fmt.Errorf("dabackup: this is not an unpacked account archive: %w", err)
 	}
@@ -564,12 +573,18 @@ func isNestedHomeArchive(clean string, typeflag byte) bool {
 		strings.HasPrefix(path.Base(clean), "home.tar")
 }
 
+// MetadataPart and HomedirPart are the two directories UnpackArchive
+// writes, and the two paths a split payload hands restic.
+func MetadataPart(dir string) string { return filepath.Join(dir, MetadataTreeDir) }
+func HomedirPart(dir string) string  { return filepath.Join(dir, HomeTreeDir) }
+
 // treePath answers where a member's body belongs in the tree.
 //
 // domains/ and imap/ from the outer archive and everything in the nested
 // one are parts of the same directory -- /home/<account> -- and are put
 // back into it, so what restic sees is a home directory rather than the
-// shape of the archive it arrived in.
+// shape of the archive it arrived in. What is left is DirectAdmin's own
+// records of the account, which are the metadata part.
 func treePath(clean string, home bool) string {
 	if home {
 		return path.Join(HomeTreeDir, clean)
@@ -577,7 +592,7 @@ func treePath(clean string, home bool) string {
 	if first, _, _ := strings.Cut(clean, "/"); first == DomainsDir || first == MailDir {
 		return path.Join(HomeTreeDir, clean)
 	}
-	return clean
+	return path.Join(MetadataTreeDir, clean)
 }
 
 // safeMemberName refuses a member that would be written outside the tree

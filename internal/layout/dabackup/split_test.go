@@ -2,6 +2,7 @@ package dabackup
 
 import (
 	"archive/tar"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -55,16 +56,16 @@ func TestTheThreePlacesTheHomeDirectoryArrivesInBecomeOne(t *testing.T) {
 		"home/imap/gzv0908a.gniza-test.invalid/sales/Maildir/cur/1.eml",
 		"home/.bashrc",
 		"home/.php/php-mail.log",
-		"backup/user.conf",
+		"metadata/backup/user.conf",
 	} {
-		if _, err := os.Stat(filepath.Join(dir, TreeDirName, want)); err != nil {
+		if _, err := os.Stat(filepath.Join(dir, want)); err != nil {
 			t.Errorf("%s is not in the unpacked tree: %v", want, err)
 		}
 	}
 	// And the archive inside the archive is not left lying in it as a
 	// file, because a compressed blob is the thing split mode exists to
 	// get rid of.
-	if _, err := os.Stat(filepath.Join(dir, TreeDirName, BackupDir, NestedHomeArchive)); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, MetadataTreeDir, BackupDir, NestedHomeArchive)); err == nil {
 		t.Error("the nested archive was stored rather than opened")
 	}
 }
@@ -125,9 +126,9 @@ func TestTwoMembersThatWantTheSameFileBothSurvive(t *testing.T) {
 	sameArchive(t, original, rebuilt)
 }
 
-// A host configured for gzip writes home.tar.gz, and an account with
-// nothing outside its domains has no nested archive at all. Neither is a
-// different format.
+// An account with nothing outside its domains has no nested archive at
+// all. That is the same format with one member missing, not a different
+// one.
 func TestAnArchiveWithNoNestedHomeStillComesBack(t *testing.T) {
 	account := "gzv0908a"
 	original := buildSplitFixture(t, account, fixtureExtra{noNestedHome: true})
@@ -142,6 +143,184 @@ func TestAnArchiveWithNoNestedHomeStillComesBack(t *testing.T) {
 	sameArchive(t, original, rebuilt)
 }
 
+// A host DirectAdmin is configured for gzip on writes user.admin.x.tar.gz
+// with home.tar.gz inside it. Nothing about the shape changes, and the
+// archive has to go back the way it came: a host that reads gz and writes
+// zst hands its own restore an archive its tar was not asked for.
+func TestAGzipHostsArchiveComesBackTheSame(t *testing.T) {
+	account := "gzv0908a"
+	original := buildSplitFixture(t, account, fixtureExtra{compression: "gz"})
+	if !strings.HasSuffix(original, ".tar.gz") {
+		t.Fatalf("the fixture is %s", original)
+	}
+	dir := t.TempDir()
+	if err := (Layout{}).UnpackArchive(context.Background(), original, account, dir); err != nil {
+		t.Fatalf("taking the archive apart: %v", err)
+	}
+	// The nested archive is found by name, and on this host its name is
+	// not the one the constant spells.
+	if _, err := os.Stat(filepath.Join(HomedirPart(dir), ".bashrc")); err != nil {
+		t.Errorf("the gzip nested archive was not opened: %v", err)
+	}
+	rebuilt := filepath.Join(t.TempDir(), filepath.Base(original))
+	if err := (Layout{}).PackArchive(context.Background(), dir, account, rebuilt); err != nil {
+		t.Fatalf("putting the archive back together: %v", err)
+	}
+	sameArchive(t, original, rebuilt)
+}
+
+// A host that compresses nothing writes user.admin.x.tar with home.tar
+// inside it, and that is the same archive without the compression around
+// it.
+func TestAnUncompressedArchiveComesBackTheSame(t *testing.T) {
+	account := "gzv0908a"
+	original := buildSplitFixture(t, account, fixtureExtra{compression: "none"})
+	if !strings.HasSuffix(original, ".tar") {
+		t.Fatalf("the fixture is %s", original)
+	}
+	dir := t.TempDir()
+	if err := (Layout{}).UnpackArchive(context.Background(), original, account, dir); err != nil {
+		t.Fatalf("taking the archive apart: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(HomedirPart(dir), ".bashrc")); err != nil {
+		t.Errorf("the uncompressed nested archive was not opened: %v", err)
+	}
+	rebuilt := filepath.Join(t.TempDir(), filepath.Base(original))
+	if err := (Layout{}).PackArchive(context.Background(), dir, account, rebuilt); err != nil {
+		t.Fatalf("putting the archive back together: %v", err)
+	}
+	sameArchive(t, original, rebuilt)
+}
+
+// An extended attribute is where an ACL lives, and losing one restores a
+// file the account cannot read. tar keeps them as pax records, and they
+// are the one kind of pax record the manifest carries: everything else
+// Go's tar writer works out again from the fields beside it.
+func TestTheExtendedAttributesOfAMemberSurvive(t *testing.T) {
+	account := "gzv0908a"
+	const key, value = "SCHILY.xattr.user.gniza", "kept"
+	original := buildSplitFixture(t, account, fixtureExtra{
+		name: "domains/marked.txt", body: "marked\n",
+		xattrs: map[string]string{key: value},
+	})
+	dir := t.TempDir()
+	if err := (Layout{}).UnpackArchive(context.Background(), original, account, dir); err != nil {
+		t.Fatalf("taking the archive apart: %v", err)
+	}
+	rebuilt := filepath.Join(t.TempDir(), filepath.Base(original))
+	if err := (Layout{}).PackArchive(context.Background(), dir, account, rebuilt); err != nil {
+		t.Fatalf("putting the archive back together: %v", err)
+	}
+	sameArchive(t, original, rebuilt)
+
+	body, err := os.ReadFile(rebuilt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := tar.NewReader(strings.NewReader(string(decompress(t, rebuilt, body))))
+	found := false
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if header.Name == "domains/marked.txt" {
+			found = true
+			if header.PAXRecords[key] != value {
+				t.Errorf("the extended attribute came back as %q", header.PAXRecords[key])
+			}
+		}
+	}
+	if !found {
+		t.Error("the member carrying the extended attribute is not in the rebuilt archive")
+	}
+}
+
+// The manifest and the tree share a directory with the account's own
+// files, so an archive carrying a member named like one of Gniza's is
+// refused rather than allowed to overwrite it.
+func TestAMemberNamedLikeGnizasOwnFilesIsRefused(t *testing.T) {
+	account := "gzv0908a"
+	original := buildSplitFixture(t, account, fixtureExtra{
+		name: ManifestFile, body: `{"version":1,"account":"somebody-else"}`,
+	})
+	err := (Layout{}).UnpackArchive(context.Background(), original, account, t.TempDir())
+	if err == nil {
+		t.Fatal("a member named like Gniza's manifest was unpacked")
+	}
+	if !strings.Contains(err.Error(), ManifestFile) {
+		t.Errorf("the refusal does not name the member: %v", err)
+	}
+}
+
+// One archive has one home archive in it. A second is an archive this
+// does not understand, and guessing which of the two is the home
+// directory is guessing what an account gets restored from.
+func TestASecondNestedHomeArchiveIsRefused(t *testing.T) {
+	account := "gzv0908a"
+	original := buildSplitFixture(t, account, fixtureExtra{
+		name: path.Join(BackupDir, NestedHomeArchive), body: "another one\n",
+	})
+	err := (Layout{}).UnpackArchive(context.Background(), original, account, t.TempDir())
+	if err == nil {
+		t.Fatal("an archive with two nested home archives was unpacked")
+	}
+	if !strings.Contains(err.Error(), "two nested home archives") {
+		t.Errorf("refused, but not for that: %v", err)
+	}
+}
+
+// The tree says whose account it came from, and it is checked, for the
+// same reason the archive's own identity record is: restoring one
+// customer's data into another's account is the worst thing this program
+// could do.
+func TestATreeFromAnotherAccountIsNotRepacked(t *testing.T) {
+	account := "gzv0908a"
+	dir := t.TempDir()
+	if err := (Layout{}).UnpackArchive(context.Background(),
+		buildSplitFixture(t, account), account, dir); err != nil {
+		t.Fatalf("taking the archive apart: %v", err)
+	}
+	err := (Layout{}).PackArchive(context.Background(), dir, "someone-else",
+		filepath.Join(t.TempDir(), "user.admin.someone-else.tar.zst"))
+	if err == nil {
+		t.Fatal("a tree was repacked into another account's archive")
+	}
+	if !strings.Contains(err.Error(), account) {
+		t.Errorf("the refusal does not say whose tree it is: %v", err)
+	}
+}
+
+// A tree written by a later Gniza is refused rather than read as though
+// its manifest meant what this version means by it.
+func TestATreeFromAnotherVersionIsRefused(t *testing.T) {
+	account := "gzv0908a"
+	dir := t.TempDir()
+	if err := (Layout{}).UnpackArchive(context.Background(),
+		buildSplitFixture(t, account), account, dir); err != nil {
+		t.Fatalf("taking the archive apart: %v", err)
+	}
+	manifest := filepath.Join(MetadataPart(dir), ManifestFile)
+	body, err := os.ReadFile(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := strings.Replace(string(body), `"version": 1`, `"version": 2`, 1)
+	if changed == string(body) {
+		t.Fatal("the manifest does not say which version wrote it")
+	}
+	if err := os.WriteFile(manifest, []byte(changed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Layout{}).PackArchive(context.Background(), dir, account,
+		filepath.Join(t.TempDir(), "user.admin."+account+".tar.zst")); err == nil {
+		t.Fatal("a tree from another version of Gniza was repacked")
+	}
+}
+
 // The manifest is the whole of what the headers said. A tree without one
 // cannot be repacked into anything DirectAdmin would restore, and
 // guessing the headers back from the files on disk is exactly the
@@ -153,7 +332,7 @@ func TestATreeWithNoManifestIsNotRepacked(t *testing.T) {
 		buildSplitFixture(t, account), account, dir); err != nil {
 		t.Fatalf("taking the archive apart: %v", err)
 	}
-	if err := os.Remove(filepath.Join(dir, ManifestFile)); err != nil {
+	if err := os.Remove(filepath.Join(MetadataPart(dir), ManifestFile)); err != nil {
 		t.Fatal(err)
 	}
 	err := (Layout{}).PackArchive(context.Background(), dir,
@@ -174,7 +353,7 @@ func TestABodyThatIsNotItsRecordedSizeIsRefused(t *testing.T) {
 		buildSplitFixture(t, account), account, dir); err != nil {
 		t.Fatalf("taking the archive apart: %v", err)
 	}
-	victim := filepath.Join(dir, TreeDirName, "home", ".bashrc")
+	victim := filepath.Join(HomedirPart(dir), ".bashrc")
 	if err := os.WriteFile(victim, []byte("truncated"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +376,7 @@ func TestTheManifestKeepsTheOwnerAndGroupOfEveryMember(t *testing.T) {
 		buildSplitFixture(t, account), account, dir); err != nil {
 		t.Fatalf("taking the archive apart: %v", err)
 	}
-	body, err := os.ReadFile(filepath.Join(dir, ManifestFile))
+	body, err := os.ReadFile(filepath.Join(MetadataPart(dir), ManifestFile))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,13 +401,19 @@ func TestTheManifestKeepsTheOwnerAndGroupOfEveryMember(t *testing.T) {
 	}
 }
 
-// fixtureExtra is one more member put into a fixture archive, or the one
-// switch that leaves the nested archive out of it.
+// fixtureExtra is one more member put into a fixture archive, or one of
+// the switches that changes the archive itself.
 type fixtureExtra struct {
 	name         string
 	body         string
 	nested       bool
 	noNestedHome bool
+	// compression is what the host is configured for: zst unless this
+	// says otherwise, and "none" for a host that compresses nothing.
+	compression string
+	// xattrs are put on the member as pax records, which is where tar
+	// keeps an extended attribute.
+	xattrs map[string]string
 }
 
 // buildSplitFixture writes an archive shaped like the one DirectAdmin
@@ -246,10 +431,18 @@ func buildSplitFixture(t *testing.T, account string, extras ...fixtureExtra) str
 	domain := account + ".gniza-test.invalid"
 
 	noNested := false
+	compression := "zst"
 	for _, extra := range extras {
 		if extra.noNestedHome {
 			noNested = true
 		}
+		if extra.compression != "" {
+			compression = extra.compression
+		}
+	}
+	suffix := "." + compression
+	if compression == "none" {
+		compression, suffix = "", ""
 	}
 
 	nested := packTar(t, func(tw *tar.Writer) {
@@ -284,17 +477,18 @@ func buildSplitFixture(t *testing.T, account string, extras ...fixtureExtra) str
 			ModTime: when, Linkname: ".bashrc",
 		}, "")
 		for _, extra := range extras {
-			if extra.nested {
+			if extra.nested && extra.name != "" {
 				writeMember(t, tw, &tar.Header{
 					Name: extra.name, Typeflag: tar.TypeReg, Mode: 0o644,
 					Uid: 1005, Gid: 1005, Uname: account, Gname: account, ModTime: when,
+					PAXRecords: extra.xattrs,
 				}, extra.body)
 			}
 		}
 	})
-	nested = compressZstd(t, nested)
+	nested = compress(t, nested, compression)
 
-	file := filepath.Join(t.TempDir(), "user.admin."+account+".tar.zst")
+	file := filepath.Join(t.TempDir(), "user.admin."+account+".tar"+suffix)
 	plain := packTar(t, func(tw *tar.Writer) {
 		writeMember(t, tw, &tar.Header{
 			Name: BackupDir + "/", Typeflag: tar.TypeDir, Mode: 0o700,
@@ -310,7 +504,7 @@ func buildSplitFixture(t *testing.T, account string, extras ...fixtureExtra) str
 		}, "CREATE TABLE orders (id int);\n")
 		if !noNested {
 			writeMember(t, tw, &tar.Header{
-				Name: path.Join(BackupDir, NestedHomeArchive), Typeflag: tar.TypeReg,
+				Name: path.Join(BackupDir, "home.tar"+suffix), Typeflag: tar.TypeReg,
 				Mode: 0o640, Uid: 1005, Gid: 1005, Uname: account, Gname: account,
 				ModTime: when,
 			}, string(nested))
@@ -334,11 +528,12 @@ func buildSplitFixture(t *testing.T, account string, extras ...fixtureExtra) str
 				writeMember(t, tw, &tar.Header{
 					Name: extra.name, Typeflag: tar.TypeReg, Mode: 0o644,
 					Uid: 1005, Gid: 1005, Uname: account, Gname: account, ModTime: when,
+					PAXRecords: extra.xattrs,
 				}, extra.body)
 			}
 		}
 	})
-	if err := os.WriteFile(file, compressZstd(t, plain), 0o600); err != nil {
+	if err := os.WriteFile(file, compress(t, plain, compression), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return file
@@ -371,12 +566,23 @@ func packTar(t *testing.T, members func(*tar.Writer)) []byte {
 	return []byte(buffer.String())
 }
 
-func compressZstd(t *testing.T, body []byte) []byte {
+func compress(t *testing.T, body []byte, compression string) []byte {
 	t.Helper()
 	var out strings.Builder
-	writer, err := zstd.NewWriter(&out)
-	if err != nil {
-		t.Fatal(err)
+	var writer io.WriteCloser
+	switch compression {
+	case "zst":
+		z, err := zstd.NewWriter(&out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		writer = z
+	case "gz":
+		writer = gzip.NewWriter(&out)
+	case "":
+		return body
+	default:
+		t.Fatalf("the fixture cannot write %q archives", compression)
 	}
 	if _, err := writer.Write(body); err != nil {
 		t.Fatal(err)
@@ -481,14 +687,25 @@ func readSnapshotsFrom(t *testing.T, archive string, body []byte) []snapshot {
 
 func decompress(t *testing.T, name string, body []byte) []byte {
 	t.Helper()
-	if !strings.HasSuffix(name, ".zst") {
+	var reader io.Reader
+	switch {
+	case strings.HasSuffix(name, ".zst"):
+		z, err := zstd.NewReader(strings.NewReader(string(body)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer z.Close()
+		reader = z
+	case strings.HasSuffix(name, ".gz"):
+		z, err := gzip.NewReader(strings.NewReader(string(body)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer z.Close()
+		reader = z
+	default:
 		return body
 	}
-	reader, err := zstd.NewReader(strings.NewReader(string(body)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer reader.Close()
 	plain, err := io.ReadAll(reader)
 	if err != nil {
 		t.Fatal(err)

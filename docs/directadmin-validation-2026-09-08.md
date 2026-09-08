@@ -278,17 +278,24 @@ A rebuild that walked the unpacked tree would write whatever the staging
 server's own passwd and group files said, and restore an account whose mail
 directory Dovecot cannot write.
 
-The unpacked form is a manifest beside a tree, and the tree is the account's
-home directory put back together from the three places the archive keeps it
-in:
+The unpacked form is the two directories restic is pointed at. One is the
+account's home directory, put back together from the three places the archive
+keeps it in; the other is DirectAdmin's own records of the account, and the
+manifest travels inside it, because restic is handed the parts and nothing
+else:
 
 ```text
-manifest.json
-tree/backup/…            # DirectAdmin's records of the account
-tree/home/domains/…      # from the outer archive
-tree/home/imap/…         # from the outer archive
-tree/home/.bashrc …      # from backup/home.tar.zst
+metadata/.gniza-manifest.json
+metadata/backup/…        # DirectAdmin's records of the account
+home/domains/…           # from the outer archive
+home/imap/…              # from the outer archive
+home/.bashrc …           # from backup/home.tar.zst
 ```
+
+The names are what `reassemble.Classify` reads a snapshot's paths as, which is
+why the metadata part is not called `backup`: that would come back as a second
+home directory and the restore would refuse the snapshot rather than rebuild
+it.
 
 Reproduce with:
 

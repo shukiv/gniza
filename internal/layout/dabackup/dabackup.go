@@ -3,13 +3,10 @@
 //
 // # What is known, and what is not
 //
-// The names here come from DirectAdmin's own documentation, read in
-// September 2026, and not from a running server. What the documentation
-// states -- the archive's name, the per-account configuration directory
-// and its files, the home directory root, the folders DirectAdmin's own
-// backups skip -- is marked as stated. What it does not state is marked
-// as assumed, and an assumption here is a restore that silently produces
-// an archive DirectAdmin will not read.
+// The whole-account path is checked against native DirectAdmin 1.709
+// archives, including zstd and the backup/user.conf identity. Split and
+// granular selectors below are still provisional: native archives have a
+// nested backup/home.tar.zst as well as outer domains/ and imap/ trees.
 //
 // ADR 0019 lists what a DirectAdmin host has to answer before any of this
 // is run against a customer's server. Until it does, Provisional is what
@@ -29,8 +26,12 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"syscall"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 const (
@@ -51,12 +52,11 @@ const (
 	// directory and the domains.
 	BackupDir = "backup"
 	// DomainsDir is where the archive keeps each domain's files.
-	// Assumed: the documentation says the domains are in there, not what
-	// the directory is called.
+	// Observed on the disposable 1.709 fixture; this is not the whole home.
 	DomainsDir = "domains"
 	// DatabaseDirName is where Gniza places the database dumps when it
-	// rebuilds an archive. Assumed entirely -- DirectAdmin's own backups
-	// carry the dumps, but where is not documented.
+	// rebuilds an archive. Native per-database SQL and .conf files were
+	// observed here; rebuilding their authentication metadata is not supported.
 	DatabaseDirName = "backup"
 
 	// StagedGrantsFile and StagedRunnableFile are what Gniza names the
@@ -67,14 +67,13 @@ const (
 	StagedRunnableFile = "_users-runnable.sql"
 )
 
-// Provisional says this layout has never been checked against a running
-// DirectAdmin, and names what is at stake if it is wrong.
+// Provisional describes the remaining limits of this integration.
 //
 // It is a value rather than a comment because the agent prints it: an
 // operator who selects DirectAdmin is told, in the log and on the page,
 // that the restore path is unproven here.
-const Provisional = "the DirectAdmin layout is taken from documentation and has " +
-	"not been checked against a running server: see ADR 0019"
+const Provisional = "DirectAdmin whole-account archives were validated on 1.709; " +
+	"split/granular restore and the session bridge remain experimental: see ADR 0019"
 
 // Layout answers where DirectAdmin keeps the parts of an account.
 type Layout struct{}
@@ -85,13 +84,13 @@ func (Layout) Panel() string { return "directadmin" }
 // HomedirDir is where, under the account's own directory in the archive,
 // the account's files belong.
 //
-// Assumed. DirectAdmin does not lay an account out as one home directory
+// Not suitable for split reassembly. DirectAdmin does not lay an account out as one home directory
 // beside one database directory the way a cpmove tree does; its archive
 // carries the domains separately. This is the seam a DirectAdmin host has
 // to settle first.
 func (Layout) HomedirDir() string { return DomainsDir }
 
-// DatabaseDir is where the dumps belong. Assumed, as above.
+// DatabaseDir is where native SQL dumps live.
 func (Layout) DatabaseDir() string { return DatabaseDirName }
 
 // AccountRoot returns the account's own directory inside an extracted
@@ -124,100 +123,242 @@ func (Layout) PlaceDatabaseUsers(root string) error { return nil }
 // restic tag and a filename are not authoritative: the panel's restore
 // reads what is inside.
 func (Layout) ValidateArchive(ctx context.Context, filename, account string) error {
-	if account == "" || strings.ContainsAny(account, "/\\.\x00") {
-		return fmt.Errorf("dabackup: invalid expected account %q", account)
+	_, err := inspect(ctx, filename, account)
+	return err
+}
+
+// ArchiveDatabases names the account's database dumps that the archive
+// carries, having checked the archive the way ValidateArchive does.
+//
+// It is what a finished restore is held to: every database the archive
+// names has to be on the account afterwards. The names are read out of
+// the archive rather than out of a filename, and they are recognised by
+// DirectAdmin's own convention -- an account's databases are called
+// <account>_<something> -- rather than by where in the archive they sit,
+// which is the part ADR 0019 still has open.
+//
+// An archive that names none is not an error. DirectAdmin may carry its
+// dumps somewhere this cannot read them, nested inside another
+// compressed member among other places, and a check that cannot see them
+// has to stay quiet rather than fail every restore of an account that
+// has databases.
+func ArchiveDatabases(ctx context.Context, filename, account string) ([]string, error) {
+	found, err := inspect(ctx, filename, account)
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(found)
+	return slices.Compact(found), nil
+}
+
+func inspect(ctx context.Context, filename, account string) ([]string, error) {
+	if !validUser(account) {
+		return nil, fmt.Errorf("dabackup: invalid expected account %q", account)
 	}
 	if !nameMatchesArchive(filepath.Base(filename), account) {
-		return fmt.Errorf("dabackup: archive filename does not belong to %s", account)
+		return nil, fmt.Errorf("dabackup: archive filename does not belong to %s", account)
 	}
-	f, err := os.OpenFile(filename, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	f, err := os.OpenFile(filename, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer f.Close()
 	info, err := f.Stat()
 	if err != nil || !info.Mode().IsRegular() {
-		return fmt.Errorf("dabackup: account archive is not a regular file")
+		return nil, fmt.Errorf("dabackup: account archive is not a regular file")
 	}
 	var reader io.Reader = f
 	if strings.HasSuffix(filename, ".gz") {
 		z, err := gzip.NewReader(f)
 		if err != nil {
-			return fmt.Errorf("dabackup: read compressed account archive: %w", err)
+			return nil, fmt.Errorf("dabackup: read compressed account archive: %w", err)
+		}
+		defer z.Close()
+		reader = z
+	} else if strings.HasSuffix(filename, ".zst") {
+		z, err := zstd.NewReader(f, zstd.WithDecoderConcurrency(1), zstd.WithDecoderMaxMemory(128<<20))
+		if err != nil {
+			return nil, fmt.Errorf("dabackup: read zstd account archive: %w", err)
 		}
 		defer z.Close()
 		reader = z
 	}
+	reader = contextReader{ctx, reader}
 	tr := tar.NewReader(reader)
 	identity := false
+	var databases []string
 	for {
 		if err := ctx.Err(); err != nil {
-			return err
+			return nil, err
 		}
 		h, err := tr.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("dabackup: read account archive: %w", err)
+			return nil, fmt.Errorf("dabackup: read account archive: %w", err)
 		}
-		name := path.Clean(strings.TrimPrefix(h.Name, "./"))
+		// A member that climbs out of the archive is refused. A member
+		// with an awkward name is not: a backslash is an ordinary
+		// character in a Linux filename, it reaches a hosting account
+		// through Windows FTP clients and through plugins that write
+		// their own cache keys, and refusing the archive over one would
+		// stop that account being backed up at all. This is the rule
+		// cpmove uses.
+		if path.IsAbs(h.Name) || strings.ContainsRune(h.Name, 0) {
+			return nil, fmt.Errorf("dabackup: unsafe account archive member %q", h.Name)
+		}
+		// Check before cleaning: cleaning would conceal backup/../user.conf.
+		for _, component := range strings.Split(h.Name, "/") {
+			if component == ".." {
+				return nil, fmt.Errorf("dabackup: unsafe account archive member %q", h.Name)
+			}
+		}
+		name := path.Clean(h.Name)
 		if name == "." && h.Typeflag == tar.TypeDir {
 			continue
 		}
 		for _, component := range strings.Split(name, "/") {
 			if component == ".." {
-				return fmt.Errorf("dabackup: unsafe account archive member %q", h.Name)
+				return nil, fmt.Errorf("dabackup: unsafe account archive member %q", h.Name)
 			}
+		}
+		if database, ok := databaseIn(name, account, h.Typeflag); ok {
+			databases = append(databases, database)
 		}
 		if name != path.Join(BackupDir, UserConf) {
 			continue
 		}
-		if h.Typeflag != tar.TypeReg || h.Size > 1<<20 {
-			return fmt.Errorf("dabackup: invalid account identity record %s", h.Name)
+		if identity || h.Typeflag != tar.TypeReg || h.Size > 1<<20 {
+			return nil, fmt.Errorf("dabackup: invalid account identity record %s", h.Name)
 		}
 		body, err := io.ReadAll(tr)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		named, found := usernameIn(string(body))
 		if !found {
-			return fmt.Errorf("dabackup: %s names no account", h.Name)
+			return nil, fmt.Errorf("dabackup: %s names no account", h.Name)
 		}
 		if named != account {
-			return fmt.Errorf("dabackup: archive's account identity is %s, not %s", named, account)
+			return nil, fmt.Errorf("dabackup: archive's account identity is %s, not %s", named, account)
 		}
 		identity = true
 	}
 	if !identity {
-		return fmt.Errorf("dabackup: archive has no identity record for %s", account)
+		return nil, fmt.Errorf("dabackup: archive has no identity record for %s", account)
 	}
-	return nil
+	// tar.Reader stops at the end marker, before a compressor's checksum.
+	// Consume padding and verify the entire compressed stream; refuse a
+	// second hidden tar after the one whose identity we just checked.
+	buf := make([]byte, 32<<10)
+	for {
+		n, err := reader.Read(buf)
+		for _, b := range buf[:n] {
+			if b != 0 {
+				return nil, fmt.Errorf("dabackup: non-padding data after account archive")
+			}
+		}
+		if err == io.EOF {
+			return databases, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("dabackup: finish account archive: %w", err)
+		}
+	}
+}
+
+// databaseIn reads a database dump's name out of an archive member.
+//
+// DirectAdmin names an account's databases <account>_<something>, which
+// is the same convention the provider's own listing goes by, so a dump
+// is recognised by its name and not by the directory it sits in. Anything
+// else in the archive that happens to end in .sql -- a customer's own
+// backup of somebody else's database among them -- is not one of this
+// account's databases and is not counted as one.
+func databaseIn(name, account string, kind byte) (string, bool) {
+	if kind != tar.TypeReg {
+		return "", false
+	}
+	stem, ok := strings.CutSuffix(path.Base(name), ".sql")
+	if !ok || !strings.HasPrefix(stem, account+"_") || !validUser(stem) {
+		return "", false
+	}
+	return stem, true
 }
 
 // nameMatchesArchive accepts the shapes DirectAdmin gives a user backup:
-// user.<creator>.<account>.tar.gz, the same with a timestamp, and the
-// bare account name Gniza uses where it makes one itself.
+// user.<creator>.<account>.tar.gz and the same with a timestamp. A name
+// without one of the supported tar suffixes is not an account archive.
 func nameMatchesArchive(base, account string) bool {
-	trimmed := strings.TrimSuffix(strings.TrimSuffix(
-		strings.TrimSuffix(base, ".zst"), ".gz"), ".tar")
-	if trimmed == account {
-		return true
+	named, err := ArchiveAccount(base)
+	return err == nil && named == account
+}
+
+// ArchiveAccount reads a supported native filename, not its authoritative
+// identity. Always call ValidateArchive before handing the file to DirectAdmin.
+func ArchiveAccount(base string) (string, error) {
+	if filepath.Base(base) != base {
+		return "", fmt.Errorf("dabackup: expected an archive basename")
 	}
-	fields := strings.Split(trimmed, ".")
-	if len(fields) < 3 || fields[0] != "user" {
+	stem := ""
+	for _, suffix := range []string{".tar.gz", ".tar.zst", ".tar"} {
+		if strings.HasSuffix(base, suffix) {
+			stem = strings.TrimSuffix(base, suffix)
+			break
+		}
+	}
+	if validUser(stem) {
+		return stem, nil
+	}
+	fields := strings.Split(stem, ".")
+	if len(fields) >= 3 && fields[0] == "user" && validUser(fields[1]) && validUser(fields[2]) {
+		for _, field := range fields[3:] {
+			if !validUser(field) {
+				return "", fmt.Errorf("dabackup: invalid archive timestamp")
+			}
+		}
+		return fields[2], nil
+	}
+	return "", fmt.Errorf("dabackup: unsupported account archive filename %q", base)
+}
+
+func validUser(value string) bool {
+	if len(value) == 0 || len(value) > 64 || value[0] == '-' {
 		return false
 	}
-	// user.<creator>.<account>, optionally followed by a timestamp.
-	return fields[2] == account
+	for _, c := range value {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+type contextReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (r contextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.r.Read(p)
 }
 
 // usernameIn reads the account out of a user.conf.
 func usernameIn(body string) (string, bool) {
+	var username string
+	found := false
 	for _, line := range strings.Split(body, "\n") {
 		if value, ok := strings.CutPrefix(strings.TrimSpace(line), "username="); ok {
-			return strings.TrimSpace(value), true
+			if found {
+				return "", false
+			}
+			username, found = strings.TrimSpace(value), true
 		}
 	}
-	return "", false
+	return username, found
 }

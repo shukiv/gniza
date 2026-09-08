@@ -6,6 +6,7 @@ toolchain go1.26.8
 
 require (
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/klauspost/compress v1.20.0
 	github.com/robfig/cron/v3 v3.0.1
 	go.etcd.io/bbolt v1.5.0
 	golang.org/x/crypto v0.56.0

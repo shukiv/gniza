@@ -28,8 +28,8 @@ import (
 // walking a home directory and listing databases means a MySQL round trip.
 // Account fills in everything, and is called when a backup is about to run.
 // ApplyOptions are the choices an operator makes about handing an archive
-// to the panel's own restore. The fields below are cPanel's flags; a
-// second panel is expected to add its own rather than reinterpret these.
+// to the panel's own restore. Providers must refuse safety options they
+// cannot honor, not silently ignore them.
 type ApplyOptions struct {
 	// Unrestricted turns off cPanel's Restricted Restore.
 	//
@@ -39,6 +39,9 @@ type ApplyOptions struct {
 	// follow what it finds in there. Restricted mode refuses some
 	// legitimate content too, which is why this is a choice rather than
 	// a rule.
+	// DirectAdmin currently requires this explicit acknowledgement for
+	// native whole-account overwrite: an equivalent restricted restore has
+	// not been established there. False is refused, never silently weakened.
 	Unrestricted bool
 	// Overwrite restores over an account that is already on this server.
 	// Without it restorepkg will not replace what is there, and a restore

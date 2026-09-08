@@ -138,3 +138,39 @@ None of these can be answered from documentation, and each changes code:
 
 Until 1–6 are answered on a real host, the DirectAdmin provider is not
 something to run against a customer's server.
+
+## Live evidence and implementation update — 2026-09-08
+
+The [native validation](../directadmin-validation-2026-09-08.md) and subsequent
+[Gniza provider round trip](../directadmin-provider-validation-2026-09-08.md)
+settle part of questions 2 and 6 on DirectAdmin 1.709. One `taskq --run` task
+can synchronously restore the existing disposable account, but failures can
+exit zero and require transcript validation. Native backup requires a fresh
+dual-identity workspace, not Gniza's root-private staging directory. The
+archive is zstd on this host and carries additional home files in a nested
+`backup/home.tar.zst`.
+
+Whole-account provider backup/repository/reassembly/native overwrite now
+passes the disposable test. Explicit unrestricted overwrite is required; there
+is no implied equivalent to cPanel restricted restore. The earlier statements
+that every restore is asynchronous/refused and every archive path is merely
+documented are superseded by this evidence. Split/granular layout, secure
+plugin-session authentication, lifecycle isolation and new-account recovery
+remain open. These results do not authorize a production deployment or make
+the experimental package release-ready.
+
+### 8. Where the archive keeps an account's database dumps
+
+A finished restore is held to the databases the archive names, the way the
+cPanel path already holds one to the dumps beside a rebuilt tree. On
+DirectAdmin the names are read out of the archive by DirectAdmin's own
+naming convention -- an account's databases are called
+`<account>_<something>` -- and not by the directory they sit in, because
+that directory is not settled.
+
+The consequence is that the check is quiet when it finds nothing. An
+account whose dumps are nested inside `backup/home.tar.zst`, or named some
+other way, restores with nothing holding its databases to account. That is
+better than failing every such restore and better than the silence there
+was before, but it is not the check the cPanel side has, and it stays this
+way until a host says where the dumps are and what they are called.

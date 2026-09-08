@@ -125,3 +125,49 @@ func writeTar(t *testing.T, path string, files map[string]string) {
 		t.Fatal(err)
 	}
 }
+
+// TestACustomerFileIsNotAnUnsafeArchiveMember covers a backup that stops
+// working because of a filename the customer is entitled to use.
+//
+// A backslash is an ordinary character in a Linux filename. It arrives on
+// a hosting account through an FTP client that came from Windows, through
+// a plugin that writes its own cache keys, and through any archive a
+// customer unpacks in their own home directory. DirectAdmin's backup puts
+// the file in the archive without comment.
+//
+// Refusing the whole archive over one such member does not protect
+// anything: the name is not a traversal, it names one file in one
+// directory. What it does is stop that account being backed up at all,
+// every night, with an error that points at the archive rather than at
+// the file. A backup that quietly stops running for one customer is the
+// failure this program exists to prevent, so the rule is the one cpmove
+// uses -- a member that climbs out of the archive is refused, and a
+// member with an awkward name is not.
+func TestACustomerFileIsNotAnUnsafeArchiveMember(t *testing.T) {
+	dir := t.TempDir()
+	archive := filepath.Join(dir, "user.admin.customer1.tar")
+
+	writeTar(t, archive, map[string]string{
+		"backup/user.conf": "username=customer1\n",
+		`domains/example.com/public_html/wp-content/cache\a.txt`: "cached",
+	})
+	if err := (Layout{}).ValidateArchive(t.Context(), archive, "customer1"); err != nil {
+		t.Fatalf("an account with a backslash in a filename cannot be backed up: %v", err)
+	}
+
+	// What the rule is actually for is unchanged.
+	writeTar(t, archive, map[string]string{
+		"backup/user.conf":        "username=customer1\n",
+		"backup/../../etc/shadow": "root:x:",
+	})
+	if err := (Layout{}).ValidateArchive(t.Context(), archive, "customer1"); err == nil {
+		t.Fatal("a member that climbs out of the archive was accepted")
+	}
+	writeTar(t, archive, map[string]string{
+		"backup/user.conf": "username=customer1\n",
+		"/etc/shadow":      "root:x:",
+	})
+	if err := (Layout{}).ValidateArchive(t.Context(), archive, "customer1"); err == nil {
+		t.Fatal("an absolute member was accepted")
+	}
+}

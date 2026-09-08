@@ -214,7 +214,10 @@ func classifyPaths(paths []string) (Parts, error) {
 			found.Databases = path
 		case strings.HasSuffix(path, "/system"):
 			found.System = path
-		case strings.HasSuffix(path, ".tar"), strings.HasSuffix(path, ".tar.gz"):
+		case strings.HasSuffix(path, ".tar"), strings.HasSuffix(path, ".tar.gz"), strings.HasSuffix(path, ".tar.zst"):
+			if found.Archive != "" {
+				return Parts{}, fmt.Errorf("reassemble: snapshot has multiple account archives")
+			}
 			found.Archive = path
 		default:
 			if found.Homedir != "" {
@@ -235,7 +238,7 @@ func classifyPaths(paths []string) (Parts, error) {
 				"reassemble: snapshot mixes the server's own settings with an account's parts")
 		}
 		return found, nil
-	case found.Archive != "" && (found.Metadata != "" || found.Homedir != ""):
+	case found.Archive != "" && (found.Metadata != "" || found.Homedir != "" || found.Databases != ""):
 		return Parts{}, fmt.Errorf("reassemble: snapshot mixes a monolithic archive with split Parts")
 	case found.Archive != "":
 		return found, nil

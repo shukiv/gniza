@@ -1,8 +1,9 @@
 // Package directadmin drives the DirectAdmin tooling installed on a host.
 //
 // It is the second implementation of panel.Provider, and it is not
-// finished: what DirectAdmin's own documentation states is implemented
-// here, and what it does not state is refused rather than guessed. A
+// finished: whole-account backup and explicit native overwrite were checked
+// against a disposable account on DirectAdmin 1.709. Other operations are
+// refused rather than guessed. A
 // method that returns ErrUnverified is one whose answer needs a running
 // DirectAdmin server, and every one of them is listed in ADR 0019.
 //
@@ -18,12 +19,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
-	"time"
 
 	"github.com/shukiv/gniza/internal/layout/dabackup"
 	"github.com/shukiv/gniza/internal/panel"
@@ -69,6 +72,11 @@ type Real struct {
 	// locations.
 	TaskQueuePath string
 	DataskqPath   string
+	// NativeRoot is separate from the root-private state and staging tree.
+	// Empty selects /var/lib/gniza-directadmin-native. Never put it under
+	// an account-writable directory or broaden the service state permissions.
+	NativeRoot string
+	lookupUser func(string) (*user.User, error)
 }
 
 var _ panel.Provider = (*Real)(nil)
@@ -144,7 +152,7 @@ func (r *Real) debug(msg string, args ...any) {
 	}
 }
 
-// Layout is DirectAdmin's own, and says of itself that it is provisional.
+// Layout validates native archives; split/granular selectors remain provisional.
 func (r *Real) Layout() panel.Layout { return dabackup.Layout{} }
 
 // NativeExcludes is what DirectAdmin's own backups leave out of an
@@ -235,6 +243,42 @@ func (r *Real) Account(ctx context.Context, user string) (panel.AccountInfo, err
 		return info, err
 	}
 	info.Databases = databases
+	if !info.Missing {
+		if err := filepath.Walk(info.HomeDir, func(_ string, entry os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if entry.Mode().IsRegular() {
+				info.SizeBytes += uint64(entry.Size())
+			}
+			return nil
+		}); err != nil {
+			return info, fmt.Errorf("directadmin: measure account home: %w", err)
+		}
+	}
+	// Database files do not live in the home. Include their measured logical
+	// size, otherwise a tiny website with a large database passes preflight.
+	// As in databases() below, the account name is put into the statement
+	// rather than bound, because MySQL's command-line client has no
+	// placeholders. usableAccountName above is what makes that safe: the
+	// name is letters, digits, dash and underscore, so it cannot carry a
+	// quote. Do not move this query anywhere that check does not run.
+	query := "SELECT COALESCE(SUM(data_length+index_length),0) FROM information_schema.tables WHERE table_schema LIKE '" + escapeLike(user) + `\_%` + "'"
+	out, err := exec.CommandContext(ctx, r.mysql(), "--defaults-file="+r.myCnf(), "--batch", "--skip-column-names", "-e", query).Output()
+	if err != nil {
+		return info, fmt.Errorf("directadmin: measure databases: %w", err)
+	}
+	dbBytes, err := strconv.ParseUint(strings.TrimSpace(string(out)), 10, 64)
+	if err != nil {
+		return info, fmt.Errorf("directadmin: invalid database size: %w", err)
+	}
+	if dbBytes > ^uint64(0)-info.SizeBytes {
+		return info, fmt.Errorf("directadmin: account size overflow")
+	}
+	info.SizeBytes += dbBytes
 	return info, nil
 }
 
@@ -313,7 +357,7 @@ func escapeLike(value string) string {
 // usableAccountName refuses anything that is not a DirectAdmin username,
 // because the name becomes a path and a database prefix.
 func usableAccountName(user string) error {
-	if user == "" || len(user) > 64 {
+	if user == "" || len(user) > 64 || user[0] == '-' {
 		return fmt.Errorf("directadmin: %q is not an account name", user)
 	}
 	for _, char := range user {
@@ -347,22 +391,13 @@ func (r *Real) Stage(ctx context.Context, req panel.StageRequest) (pkgacct.Paylo
 		return pkgacct.Payload{}, unverified(
 			"leaving part of an account out of a DirectAdmin backup")
 	}
-	if err := os.MkdirAll(req.StagingDir, 0o700); err != nil {
-		return pkgacct.Payload{}, fmt.Errorf("directadmin: create staging: %w", err)
+	if req.Mode != pkgacct.ModeMonolithic {
+		return pkgacct.Payload{}, fmt.Errorf("directadmin: select monolithic mode for a native whole-account backup")
 	}
-
-	started := time.Now()
-	cmd := exec.CommandContext(ctx, r.binary(), "admin-backup",
-		"--destination="+req.StagingDir, "--user="+req.Account.User)
-	output, err := cmd.CombinedOutput()
-	r.debug("ran admin-backup", "account", req.Account.User,
-		"took", time.Since(started).String(), "error", errorText(err))
-	if err != nil {
-		return pkgacct.Payload{}, fmt.Errorf("directadmin: admin-backup %s: %w: %s",
-			req.Account.User, err, lastLine(output))
+	if _, err := r.userConf(req.Account.User); err != nil {
+		return pkgacct.Payload{}, err
 	}
-
-	archive, err := soleArchive(req.StagingDir)
+	archive, err := r.stageNative(ctx, req.Account.User, req.StagingDir, req.Account.SizeBytes)
 	if err != nil {
 		return pkgacct.Payload{}, err
 	}
@@ -387,14 +422,107 @@ func (r *Real) StageSystem(ctx context.Context, stagingDir string) (pkgacct.Payl
 
 // Apply hands a rebuilt archive to DirectAdmin's own restore.
 //
-// DirectAdmin does not restore in the foreground: a line is appended to
-// its task queue and dataskq carries it out. Running dataskq here makes
-// that synchronous, which is what the interface promises -- but how a
-// restore reports that it failed is the second thing ADR 0019 says a real
-// host has to answer, so this refuses rather than reporting a success it
-// cannot vouch for.
+// Only an existing ordinary account, explicitly overwritten using the native
+// unrestricted restore, is supported. No shared task.queue is read or written.
+// New-account, renamed and restricted restore have not been established.
 func (r *Real) Apply(ctx context.Context, archivePath string, options panel.ApplyOptions) (string, error) {
-	return "", unverified("how a queued DirectAdmin restore reports that it failed")
+	if !options.Unrestricted || options.NewUser != "" || options.SkipDNS || !options.Overwrite {
+		return "", unverified("DirectAdmin restore requires explicit native/unrestricted overwrite of an existing account; restricted, renamed and new-account restores are not supported")
+	}
+	account, err := dabackup.ArchiveAccount(filepath.Base(archivePath))
+	if err != nil {
+		return "", err
+	}
+	conf, err := r.userConf(account)
+	if err != nil {
+		return "", err
+	}
+	if conf["username"] != account || conf["usertype"] != "user" {
+		return "", fmt.Errorf("directadmin: native overwrite requires an existing ordinary user account")
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	w, err := r.nativeWorkspace(account)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if err := w.close(); err != nil {
+			r.debug("native workspace cleanup failed", "path", w.path, "error", err)
+		}
+	}()
+	staged := filepath.Join(w.destination, filepath.Base(archivePath))
+	if err := copyArchive(ctx, archivePath, staged, uint32(os.Geteuid())); err != nil {
+		return "", err
+	}
+	// What the archive says the account's databases are is what the
+	// finished restore is held to. Checking the copy inside the workspace
+	// checks the bytes DirectAdmin is about to read, not another file.
+	expected, err := dabackup.ArchiveDatabases(ctx, staged, account)
+	if err != nil {
+		return "", err
+	}
+	if err := os.Chown(staged, w.adminUID, w.adminGID); err != nil {
+		return "", err
+	}
+	task := url.Values{
+		"action": {"restore"}, "ip_choice": {"file"}, "local_path": {w.destination},
+		"owner": {"admin"}, "select0": {filepath.Base(staged)}, "type": {"admin"},
+		"value": {"multiple"}, "when": {"now"}, "where": {"local"},
+	}
+	transcript, err := r.runNative(ctx, "restore", filepath.Base(staged), w.destination, "taskq", "--run="+task.Encode())
+	if err != nil {
+		return transcript, err
+	}
+	after, err := r.userConf(account)
+	if err != nil {
+		return transcript, err
+	}
+	if after["username"] != account || after["usertype"] != "user" {
+		return transcript, fmt.Errorf("directadmin: account identity did not survive native restore")
+	}
+	// A DirectAdmin restore is carried out by several modules, and the
+	// account being there afterwards says nothing about whether the
+	// databases came back with it. An account whose website answers and
+	// whose orders are gone is the failure this check exists for.
+	// Nothing to hold it to means no question to ask the database server,
+	// and no restore failed because that server could not be reached.
+	if len(expected) == 0 {
+		return transcript, nil
+	}
+	present, err := r.databases(ctx, account)
+	if err != nil {
+		return transcript, err
+	}
+	if missing := absentFrom(expected, present); len(missing) > 0 {
+		verb := "is"
+		if len(missing) > 1 {
+			verb = "are"
+		}
+		return transcript, fmt.Errorf(
+			"directadmin: the restore of %s reported success, but %s %s not on "+
+				"the account afterwards -- DirectAdmin restores an account in "+
+				"modules, so this restore is not the account back",
+			account, strings.Join(missing, ", "), verb)
+	}
+	return transcript, nil
+}
+
+// absentFrom names what the archive carried and the account does not have.
+// A database the account has gained since the backup is not a failure.
+func absentFrom(expected, present []string) []string {
+	has := make(map[string]bool, len(present))
+	for _, name := range present {
+		has[name] = true
+	}
+	var missing []string
+	for _, name := range expected {
+		if !has[name] {
+			missing = append(missing, name)
+		}
+	}
+	return missing
 }
 
 // PutHomeDir copies a restored subtree back into an account's home
@@ -436,7 +564,7 @@ func soleArchive(dir string) (string, error) {
 	}
 	var archives []string
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if !entry.Type().IsRegular() {
 			continue
 		}
 		name := entry.Name()
@@ -454,17 +582,4 @@ func soleArchive(dir string) (string, error) {
 		return "", fmt.Errorf("directadmin: admin-backup wrote %d archives, expected one",
 			len(archives))
 	}
-}
-
-// lastLine is the most useful part of a failed command's output.
-func lastLine(output []byte) string {
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	return strings.TrimSpace(lines[len(lines)-1])
-}
-
-func errorText(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
 }

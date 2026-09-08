@@ -1,0 +1,378 @@
+package directadmin
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/url"
+	"os"
+	"os/exec"
+	"os/user"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/shukiv/gniza/internal/bugreport"
+	"github.com/shukiv/gniza/internal/layout/dabackup"
+)
+
+const defaultNativeRoot = "/var/lib/gniza-directadmin-native"
+
+// A native workspace is separate from the root-private state/staging tree.
+// DirectAdmin switches between admin and the selected account during backup.
+// Only admin can list/write the job directory; only that account's group can
+// traverse it. The parent contains no credentials and is never group writable.
+type nativeWorkspace struct {
+	path, destination  string
+	adminUID, adminGID int
+	lock               *os.File
+}
+
+func (r *Real) nativeWorkspace(account string) (_ *nativeWorkspace, err error) {
+	if err := usableAccountName(account); err != nil {
+		return nil, err
+	}
+	lookup := r.lookupUser
+	if lookup == nil {
+		lookup = user.Lookup
+	}
+	admin, err := lookup("admin")
+	if err != nil {
+		return nil, fmt.Errorf("directadmin: resolve native backup owner: %w", err)
+	}
+	selected, err := lookup(account)
+	if err != nil {
+		return nil, fmt.Errorf("directadmin: resolve account identity: %w", err)
+	}
+	adminUID, err := strconv.Atoi(admin.Uid)
+	if err != nil {
+		return nil, err
+	}
+	adminGID, err := strconv.Atoi(admin.Gid)
+	if err != nil {
+		return nil, err
+	}
+	accountGID, err := strconv.Atoi(selected.Gid)
+	if err != nil {
+		return nil, err
+	}
+	root := r.NativeRoot
+	if root == "" {
+		root = defaultNativeRoot
+	}
+	if !filepath.IsAbs(root) || filepath.Clean(root) == "/" {
+		return nil, fmt.Errorf("directadmin: native workspace root must be a dedicated absolute directory")
+	}
+	if err := os.Mkdir(root, 0o711); err == nil {
+		// The service has umask 0077. Open traversal only on this newly
+		// created, dedicated native root, never on an existing directory.
+		if err := os.Chmod(root, 0o711); err != nil {
+			return nil, err
+		}
+	} else if !os.IsExist(err) {
+		return nil, err
+	}
+	info, err := os.Lstat(root)
+	if err != nil {
+		return nil, err
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || !info.IsDir() || stat.Uid != uint32(os.Geteuid()) || info.Mode().Perm() != 0o711 {
+		return nil, fmt.Errorf("directadmin: native workspace root must be service-owned mode 0711, not a symlink")
+	}
+	lock, err := os.OpenFile(filepath.Join(root, account+".lock"),
+		os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			lock.Close()
+		}
+	}()
+	if _, err := checkedFile(lock, uint32(os.Geteuid())); err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		return nil, fmt.Errorf("directadmin: another native operation holds account %s: %w", account, err)
+	}
+	dir, err := os.MkdirTemp(root, account+"-")
+	if err != nil {
+		return nil, err
+	}
+	w := &nativeWorkspace{path: dir, destination: filepath.Join(dir, "output"),
+		adminUID: adminUID, adminGID: adminGID, lock: lock}
+	defer func() {
+		if err != nil {
+			w.close()
+		}
+	}()
+	if err := os.Mkdir(w.destination, 0o700); err != nil {
+		return nil, err
+	}
+	for _, entry := range []struct {
+		path     string
+		uid, gid int
+		mode     os.FileMode
+	}{
+		{w.destination, adminUID, adminGID, 0o711},
+		{w.path, adminUID, accountGID, 0o710},
+	} {
+		if err := os.Chown(entry.path, entry.uid, entry.gid); err != nil {
+			return nil, err
+		}
+		if err := os.Chmod(entry.path, entry.mode); err != nil {
+			return nil, err
+		}
+	}
+	return w, nil
+}
+
+func (w *nativeWorkspace) seal() error {
+	if err := os.Chown(w.path, os.Geteuid(), os.Getegid()); err != nil {
+		return err
+	}
+	return os.Chmod(w.path, 0o700)
+}
+
+func (w *nativeWorkspace) close() error {
+	defer w.lock.Close()
+	if err := w.seal(); err != nil {
+		return err
+	}
+	// Only the fresh, locked job directory is temporary. Never remove the
+	// native root, another job, the input archive, or panel backup data.
+	return os.RemoveAll(w.path)
+}
+
+func checkedFile(f *os.File, owner uint32) (os.FileInfo, error) {
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || !info.Mode().IsRegular() || stat.Uid != owner || stat.Nlink != 1 || info.Mode().Perm()&0o022 != 0 {
+		return nil, fmt.Errorf("directadmin: expected a singly linked regular file owned by uid %d, without group/other write access", owner)
+	}
+	return info, nil
+}
+
+// copyArchive never follows links or overwrites a prior result. The caller
+// validates this private copy, not bytes that the native workspace can change.
+func copyArchive(ctx context.Context, source, destination string, owner uint32) error {
+	in, err := os.OpenFile(source, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	before, err := checkedFile(in, owner)
+	if err != nil {
+		return err
+	}
+	out, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(out, &contextReader{ctx, in})
+	closeErr := out.Close()
+	if err := errors.Join(copyErr, closeErr); err != nil {
+		os.Remove(destination)
+		return err
+	}
+	after, err := in.Stat()
+	if err != nil || before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime()) {
+		os.Remove(destination)
+		return fmt.Errorf("directadmin: archive changed during handoff")
+	}
+	return nil
+}
+
+type contextReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (r *contextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.r.Read(p)
+}
+
+// DirectAdmin 1.709 can exit zero on a failed task. Require a matching
+// start/completion pair AND no error records, inspecting the whole transcript.
+// Unrecognised/truncated output fails closed, not as an assumed success.
+var nativeRecord = regexp.MustCompile(`^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\s+(info|error|warn)\s+(.*)$`)
+
+type nativeOutput struct {
+	bytes.Buffer
+	overflow bool
+}
+
+func (b *nativeOutput) Write(p []byte) (int, error) {
+	const limit = 1 << 20
+	n := len(p)
+	if len(p) > limit-b.Len() {
+		p = p[:limit-b.Len()]
+		b.overflow = true
+	}
+	b.Buffer.Write(p)
+	return n, nil
+}
+
+func (r *Real) runNative(ctx context.Context, action, selection, destination string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, r.binary(), args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
+	// Cancel the whole group, not just DirectAdmin with mysqldump/tar still
+	// using the directory after its account lock has been released.
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = 5 * time.Second
+	var output nativeOutput
+	cmd.Stdout, cmd.Stderr = &output, &output
+	err := cmd.Run()
+	transcript := bugreport.Redact(output.String())
+	// A native command must not leave a background writer behind after its
+	// parent exits (including an output-pipe WaitDelay failure). Do not turn
+	// a detached operation into a reported completion and release its lock.
+	if cmd.Process != nil && syscall.Kill(-cmd.Process.Pid, 0) == nil {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		if err == nil {
+			err = fmt.Errorf("native task left running child processes")
+		}
+	}
+	if ctx.Err() != nil {
+		return transcript, ctx.Err()
+	}
+	if err != nil {
+		return transcript, fmt.Errorf("directadmin: native %s process: %w", action, err)
+	}
+	if output.overflow {
+		return transcript, fmt.Errorf("directadmin: native %s transcript exceeded 1 MiB; completion is unverified", action)
+	}
+	started, finished := 0, 0
+	for _, line := range strings.Split(output.String(), "\n") {
+		record := nativeRecord.FindStringSubmatch(line)
+		if record == nil {
+			continue
+		}
+		if record[1] == "error" {
+			return transcript, fmt.Errorf("directadmin: native %s reported an error; inspect its transcript", action)
+		}
+		message := record[2]
+		isStart, isEnd := strings.HasPrefix(message, "executing task "), strings.HasPrefix(message, "finished task ")
+		if !isStart && !isEnd {
+			continue
+		}
+		_, encoded, found := strings.Cut(message, "task=")
+		if !found {
+			return transcript, fmt.Errorf("directadmin: native task identity is missing")
+		}
+		task, err := url.ParseQuery(encoded)
+		if err != nil {
+			return transcript, fmt.Errorf("directadmin: invalid native task record")
+		}
+		for key, values := range task {
+			if len(values) != 1 || (strings.HasPrefix(key, "select") && key != "select0") {
+				return transcript, fmt.Errorf("directadmin: native task selected unexpected accounts")
+			}
+		}
+		for key, expected := range map[string]string{"action": action, "select0": selection, "local_path": destination, "owner": "admin", "type": "admin", "value": "multiple", "where": "local", "when": "now"} {
+			if task.Get(key) != expected {
+				return transcript, fmt.Errorf("directadmin: native task %s did not match the requested operation", key)
+			}
+		}
+		if isStart {
+			started++
+		} else {
+			if started != 1 {
+				return transcript, fmt.Errorf("directadmin: native task completed without a unique start")
+			}
+			finished++
+		}
+	}
+	if started != 1 || finished != 1 {
+		return transcript, fmt.Errorf("directadmin: native %s did not confirm exactly one completed task", action)
+	}
+	return transcript, nil
+}
+
+func (r *Real) stageNative(ctx context.Context, account, staging string, accountBytes uint64) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(staging) {
+		return "", fmt.Errorf("directadmin: private staging must be an absolute directory")
+	}
+	if err := os.MkdirAll(staging, 0o700); err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(staging)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() || info.Mode().Perm()&0o077 != 0 || info.Sys().(*syscall.Stat_t).Uid != uint32(os.Geteuid()) {
+		return "", fmt.Errorf("directadmin: handoff staging must be service-owned and private")
+	}
+	w, err := r.nativeWorkspace(account)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		if err := w.close(); err != nil {
+			r.debug("native workspace cleanup failed", "path", w.path, "error", err)
+		}
+	}()
+	// Native working data, its completed archive and the private handoff can
+	// coexist. Check BOTH filesystems; the ordinary staging preflight only
+	// knows about the latter. This is an estimate, not a disk reservation.
+	if err := nativeSpace(w.destination, accountBytes, 3); err != nil {
+		return "", err
+	}
+	if err := nativeSpace(staging, accountBytes, 1); err != nil {
+		return "", err
+	}
+	transcript, err := r.runNative(ctx, "backup", account, w.destination, "admin-backup", "--destination="+w.destination, "--user="+account)
+	if err != nil {
+		// Unlike Apply, Stage has no transcript return field. Keep a bounded,
+		// redacted diagnostic in its error so the job record remains useful.
+		return "", fmt.Errorf("%w\n%s", err, bugreport.Clip(transcript, 16<<10))
+	}
+	if err := w.seal(); err != nil {
+		return "", err
+	}
+	source, err := soleArchive(w.destination)
+	if err != nil {
+		return "", err
+	}
+	archive := filepath.Join(staging, filepath.Base(source))
+	if err := copyArchive(ctx, source, archive, uint32(w.adminUID)); err != nil {
+		return "", err
+	}
+	if err := (dabackup.Layout{}).ValidateArchive(ctx, archive, account); err != nil {
+		os.Remove(archive)
+		return "", err
+	}
+	return archive, nil
+}
+
+func nativeSpace(dir string, size, copies uint64) error {
+	const reserve = 1 << 30
+	if size > (^uint64(0)-reserve)/copies {
+		return fmt.Errorf("directadmin: staging estimate overflow")
+	}
+	required := size*copies + reserve
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(dir, &stat); err != nil {
+		return err
+	}
+	available := stat.Bavail * uint64(stat.Bsize)
+	if required > available {
+		return fmt.Errorf("directadmin: native staging needs %d bytes including reserve; %s has %d available", required, dir, available)
+	}
+	return nil
+}

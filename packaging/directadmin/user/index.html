@@ -1,12 +1,13 @@
 #!/bin/sh
 # Gniza's account page on DirectAdmin.
 #
-# DirectAdmin runs this as the account it belongs to, which is exactly
-# what the account socket needs: it reads who is asking from the socket
-# itself rather than from anything in the request. What is missing is the
-# other half of the check cPanel's plugin performs -- proof that the
-# request came from that customer'"'"'s own logged-in session rather than
-# from any process running as them. See ADR 0019.
+# DirectAdmin hands this script the caller's panel session as SESSION_ID
+# and SESSION_KEY in the environment, and a plugin proves who is asking
+# by replaying those to DirectAdmin's own API and letting DirectAdmin
+# answer. That is the same bar cPanel's plugin clears -- a process that
+# merely runs as the account has neither value -- and it is the half
+# that is missing here. IS_LOGIN_AS says when the host, not the
+# customer, is at the keyboard. See ADR 0019.
 set -eu
 printf '%s' '<div class="ui-widget">
 <h1>Backups</h1>

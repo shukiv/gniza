@@ -2,10 +2,17 @@
 # Gniza's admin page on DirectAdmin.
 #
 # It says what is true rather than drawing an interface that cannot work
-# yet. DirectAdmin runs an admin plugin as the admin unix user; Gniza's
-# administrative interface is a root-only socket, and bridging the two is
-# a decision about who may read every customer's backups, not a detail to
-# be arranged quietly here. See ADR 0019.
+# yet. DirectAdmin does not run a plugin script as root -- the two
+# third-party plugins on a real host that need root both ship a
+# setuid-root helper to get there -- and Gniza's administrative
+# interface is a root-only socket, so this page cannot reach it.
+#
+# What DirectAdmin does hand a plugin is the caller's panel session, as
+# SESSION_ID and SESSION_KEY in the environment, which a plugin replays
+# to DirectAdmin's own API to have it say whose session that is. That is
+# the bridge to build, and building it is a decision about who may read
+# every customer's backups rather than a detail to be arranged quietly
+# here. See ADR 0019.
 set -eu
 printf '%s' '<div class="ui-widget">
 <h1>Gniza</h1>
@@ -14,9 +21,9 @@ running: DirectAdmin tells Gniza when an account is created, suspended,
 restored or removed, which is what keeps one customer'"'"'s backups from
 being handed to the next holder of the same username.</p>
 <p>The administrative interface is not available on DirectAdmin yet.
-DirectAdmin runs this page as the <b>admin</b> user, while Gniza'"'"'s
-administration is a socket only root may open. Until that is settled,
-administer this server with the <code>gniza</code> command line as root.</p>
+DirectAdmin does not run this page as root, and Gniza'"'"'s administration
+is a socket only root may open. Until that is settled, administer this
+server with the <code>gniza</code> command line as root.</p>
 <p>What remains to be settled is written down in ADR 0019 in the Gniza
 documentation.</p>
 </div>'

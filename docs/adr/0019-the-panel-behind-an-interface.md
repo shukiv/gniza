@@ -117,7 +117,9 @@ None of these can be answered from documentation, and each changes code:
 3. **Plugin scripts run as the requesting unix user, and an admin plugin
    therefore runs as `admin`, not as root.** Gniza's admin interface is a
    root-only unix socket (ADR 0012). That model does not survive the move
-   as it stands.
+   as it stands. (The half of this that a real host confirmed is that a
+   plugin is not root; which user it is instead turned out not to be the
+   question. See "What the installed plugins answered" below.)
 4. How `login-as` affects the unix user a `user/` script runs as, which is
    what the account socket attributes a request by (`SO_PEERCRED`).
 5. Whether DirectAdmin's record of an account's databases is a file or a
@@ -240,7 +242,91 @@ Settling this means giving those two methods the domain names the other
 three already take, which changes the interface for both panels. It is
 worth doing when granular restore on DirectAdmin is worth having.
 
-**Still open.** The plugin session bridge (questions 3, 4 and 7), split
-mode -- which needs the nested `home.tar.zst` reassembled into one tree
-and back -- new-account recovery, lifecycle isolation, and where
-DirectAdmin puts a certificate, which this fixture had none of.
+**Still open.** The plugin session bridge (questions 3, 4 and 7 --
+answered below, but not yet built), split mode -- which needs the nested
+`home.tar.zst` reassembled into one tree and back -- new-account
+recovery, lifecycle isolation, and where DirectAdmin puts a certificate,
+which this fixture had none of.
+
+## What the installed plugins answered — 2026-09-08
+
+Questions 3, 4 and 7 were written as a problem about unix users: which
+account a plugin script runs as, and what a `SO_PEERCRED` socket can
+therefore conclude from it. Reading the plugins already installed on the
+DirectAdmin host shows that the unix user is the wrong thing to ask
+about, and that DirectAdmin hands a plugin something better.
+
+### What the other plugins do
+
+Two third-party plugins on that host need to run work as root, and
+neither of them is run as root. Installatron's `admin/index.raw`,
+`reseller/index.raw` and `user/index.raw` are one setuid-root C binary
+(`-r-sr-xr-x root root`), a suexec wrapper that records the uid it was
+invoked as and re-executes the real program. JetBackup's `index.raw` is
+an ordinary script owned by `diradmin`, and the binary it calls,
+`/usr/local/jetapps/usr/bin/jetbackup5/jetbackup_admin`, is setuid root
+(`-rwsr-xr-x root root`).
+
+A setuid helper is only needed by a process that is not already root. So
+the part of question 3 that matters is answered: **a plugin script does
+not run as root**, at any of the three levels. Which non-root user it
+runs as was not established, and no longer needs to be, for the reason
+below.
+
+### What DirectAdmin passes a plugin
+
+DirectAdmin puts the caller's panel session into the script's
+environment. Its own binary names the variables together:
+
+```text
+SESSION_ID
+IS_LOGIN_AS
+LOGIN_AS_MASTER
+IS_LOGIN_KEY
+LOGIN_KEY_NAME
+```
+
+with `SESSION_KEY` alongside them, and the Installatron wrapper passes
+exactly `SESSION_ID` and `SESSION_KEY` through its environment
+allowlist.
+
+The `hosts_click` plugin shows what they are for. Its
+`exec/httpsocket.inc.php` calls DirectAdmin's own API back over HTTPS
+with no credentials of its own:
+
+```php
+curl_setopt($ch, CURLOPT_COOKIE, "session={$_SERVER['SESSION_ID']}; key={$_SERVER['SESSION_KEY']}");
+```
+
+That is the session bridge, and it is a better one than the unix user.
+A plugin does not have to believe anything the request tells it: it
+replays the two values to DirectAdmin and DirectAdmin answers as
+whoever that session belongs to, or refuses. `CMD_API_LOGIN_TEST`
+answers `Login OK`, and `CMD_API_GET_SESSION` describes the session.
+
+### What this settles
+
+**3 — the unix user is not the question.** A plugin script is not root,
+so a root-only socket cannot be opened from one. What replaces the check
+is not a widened socket but a proof: the plugin asks DirectAdmin who the
+session belongs to, and only an answer naming an administrator gets
+administrative work done.
+
+**4 — `login-as` is declared, not inferred.** `IS_LOGIN_AS` says the
+session is an impersonation and `LOGIN_AS_MASTER` names who is behind
+it, so a `user/` page does not have to work out from a uid whether the
+customer or their host is at the keyboard. `IS_LOGIN_KEY` and
+`LOGIN_KEY_NAME` say the same for a login key.
+
+**7 — this is the equivalent cPanel has.** cPanel's plugin proves the
+request came from that customer's own logged-in session; a DirectAdmin
+plugin proves the same thing by replaying `SESSION_ID` and
+`SESSION_KEY` and letting DirectAdmin say whose they are. A process
+merely running as the account has neither value, so the bar is the same
+one, not a lower one.
+
+**Still to build.** The proof has to be made on Gniza's side of the
+socket rather than the plugin's: a page that asks DirectAdmin who is
+calling and then tells the daemon is only as trustworthy as the path
+between them. What the two pages ship today still says the interface is
+unavailable, because saying so is honest until that path exists.

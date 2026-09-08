@@ -237,3 +237,67 @@ the retained fixture.
 
 Reference for the native command/task format:
 [DirectAdmin backup and restore documentation](https://docs.directadmin.com/directadmin/backup-restore-migration/#how-to-create-a-full-backup-via-the-command-line).
+
+## The archive taken apart and put back together — 2026-09-08
+
+Split mode stores files rather than one compressed archive, so restic can
+deduplicate them. DirectAdmin has no documented way to be asked for the parts
+separately, so Gniza takes them out of the archive it does write. What has to
+be true for that to be safe is that the archive comes back the same.
+
+The retained fixture archive was copied off `.10` read-only — 8,084 bytes,
+`sha256 39c2cff53e94e85d3a951ae7dede02b003e7e5eddefc5399c20d99a107b6f292` — and
+unpacked and repacked by `dabackup.Layout.UnpackArchive` and `PackArchive`.
+Nothing was restored and nothing on the panel was touched.
+
+All 74 members across both archives came back with the same name, type, mode,
+uid, gid, owner name, group name, mtime, size, link target and contents.
+`tar -tv` of the original and of the rebuilt archive differ in exactly one
+line, which is the nested archive's own length:
+
+```text
+< -rw-r----- gzv0908a/gzv0908a   864 2026-09-08 05:41 backup/home.tar.zst
+> -rw-r----- gzv0908a/gzv0908a   861 2026-09-08 05:41 backup/home.tar.zst
+```
+
+Compressing the same bytes twice does not produce the same file, and does not
+need to: the members inside it are identical, and GNU tar reads both.
+
+The reason the tar headers are kept in a manifest rather than rebuilt from the
+files on disk is visible in that listing. Three different groups own parts of
+one account's home directory:
+
+```text
+-rw-r--r-- gzv0908a/gzv0908a 376 2025-08-26 11:44 .bashrc
+-rw-r--r-- gzv0908a/access   102 2026-09-08 05:40 .myimunify_id
+drwxrwx--- gzv0908a/apache     0 2026-09-08 05:32 .php/
+drwxrwx--- gzv0908a/mail       0 2026-09-08 05:31 Maildir/
+```
+
+A rebuild that walked the unpacked tree would write whatever the staging
+server's own passwd and group files said, and restore an account whose mail
+directory Dovecot cannot write.
+
+The unpacked form is a manifest beside a tree, and the tree is the account's
+home directory put back together from the three places the archive keeps it
+in:
+
+```text
+manifest.json
+tree/backup/…            # DirectAdmin's records of the account
+tree/home/domains/…      # from the outer archive
+tree/home/imap/…         # from the outer archive
+tree/home/.bashrc …      # from backup/home.tar.zst
+```
+
+Reproduce with:
+
+```sh
+GNIZA_DA_LIVE_ARCHIVE=/path/to/user.admin.<account>.tar.zst \
+  go test -tags directadmin_live ./internal/layout/dabackup/ \
+  -run TestLiveARealArchiveComesBackTheSame -v
+```
+
+Still not done here: the split payload is not yet wired into `Stage`, which
+still refuses `ModeSplit`, and no account has been restored from a repacked
+archive.

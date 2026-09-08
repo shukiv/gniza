@@ -44,9 +44,11 @@ recovery yet. Pushing the source does not publish a DirectAdmin release.
   the account has to still be an ordinary user account of that name, and
   every database the archive names has to be on it. DirectAdmin restores
   an account in modules, and an account whose website answers and whose
-  orders are gone is not the account back. Where the archive names no
-  databases the check is quiet rather than wrong -- see question 8 in
-  ADR 0019 for what that leaves open.
+  orders are gone is not the account back. Only the dumps DirectAdmin's
+  own backup writes count, not a `.sql` file the customer left in their
+  web root. Where the archive names no databases the check is quiet
+  rather than wrong -- see question 8 in ADR 0019 for what that leaves
+  open.
 
 ## What is refused
 

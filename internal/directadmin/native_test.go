@@ -405,6 +405,32 @@ func TestARestoreThatDidNotPutTheDatabasesBackIsNotASuccess(t *testing.T) {
 	}
 }
 
+// TestACustomerSQLFileIsNotOneOfTheAccountsDatabases covers what a
+// customer keeps in their own web root.
+//
+// A .sql file in public_html is one of the most ordinary things on a
+// hosting account: phpMyAdmin writes one on every export, and the popular
+// WordPress migration plugins leave one behind. It is named after the
+// database it came from, so it carries the account prefix, and it stays
+// there long after that database has been dropped.
+//
+// Counting it as one of the account's databases would fail a restore that
+// worked, for an account that is fine, every time -- and a restore
+// reported as failed is a restore somebody runs again. Only the dumps
+// DirectAdmin's own backup writes are the account's databases.
+func TestACustomerSQLFileIsNotOneOfTheAccountsDatabases(t *testing.T) {
+	r := nativeHost(t)
+	fakeMySQL(t, r, "studio_shop")
+	archive := filepath.Join(t.TempDir(), "user.admin.studio.tar.zst")
+	writeNativeArchiveWith(t, archive, "studio", map[string]string{
+		"backup/studio_shop.sql":                            "-- dump\n",
+		"domains/studio.example/public_html/studio_old.sql": "-- the customer's own export\n",
+	})
+	if _, err := r.Apply(t.Context(), archive, panel.ApplyOptions{Overwrite: true, Unrestricted: true}); err != nil {
+		t.Errorf("a restore was failed over a file in the customer's web root: %v", err)
+	}
+}
+
 // An archive that names no databases fails nothing. DirectAdmin may carry
 // its dumps somewhere this cannot read them -- nested inside another
 // compressed member, for one -- and a check that cannot see them must

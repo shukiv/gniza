@@ -132,16 +132,15 @@ func (Layout) ValidateArchive(ctx context.Context, filename, account string) err
 //
 // It is what a finished restore is held to: every database the archive
 // names has to be on the account afterwards. The names are read out of
-// the archive rather than out of a filename, and they are recognised by
-// DirectAdmin's own convention -- an account's databases are called
-// <account>_<something> -- rather than by where in the archive they sit,
-// which is the part ADR 0019 still has open.
+// the archive rather than out of a filename or a tag, and only the dumps
+// DirectAdmin's own backup writes are counted -- see databaseIn for what
+// that excludes and why.
 //
 // An archive that names none is not an error. DirectAdmin may carry its
 // dumps somewhere this cannot read them, nested inside another
 // compressed member among other places, and a check that cannot see them
 // has to stay quiet rather than fail every restore of an account that
-// has databases.
+// has databases. ADR 0019 question 8 says what that leaves open.
 func ArchiveDatabases(ctx context.Context, filename, account string) ([]string, error) {
 	found, err := inspect(ctx, filename, account)
 	if err != nil {
@@ -270,14 +269,21 @@ func inspect(ctx context.Context, filename, account string) ([]string, error) {
 
 // databaseIn reads a database dump's name out of an archive member.
 //
-// DirectAdmin names an account's databases <account>_<something>, which
-// is the same convention the provider's own listing goes by, so a dump
-// is recognised by its name and not by the directory it sits in. Anything
-// else in the archive that happens to end in .sql -- a customer's own
-// backup of somebody else's database among them -- is not one of this
-// account's databases and is not counted as one.
+// Two things have to hold, and the second one is the important one. The
+// name has to be DirectAdmin's for one of this account's databases --
+// <account>_<something>, the same convention the provider's own listing
+// goes by -- and the dump has to be where DirectAdmin's own backup put
+// it, directly in the archive's backup directory.
+//
+// A .sql file anywhere else in the archive belongs to the customer, not
+// to DirectAdmin. phpMyAdmin writes one on every export and the migration
+// plugins leave one behind, so there is very often one sitting in a web
+// root, named after a database that was dropped a year ago. Holding a
+// restore to that name would fail a restore that worked, on an account
+// that is fine, every time -- and a restore reported as failed is a
+// restore somebody runs again.
 func databaseIn(name, account string, kind byte) (string, bool) {
-	if kind != tar.TypeReg {
+	if kind != tar.TypeReg || path.Dir(name) != DatabaseDirName {
 		return "", false
 	}
 	stem, ok := strings.CutSuffix(path.Base(name), ".sql")

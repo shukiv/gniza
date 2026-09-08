@@ -163,14 +163,24 @@ the experimental package release-ready.
 
 A finished restore is held to the databases the archive names, the way the
 cPanel path already holds one to the dumps beside a rebuilt tree. On
-DirectAdmin the names are read out of the archive by DirectAdmin's own
-naming convention -- an account's databases are called
-`<account>_<something>` -- and not by the directory they sit in, because
-that directory is not settled.
+DirectAdmin a dump counts only if it is named `<account>_<something>`,
+which is DirectAdmin's own convention and what the provider's listing
+already goes by, and only if it sits directly in the archive's `backup/`
+directory, which is where the 1.709 fixture had it.
+
+Both halves matter. Without the directory, a `.sql` file in the customer's
+own web root -- what phpMyAdmin writes on every export, and what the
+WordPress migration plugins leave behind -- would be held against the
+restore, and a restore reported as failed is a restore somebody runs
+again. Without the naming, a customer's copy of somebody else's dump would
+count as one of theirs.
 
 The consequence is that the check is quiet when it finds nothing. An
-account whose dumps are nested inside `backup/home.tar.zst`, or named some
-other way, restores with nothing holding its databases to account. That is
-better than failing every such restore and better than the silence there
-was before, but it is not the check the cPanel side has, and it stays this
-way until a host says where the dumps are and what they are called.
+account whose dumps are nested inside `backup/home.tar.zst`, or in some
+other directory on a host that is not 1.709, restores with nothing holding
+its databases to account. That is better than failing every such restore
+and better than the silence there was before, but it is not the check the
+cPanel side has, and it stays this way until a host says where the dumps
+are on it. What settles this is a listing of a real archive from more than
+one DirectAdmin version -- question 6 above -- which nothing in the repo
+records yet.

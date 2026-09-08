@@ -121,7 +121,12 @@ fi
 [ "$(id -u "$PLUGIN_USER")" != 0 ] ||
 	die "$PLUGIN_USER is uid 0; DirectAdmin will not run a plugin as root and neither will Gniza"
 
-mkdir -p "$PLUGIN_DIR/hooks" "$PLUGIN_DIR/admin" "$PLUGIN_DIR/user"
+# Explicit modes because this script runs under umask 077 and nothing
+# under here is secret. A directory left at 0700 root:root is a plugin
+# DirectAdmin installs without complaining and then answers 404 for: the
+# page is there, and neither DirectAdmin nor the account it runs the page
+# as can traverse to it.
+install -d -m 0755 "$PLUGIN_DIR" "$PLUGIN_DIR/hooks" "$PLUGIN_DIR/admin" "$PLUGIN_DIR/user"
 install -m 0644 "$SOURCE_DIR/directadmin/plugin.conf" "$PLUGIN_DIR/plugin.conf"
 for hook in "$SOURCE_DIR"/directadmin/hooks/*.sh; do
 	install -m 0755 "$hook" "$PLUGIN_DIR/hooks/$(basename "$hook")"

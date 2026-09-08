@@ -186,3 +186,36 @@ func TestTheInstallerPutsResticThereBecauseNothingWorksWithoutIt(t *testing.T) {
 		}
 	}
 }
+
+// The plugin directory has to be reachable by DirectAdmin and by the
+// account DirectAdmin runs the page as. This script sets umask 077 --
+// correctly, since it also writes the service's state directories -- so
+// every directory it creates without a mode of its own comes out 0700
+// root:root, and on a real 1.709 host that produced a plugin that
+// installed cleanly and answered 404: the page was there and nothing
+// could traverse to it.
+//
+// WHM's installer learned this already; its comment says the modes are
+// explicit because the script runs under umask 077 and these are not
+// secret. Nothing under the plugin directory is secret either.
+func TestThePluginDirectoriesAreReachableUnderUmask077(t *testing.T) {
+	script := read(t, "install.sh")
+	if !strings.Contains(script, "umask 077") {
+		t.Fatal("this test is about a umask the installer no longer sets")
+	}
+	// Every directory the plugin needs, named as the installer names it.
+	for _, dir := range []string{
+		`"$PLUGIN_DIR"`,
+		`"$PLUGIN_DIR/hooks"`,
+		`"$PLUGIN_DIR/admin"`,
+		`"$PLUGIN_DIR/user"`,
+	} {
+		if !regexp.MustCompile(`install -d -m 07[05]5[^\n]*`+regexp.QuoteMeta(dir)).MatchString(script) {
+			t.Errorf("%s is created without a mode, so umask 077 makes it 0700", dir)
+		}
+	}
+	// And a bare mkdir under the plugin directory is the bug coming back.
+	if regexp.MustCompile(`mkdir -p[^\n]*\$PLUGIN_DIR`).MatchString(script) {
+		t.Error("the plugin directory is still created with mkdir, which umask 077 makes unreachable")
+	}
+}

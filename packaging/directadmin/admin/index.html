@@ -44,8 +44,20 @@ command -v curl >/dev/null 2>&1 ||
 # What Gniza answers is passed through as it is, refusals included, so an
 # operator reads Gniza's own words about why a page did not open. Only a
 # request that never reached it falls through to the message below.
+# --location because every form in Gniza answers with a redirect: post,
+# then see the page again with a message on it. DirectAdmin gives a
+# plugin no way to emit a header -- what this prints is the page body and
+# DirectAdmin writes the headers itself -- so a redirect passed on would
+# reach the browser as its own empty body, which is what every button on
+# this page did before: the work was done and the screen went white. The
+# redirect is followed here instead and what it lands on is the page.
+#
+# --proto and --unix-socket together keep that following on this server:
+# the connection is the socket whatever a Location says, and no other
+# scheme is attempted. Gniza's own redirects are relative in any case.
 set -- \
 	--silent --max-time 300 \
+	--location --max-redirs 5 --proto '=http' \
 	--unix-socket "$SOCKET" \
 	--header "X-Gniza-DA-Session: ${SESSION_ID:-}" \
 	--header "X-Gniza-DA-Key: ${SESSION_KEY:-}"

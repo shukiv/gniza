@@ -104,6 +104,7 @@ directadmin-package:
 		$(BIN)/gniza-directadmin/
 	cp -R packaging/directadmin/plugin.conf packaging/directadmin/hooks \
 		packaging/directadmin/admin packaging/directadmin/user \
+		packaging/directadmin/images \
 		$(BIN)/gniza-directadmin/directadmin/
 	chmod +x $(BIN)/gniza-directadmin/install.sh $(BIN)/gniza-directadmin/uninstall.sh
 	tar -C $(BIN) --owner=0 --group=0 --numeric-owner --mode='u+rwX,go+rX,go-w' \

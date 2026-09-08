@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The product badge: the Gniza mark, white, on the brand orange. This is
+     the file cPanel and WHM show in their plugin lists, so it is a square
+     with the same rounding the interface gives .cpr-brand-mark. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300" role="img" aria-label="Gniza">
+  <rect width="300" height="300" rx="64" fill="#F47216"/>
+  <g transform="translate(55.22 54.91) scale(14.9)" fill="#FFFFFF" fill-rule="evenodd">
+    <g transform="translate(-97.367 -139.17)">
+      <path transform="matrix(.23378 0 0 -.23378 50.654 216.38)" d="m219.89 325.53h14.261v2.3h-14.261zm0-16.189h14.261v2.3h-14.261zm-14.721 4.14h43.703v-12.881h-43.703zm14.721-18.029h14.261v-2.3h-14.261zm7.13-19.157 2.663 4.609 2.024 3.507h17.165v12.881h-43.703v-12.881h17.166l2.023-3.507zm-21.851 53.375h43.703v-12.881h-43.703z"/>
+    </g>
+  </g>
+</svg>

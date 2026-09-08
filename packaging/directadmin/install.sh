@@ -126,16 +126,26 @@ fi
 # DirectAdmin installs without complaining and then answers 404 for: the
 # page is there, and neither DirectAdmin nor the account it runs the page
 # as can traverse to it.
-install -d -m 0755 "$PLUGIN_DIR" "$PLUGIN_DIR/hooks" "$PLUGIN_DIR/admin" "$PLUGIN_DIR/user"
+install -d -m 0755 "$PLUGIN_DIR" "$PLUGIN_DIR/hooks" "$PLUGIN_DIR/admin" \
+	"$PLUGIN_DIR/user" "$PLUGIN_DIR/images"
 install -m 0644 "$SOURCE_DIR/directadmin/plugin.conf" "$PLUGIN_DIR/plugin.conf"
 for hook in "$SOURCE_DIR"/directadmin/hooks/*.sh; do
 	install -m 0755 "$hook" "$PLUGIN_DIR/hooks/$(basename "$hook")"
 done
-# The menu entry. A plugin with no *_txt.html has no way in: the
-# directory is installed and the page is never linked to.
-for text in "$SOURCE_DIR"/directadmin/hooks/*_txt.html; do
-	[ -f "$text" ] || continue
-	install -m 0644 "$text" "$PLUGIN_DIR/hooks/$(basename "$text")"
+# The menu entries. A plugin with no *_txt.html has no way in: the
+# directory is installed and the page is never linked to. The *_img.html
+# beside it is the tile Evolution actually draws, with the icon on it, so
+# both are installed -- a glob that took only the first left the plugin
+# listed as bare words and reachable only by typing its address.
+for entry in "$SOURCE_DIR"/directadmin/hooks/*.html; do
+	[ -f "$entry" ] || continue
+	install -m 0644 "$entry" "$PLUGIN_DIR/hooks/$(basename "$entry")"
+done
+# The icon the menu tile shows. DirectAdmin serves it from the plugin's
+# own images directory, which is the address admin_img.html points at.
+for image in "$SOURCE_DIR"/directadmin/images/*; do
+	[ -f "$image" ] || continue
+	install -m 0644 "$image" "$PLUGIN_DIR/images/$(basename "$image")"
 done
 install -m 0755 "$SOURCE_DIR/directadmin/admin/index.html" "$PLUGIN_DIR/admin/index.html"
 install -m 0755 "$SOURCE_DIR/directadmin/user/index.html" "$PLUGIN_DIR/user/index.html"

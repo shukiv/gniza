@@ -2,6 +2,7 @@ package directadmin_test
 
 import (
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"testing"
@@ -204,18 +205,101 @@ func TestThePluginDirectoriesAreReachableUnderUmask077(t *testing.T) {
 		t.Fatal("this test is about a umask the installer no longer sets")
 	}
 	// Every directory the plugin needs, named as the installer names it.
+	// A shell continuation is still one statement, so they are joined
+	// before the directories are looked for in them.
+	joined := strings.ReplaceAll(script, "\\\n", " ")
+	made := strings.Join(
+		regexp.MustCompile(`install -d -m 07[05]5[^\n]*`).FindAllString(joined, -1), "\n")
 	for _, dir := range []string{
 		`"$PLUGIN_DIR"`,
 		`"$PLUGIN_DIR/hooks"`,
 		`"$PLUGIN_DIR/admin"`,
 		`"$PLUGIN_DIR/user"`,
+		`"$PLUGIN_DIR/images"`,
 	} {
-		if !regexp.MustCompile(`install -d -m 07[05]5[^\n]*`+regexp.QuoteMeta(dir)).MatchString(script) {
+		if !strings.Contains(made, dir) {
 			t.Errorf("%s is created without a mode, so umask 077 makes it 0700", dir)
 		}
 	}
 	// And a bare mkdir under the plugin directory is the bug coming back.
 	if regexp.MustCompile(`mkdir -p[^\n]*\$PLUGIN_DIR`).MatchString(script) {
 		t.Error("the plugin directory is still created with mkdir, which umask 077 makes unreachable")
+	}
+}
+
+// Every form in Gniza answers with a redirect: post, then see the page
+// again with a message on it. WHM's CGI passes headers through, so the
+// browser follows it. DirectAdmin does not give a plugin any way to emit
+// a header -- the script's output is the page body and nothing else -- so
+// a redirect arrives at the browser as its own empty body, and every
+// button on the DirectAdmin page produced a blank white screen: adding a
+// destination worked, noting its recovery key worked, testing it worked,
+// and all three looked like nothing had happened.
+//
+// So the script follows the redirect itself and prints what it lands on.
+func TestARedirectIsFollowedHereBecauseDirectAdminCannotPassOneOn(t *testing.T) {
+	page := read(t, "admin/index.html")
+	if !regexp.MustCompile(`--location\b`).MatchString(page) {
+		t.Error("the page does not follow the redirect every form answers with")
+	}
+	// And it does not follow one forever. A loop between two routes would
+	// otherwise hold a DirectAdmin request open until it timed out.
+	if !regexp.MustCompile(`--max-redirs [0-9]+`).MatchString(page) {
+		t.Error("the page follows redirects without a limit")
+	}
+	// The redirects are Gniza's own, over the socket. Following one off
+	// this server would replay the administrator's DirectAdmin session to
+	// wherever it pointed, so the request must stay on the unix socket.
+	if strings.Contains(page, "--proto") == false && !strings.Contains(page, "--unix-socket") {
+		t.Error("the page does not pin the request to Gniza's socket")
+	}
+}
+
+// DirectAdmin lists a plugin under Extra Features and links to it inside
+// the skin only when the level's *_txt.html is a link. Ours was the plain
+// words "Gniza Backups", so Evolution had nothing to point at: the page
+// could be reached by typing its address, which serves it outside the
+// skin with none of DirectAdmin's own chrome around it, and that is what
+// it looked like on a real 1.709 host. JetBackup ships an anchor in
+// admin_txt.html and an anchor with an icon in admin_img.html, and is
+// listed where an administrator looks for it.
+func TestTheMenuEntriesAreLinksDirectAdminCanFollow(t *testing.T) {
+	const target = "/CMD_PLUGINS_ADMIN/gniza/index.html"
+	for _, name := range []string{"hooks/admin_txt.html", "hooks/admin_img.html"} {
+		entry := read(t, name)
+		if !strings.Contains(entry, `href="`+target+`"`) {
+			t.Errorf("%s does not link to %s", name, target)
+		}
+		if !strings.Contains(entry, "Gniza") {
+			t.Errorf("%s does not name the plugin", name)
+		}
+	}
+	// The tile carries the icon, and the icon has to be a file the
+	// installer puts where that address resolves.
+	img := read(t, "hooks/admin_img.html")
+	icon := regexp.MustCompile(`src="(/CMD_PLUGINS_ADMIN/gniza/images/[^"]+)"`).FindStringSubmatch(img)
+	if icon == nil {
+		t.Fatal("admin_img.html has no icon under the plugin's own images directory")
+	}
+	if _, err := os.Stat(strings.TrimPrefix(icon[1], "/CMD_PLUGINS_ADMIN/gniza/")); err != nil {
+		t.Errorf("the icon %s is not in the package: %v", icon[1], err)
+	}
+	install := read(t, "install.sh")
+	if !strings.Contains(install, "images") {
+		t.Error("the installer does not install the images directory")
+	}
+	// And it installs both menu files. A glob that matched only
+	// *_txt.html left the tile behind, which is the half of the pair
+	// Evolution actually draws.
+	for _, name := range []string{"admin_txt.html", "admin_img.html"} {
+		matched := false
+		for _, glob := range regexp.MustCompile(`hooks/(\*[^"\s]*\.html)`).FindAllStringSubmatch(install, -1) {
+			if ok, _ := path.Match(glob[1], name); ok {
+				matched = true
+			}
+		}
+		if !matched {
+			t.Errorf("the installer's hooks glob does not cover %s", name)
+		}
 	}
 }

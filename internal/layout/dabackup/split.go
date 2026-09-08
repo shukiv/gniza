@@ -148,8 +148,11 @@ type Member struct {
 // and a tree of file bodies, so restic sees files rather than one
 // compressed blob.
 //
-// dir is created and must be empty. What it ends up holding is
-// ManifestFile and TreeDirName.
+// dir is created if it is not there, and must not already hold either
+// part: a tree from a previous run is refused rather than written into.
+// What it ends up holding is MetadataTreeDir and HomeTreeDir, with
+// ManifestFile inside the first of them. Anything else already in dir is
+// left alone -- the archive being taken apart is usually one of them.
 func (Layout) UnpackArchive(ctx context.Context, archivePath, account, dir string) error {
 	if !nameMatchesArchive(filepath.Base(archivePath), account) {
 		return fmt.Errorf("dabackup: archive filename does not belong to %s", account)

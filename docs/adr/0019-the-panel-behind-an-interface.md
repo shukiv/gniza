@@ -574,8 +574,8 @@ because compressing the same bytes twice does not produce the same file.
 The three groups that motivated the manifest are visible in that listing
 — `gzv0908a/apache`, `gzv0908a/mail`, `gzv0908a/access`.
 
-Three things follow from a panel that will not produce its own parts, and
-all three are decided by asking the layout rather than by naming
+Four things follow from a panel that will not produce its own parts, and
+all four are decided by asking the layout rather than by naming
 DirectAdmin:
 
 - The restore does not rebuild the tree into an archive by walking it. It
@@ -590,6 +590,14 @@ DirectAdmin:
   home directory up where it lies; here the archive is written into
   staging and taken apart there, so at the peak the account is on that
   disk twice.
+- The scratch estimate for a restore, and for a rehearsal, is the account
+  three times rather than one or two. The tree is one and the archive
+  built from it is two; the third is the home directory's own archive,
+  whose compressed length is a header in the outer one and so has to be
+  finished on disk before the outer one can be started. It is transient
+  and it is real, and on a host at 91% the difference between two and
+  three is the difference between a job that is refused and a disk that
+  fills at the last step.
 
 Still open: no account has been restored from an archive Gniza rebuilt.
 That is a restore on a production host, and it is the last question this

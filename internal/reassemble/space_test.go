@@ -59,7 +59,35 @@ func TestARehearsalIsSizedForWhatThePanelMakesItWrite(t *testing.T) {
 	if got, want := RehearsalBytes(account, cpmove.Layout{}), TreeBytes(account); got != want {
 		t.Errorf("a cPanel rehearsal is sized at %d, not the tree's %d", got, want)
 	}
-	if got, want := RehearsalBytes(account, dabackup.Layout{}), ArchiveBytes(account); got != want {
+	if got, want := RehearsalBytes(account, dabackup.Layout{}), PackedBytes(account); got != want {
 		t.Errorf("a DirectAdmin rehearsal is sized at %d, not the %d it writes", got, want)
+	}
+}
+
+// A restore that rebuilds the archive from the parts has a third copy in
+// it, and it is not the tree and not the finished archive. DirectAdmin's
+// nested home archive carries its own compressed length in a header of
+// the outer one, so it has to be finished on disk before the outer one is
+// started, and all three are on the filesystem at once. Sized for two,
+// a restore of a home directory that does not compress fills the disk at
+// the last step of the job.
+func TestARestoreThatRebuildsTheArchiveIsSizedForTheCopyInBetween(t *testing.T) {
+	const account = 10 << 30
+
+	if got, want := RestoreBytes(account, cpmove.Layout{}), ArchiveBytes(account); got != want {
+		t.Errorf("a cPanel restore is sized at %d, not the %d it writes", got, want)
+	}
+	packed := RestoreBytes(account, dabackup.Layout{})
+	if packed < 3*uint64(account) {
+		t.Errorf("a DirectAdmin restore holds the tree, the nested archive and the outer one, and is sized at %d", packed)
+	}
+	if packed >= 4*uint64(account) {
+		t.Errorf("a DirectAdmin restore is sized for a fourth copy nothing writes: %d", packed)
+	}
+	if got := PackedBytes(0); got != 0 {
+		t.Errorf("PackedBytes turned an unknown size into a usable estimate: %d", got)
+	}
+	if got := PackedBytes(math.MaxUint64); got != math.MaxUint64 {
+		t.Errorf("PackedBytes overflowed and made a huge restore look small: %d", got)
 	}
 }

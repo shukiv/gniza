@@ -63,7 +63,8 @@ func (a *Agent) RunRestore(ctx context.Context, assignment protocol.RestoreAssig
 		report.Error = err.Error()
 		return report
 	}
-	estimate := max(assignment.SizeEstimate, reassemble.ArchiveBytes(sourceBytes))
+	estimate := max(assignment.SizeEstimate,
+		reassemble.RestoreBytes(sourceBytes, a.provider.Layout()))
 	// The key carries the kind as well as the account: a granular restore
 	// and a whole-account rebuild are different output, and one must not
 	// silently replace the other while somebody is downloading it.

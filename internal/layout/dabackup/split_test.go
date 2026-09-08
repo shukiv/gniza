@@ -801,7 +801,10 @@ func TestATreeThatIsAlreadyThereIsNotWrittenOver(t *testing.T) {
 		if err == nil {
 			t.Fatalf("unpacked over the tree already in %s", part(dir))
 		}
-		if !strings.Contains(err.Error(), filepath.Base(part(dir))) {
+		// The phrase and not the word: a temporary directory under a
+		// home directory contains "home" already, and an assertion that
+		// passed on the path would pass on any refusal at all.
+		if want := "holds a " + filepath.Base(part(dir)) + " tree"; !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal does not say what was in the way: %v", err)
 		}
 	}

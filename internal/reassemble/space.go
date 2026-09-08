@@ -31,6 +31,20 @@ func TreeBytes(source uint64) uint64 { return multiple(source, 1) }
 // cPanel's copy of it coexist on the same filesystem.
 func ArchiveBytes(source uint64) uint64 { return multiple(source, 2) }
 
+// PackedBytes is what a restore needs on a panel whose archive is built
+// from the parts rather than restored beside them.
+//
+// Three copies, not two. The tree is one and the archive built from it is
+// two, as anywhere else. The third is between them and is easy to miss:
+// DirectAdmin's home directory arrives as an archive inside the account
+// archive, and its compressed length is a header in the outer one, so it
+// has to be finished on disk before the outer one can be started -- see
+// dabackup.PackArchive. It is deleted when the outer archive is closed,
+// and until then all three are on the same filesystem. A home directory
+// that does not compress, which is most of the large ones, makes each of
+// those copies about the size of the account.
+func PackedBytes(source uint64) uint64 { return multiple(source, 3) }
+
 // RehearsalBytes is what a rehearsal needs, which is not the same number
 // on every panel.
 //
@@ -38,13 +52,22 @@ func ArchiveBytes(source uint64) uint64 { return multiple(source, 2) }
 // one copy. On a panel whose backed-up parts are not the account's own
 // files -- DirectAdmin, where the archive is what a restore reads -- the
 // only way to check the parts is to build the archive from them, so the
-// rehearsal builds it whatever it was asked for. The tree and the archive
-// are then on the disk at once: two copies, the same as a real restore.
+// rehearsal builds it whatever it was asked for, and pays what a restore
+// pays.
 func RehearsalBytes(source uint64, layout panel.ArchiveLayout) uint64 {
 	if _, packs := layout.(panel.ArchivePacker); packs {
-		return ArchiveBytes(source)
+		return PackedBytes(source)
 	}
 	return TreeBytes(source)
+}
+
+// RestoreBytes is what a restore that produces the archive needs, which
+// is also not the same number on every panel.
+func RestoreBytes(source uint64, layout panel.ArchiveLayout) uint64 {
+	if _, packs := layout.(panel.ArchivePacker); packs {
+		return PackedBytes(source)
+	}
+	return ArchiveBytes(source)
 }
 
 // multiple is n copies of source plus the overhead, saturating rather

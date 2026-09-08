@@ -230,3 +230,26 @@ func TestARefusalQuotesNothingDirectAdminSent(t *testing.T) {
 		t.Errorf("the refusal is not a refusal: %v", err)
 	}
 }
+
+// DirectAdmin url-encodes characters in the values it answers with, and
+// not only the ones that need it: on 1.709 the account gzv0908a came
+// back as gzv%30%39%30%38a, every digit escaped. An answer read by
+// splitting on & and = rather than by decoding would name an account
+// that does not exist.
+func TestAnAccountNameDirectAdminEncodedIsStillTheAccount(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Field names arrive encoded too -- additional%5Fbandwidth for
+		// additional_bandwidth -- so one of those is here as well.
+		_, _ = w.Write([]byte("additional%5Fbandwidth=0&username=gzv%30%39%30%38a&usertype=user"))
+	}))
+	defer server.Close()
+	verifier := newDASessionVerifierOver(server.URL, server.Client())
+
+	who, err := verifier.verify(context.Background(), testDASession, testDAKey)
+	if err != nil {
+		t.Fatalf("an encoded account name was refused: %v", err)
+	}
+	if who.Username != "gzv0908a" {
+		t.Errorf("read the account as %q", who.Username)
+	}
+}

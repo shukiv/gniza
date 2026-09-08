@@ -18,6 +18,11 @@ export PATH
 
 SOCKET=/var/run/gniza/directadmin/plugin.sock
 METHOD=${REQUEST_METHOD:-GET}
+# DirectAdmin sets QUERY_STRING from the address bar, and a relative
+# link from this page keeps the plugin's own path -- measured on 1.709,
+# both at /CMD_PLUGINS_ADMIN/gniza/index.html and inside Evolution's
+# wrapper at /evo/plugin?src=..., where ?p=accounts arrived as
+# QUERY_STRING=p=accounts. That is what Gniza's routing is built on.
 QUERY=${QUERY_STRING:-}
 
 fail() {
@@ -46,20 +51,18 @@ set -- \
 	--header "X-Gniza-DA-Key: ${SESSION_KEY:-}"
 
 if [ "$METHOD" = POST ]; then
-	# Only the bytes the request said it has. Without the count curl
-	# would read until the web server closed the connection, which on a
-	# kept-alive connection is not at the end of this request.
-	LENGTH=${CONTENT_LENGTH:-0}
-	case $LENGTH in
-	'' | *[!0-9]*) fail 'That form did not arrive in one piece. Reload the page and try again.' ;;
-	esac
+	# DirectAdmin does not hand a plugin the request body. It reads the
+	# body itself and puts the whole url-encoded form in POST, leaving
+	# CONTENT_LENGTH empty and stdin at end of file -- measured on 1.709,
+	# where a form of two fields arrived as
+	# POST=gniza_probe_field=...&csrf=... and stdin held nothing. So the
+	# form is forwarded from there, and reading stdin would forward an
+	# empty body to every save.
 	set -- "$@" \
 		--request POST \
-		--header "Content-Type: ${CONTENT_TYPE:-application/x-www-form-urlencoded}" \
-		--data-binary @-
-	head -c "$LENGTH" | curl "$@" "http://gniza/?$QUERY" 2>/dev/null && exit 0
-else
-	curl "$@" --get "http://gniza/?$QUERY" 2>/dev/null && exit 0
+		--header "Content-Type: application/x-www-form-urlencoded" \
+		--data-raw "${POST:-}"
 fi
+curl "$@" "http://gniza/?$QUERY" 2>/dev/null && exit 0
 
 fail 'The backup service did not answer. Check <code>systemctl status gniza</code>.'

@@ -128,3 +128,62 @@ What this does not establish is the accepting path: that an
 administrator's live session is answered with their name and
 `usertype=admin`. That needs somebody logged into the panel, and the
 page installed for them to open.
+
+## What the plugin runner actually does — 2026-09-08
+
+Measured on the 1.709 host with a diagnostic plugin, at both levels,
+including under login-as. The plugin was removed afterwards.
+
+**The service account works.** With `admin_run_as=gniza-plugin` and that
+account created by `useradd --system`, DirectAdmin ran the page as it:
+`uid=979 user=gniza-plugin`, and DirectAdmin's own `RUNNING_AS` agreed.
+The account page, with no `user_run_as`, ran as the account —
+`uid=1168 user=gzv0908a`, `RUNNING_AS=gzv0908a` — so `SO_PEERCRED` still
+names a person there.
+
+**A form does not arrive in the request body.** DirectAdmin reads the
+body itself and hands the plugin the whole url-encoded form in a `POST`
+environment variable. `CONTENT_LENGTH` is empty and stdin is at end of
+file: a two-field form arrived as
+`POST=gniza_probe_field=ABCDEF0123456789&csrf=second-field` with zero
+bytes readable. A proxy that reads stdin therefore forwards an empty
+body to every save — the browser reloads, nothing is written, and it
+looks like success. That is what the page now avoids.
+
+It also puts a ceiling on a form. An environment variable is bounded by
+the kernel's per-variable limit, 128 KiB on Linux, well under the 1 MiB
+Gniza allows a form elsewhere. The one form that could approach it is a
+granular restore naming thousands of paths.
+
+**Routing survives.** `QUERY_STRING` carries what a relative link sets:
+`?p=link-test&two=2` arrived as `QUERY_STRING=p=link-test&two=2`. That
+holds both at the plugin's own address and inside Evolution's wrapper at
+`/evo/plugin?src=%2FCMD_PLUGINS%2F…`, where the page runs in a frame and
+relative links stay inside it. So ADR 0008's query-string routing works
+here unchanged.
+
+The addresses are not symmetrical: the administrator's page is at
+`/CMD_PLUGINS_ADMIN/<id>/index.html`, the account's at
+`/CMD_PLUGINS/<id>/index.html` — not `CMD_PLUGINS_USER`, which redirects
+for every plugin on the host, Gniza's and the others'.
+
+**The account type is what authorizes.** An administrator's session
+answered `usertype=admin`; a customer's answered `usertype=user`. The
+daemon's check is against the right field.
+
+**Login-as is visible to the plugin.** Impersonating a customer, the
+page received `IS_LOGIN_AS=1` and `LOGIN_AS_MASTER=admin` while
+`USERNAME` and `RUNNING_AS` were the customer. So the audit gap ADR 0019
+left open — a restore recorded against the customer when the host did it
+— can be closed: the panel says who is really at the keyboard. Neither
+value is trusted on its own; both come from the same environment as the
+session, and what makes them worth anything is that the session beside
+them verifies.
+
+**Two things to be careful with.** DirectAdmin url-encodes the values in
+its answers, and not only where it must: the account `gzv0908a` came
+back as `gzv%30%39%30%38a`, every digit escaped, and field names arrive
+encoded too. Decoding the answer rather than splitting it is therefore
+required, not tidiness. And the environment carries `HTTP_COOKIE` with
+the raw session in it, beside `SESSION_ID` and `SESSION_KEY` — a third
+copy of the same credential, and one more place not to print.

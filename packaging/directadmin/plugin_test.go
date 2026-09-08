@@ -117,3 +117,33 @@ func TestTheAdminPageNeverPrintsTheSession(t *testing.T) {
 		t.Error("the page reads the session without a default, so a request without one aborts the script")
 	}
 }
+
+// DirectAdmin reads the request body itself and hands the plugin the
+// whole url-encoded form in POST, leaving CONTENT_LENGTH empty and stdin
+// at end of file. A page that reads stdin therefore forwards an empty
+// body to every save, the browser reloads, and nothing was written --
+// which looks exactly like success. Measured on 1.709.
+func TestTheFormIsForwardedFromWhereDirectAdminPutsIt(t *testing.T) {
+	page := read(t, "admin/index.html")
+	if !strings.Contains(page, `--data-raw "${POST:-}"`) {
+		t.Error("the page does not forward the form DirectAdmin handed it in POST")
+	}
+	for _, reading := range []string{"head -c", "CONTENT_LENGTH", "--data-binary @-"} {
+		if strings.Contains(stripComments(page), reading) {
+			t.Errorf("the page still reads the request body with %q, which DirectAdmin never fills", reading)
+		}
+	}
+}
+
+// stripComments leaves the code, so a comment explaining what was
+// measured does not read as the code doing it.
+func stripComments(script string) string {
+	var kept []string
+	for _, line := range strings.Split(script, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.Join(kept, "\n")
+}

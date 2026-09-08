@@ -1,11 +1,13 @@
 package reassemble
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/pkgacct"
 )
 
@@ -47,7 +49,7 @@ func (r Result) Databases() []string {
 // would accept the archive — only a real restorepkg on a real host can —
 // but a rehearsal that fails means the backup certainly cannot be
 // restored, which is the question worth answering nightly.
-func Verify(rebuilt Result) ([]string, error) {
+func Verify(ctx context.Context, rebuilt Result) ([]string, error) {
 	var passed []string
 
 	// A backup taken of less than the whole account is checked against
@@ -81,9 +83,20 @@ func Verify(rebuilt Result) ([]string, error) {
 	}
 
 	if rebuilt.Mode == pkgacct.ModeMonolithic {
-		// There is nothing to reassemble, so the archive itself is the
-		// whole of what can be checked without unpacking cPanel's format.
-		return passed, nil
+		// There is no tree to walk: the archive is the panel's own, and
+		// its restore is what reads inside it. A panel that can read
+		// inside its own archive says what that proved; one that cannot
+		// -- cPanel's format, so far -- adds nothing, and the rehearsal
+		// reports only what it did check.
+		drill, ok := rebuilt.Layout.(panel.ArchiveDrill)
+		if !ok || rebuilt.ArchivePath == "" || rebuilt.Account == "" {
+			return passed, nil
+		}
+		inside, err := drill.DrillArchive(ctx, rebuilt.ArchivePath, rebuilt.Account)
+		if err != nil {
+			return passed, err
+		}
+		return append(passed, inside...), nil
 	}
 
 	if rebuilt.Layout == nil {

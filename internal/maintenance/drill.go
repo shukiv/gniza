@@ -112,7 +112,7 @@ func (r *Runner) Drill(ctx context.Context, req DrillRequest) (DrillResult, erro
 			return "", err
 		}
 
-		checks, err := reassemble.Verify(rebuilt)
+		checks, err := reassemble.Verify(ctx, rebuilt)
 		result = DrillResult{
 			Account:       account,
 			SnapshotID:    snapshotID,

@@ -54,7 +54,7 @@ func TestARehearsalNeedsNoArchive(t *testing.T) {
 	}
 
 	// And it verifies, without an archive to point at.
-	checks, err := Verify(result)
+	checks, err := Verify(context.Background(), result)
 	if err != nil {
 		t.Fatalf("a rehearsal of a good backup failed: %v", err)
 	}

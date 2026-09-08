@@ -1,6 +1,7 @@
 package reassemble_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,7 +63,7 @@ func TestARehearsalSaysWhatTheBackupWasTakenWithout(t *testing.T) {
 		t.Fatal("a backup taken without databases reads as complete")
 	}
 
-	passed, err := reassemble.Verify(rebuilt)
+	passed, err := reassemble.Verify(context.Background(), rebuilt)
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
@@ -80,13 +81,13 @@ func TestARehearsalSaysWhatTheBackupWasTakenWithout(t *testing.T) {
 // backup that was supposed to hold it.
 func TestAnEmptyHomeDirectoryStillFailsUnlessItWasSkipped(t *testing.T) {
 	missing := buildTree(t, false, map[string]string{"shop.sql": "CREATE TABLE t (id int);"})
-	if _, err := reassemble.Verify(missing); err == nil {
+	if _, err := reassemble.Verify(context.Background(), missing); err == nil {
 		t.Fatal("a backup that should hold the home directory rehearsed clean without one")
 	}
 
 	skipped := buildTree(t, false, map[string]string{"shop.sql": "CREATE TABLE t (id int);"})
 	skipped.Skipped = []string{"homedir"}
-	passed, err := reassemble.Verify(skipped)
+	passed, err := reassemble.Verify(context.Background(), skipped)
 	if err != nil {
 		t.Fatalf("a backup taken without the home directory failed its rehearsal: %v", err)
 	}
@@ -99,7 +100,7 @@ func TestAnEmptyHomeDirectoryStillFailsUnlessItWasSkipped(t *testing.T) {
 // changes what a whole-account rehearsal has to prove.
 func TestAFullBackupIsRehearsedAsBefore(t *testing.T) {
 	rebuilt := buildTree(t, true, map[string]string{"shop.sql": "CREATE TABLE t (id int);"})
-	passed, err := reassemble.Verify(rebuilt)
+	passed, err := reassemble.Verify(context.Background(), rebuilt)
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}

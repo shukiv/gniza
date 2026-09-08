@@ -164,5 +164,9 @@ func splitMailbox(name string) (domain, mailbox string) {
 	return name, ""
 }
 
-// Layout is a complete panel layout.
-var _ panel.Layout = Layout{}
+// Layout is a complete panel layout, and one whose archive a rehearsal
+// can read inside.
+var (
+	_ panel.Layout       = Layout{}
+	_ panel.ArchiveDrill = Layout{}
+)

@@ -1259,7 +1259,7 @@ func (e *Engine) Drill(ctx context.Context, repositoryID, account string) (
 	if err != nil {
 		return nil, nil, err
 	}
-	checks, err = reassemble.Verify(rebuilt)
+	checks, err = reassemble.Verify(ctx, rebuilt)
 	return checks, rebuilt.Skipped, err
 }
 

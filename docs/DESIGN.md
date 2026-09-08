@@ -528,6 +528,16 @@ all.
 
 The checks are structural — the extracted tree has exactly one top-level directory, the home directory contains files, every SQL dump is non-empty and contains a `CREATE` statement. Nothing here can tell you cPanel would accept the archive; only a real `restorepkg` on a real host can. But a drill that fails means the backup certainly cannot be restored, which is the question worth answering nightly.
 
+A whole-account snapshot has no tree to walk, so those checks need
+somewhere else to run. A panel whose own archive Gniza can read inside
+answers for it: `gniza-maintenance -panel directadmin` drills a
+DirectAdmin snapshot by streaming the archive, checking the identity
+record and reading every database dump it carries, and refuses one that
+came back empty or truncated. cPanel's format is not one Gniza reads
+inside, so a drill of a monolithic cpmove archive still reports only
+that the archive arrived — it says what it checked rather than implying
+the rest.
+
 For acceptance testing, `gniza-agent -certify-live-archive` runs on an
 isolated cPanel certification host. It restores under a caller-supplied
 disposable username with Restricted Restore enabled and DNS updates disabled,

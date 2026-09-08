@@ -89,6 +89,31 @@ type Layout interface {
 	ItemLayout
 }
 
+// ArchiveDrill is what a panel can prove about a whole-account archive
+// without unpacking it.
+//
+// A rehearsal of a split snapshot walks the rebuilt tree: it counts the
+// files in the home directory and reads every dump, because a dump that
+// came back empty restores an empty database and that is worse than an
+// obvious failure. A whole-account snapshot is one file the panel's own
+// restore reads, so there is no tree to walk and none of those checks
+// have anywhere to run.
+//
+// A panel whose archive Gniza can read inside implements this, and a
+// rehearsal asks it. One whose archive Gniza cannot read -- cPanel's, so
+// far -- does not, and the rehearsal reports what it actually checked
+// rather than more.
+//
+// This is a rehearsal's question and not a restore's. It reads the
+// bodies of what it finds, which is work every backup would otherwise
+// pay for on every run, so it is deliberately not part of
+// ValidateArchive.
+type ArchiveDrill interface {
+	// DrillArchive returns the checks the archive passed, or the first
+	// one it failed.
+	DrillArchive(ctx context.Context, filename, account string) ([]string, error)
+}
+
 // UsableDomainName refuses anything that is not a domain name.
 //
 // A name reaches this from an operator's choice in the interface and is

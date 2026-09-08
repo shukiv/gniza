@@ -20,7 +20,9 @@ import (
 	"syscall"
 
 	"github.com/shukiv/gniza/internal/layout/cpmove"
+	"github.com/shukiv/gniza/internal/layout/dabackup"
 	"github.com/shukiv/gniza/internal/maintenance"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/resticrun"
 	"github.com/shukiv/gniza/internal/store"
 	"github.com/shukiv/gniza/internal/vault"
@@ -39,7 +41,9 @@ func main() {
 		"percent of pack data to verify during check")
 	prune := flag.Bool("prune", true, "remove unreferenced data after forget")
 	account := flag.String("account", "",
-		"cPanel account to rehearse for -kind drill; empty picks the newest snapshot")
+		"account to rehearse for -kind drill; empty picks the newest snapshot")
+	panelName := flag.String("panel", "cpanel",
+		"the hosting panel whose servers wrote these snapshots: cpanel or directadmin")
 	resticBinary := flag.String("restic", "restic", "path to the restic binary")
 	runtimeDir := flag.String("runtime-dir", os.TempDir(),
 		"directory for the transient restic password file")
@@ -57,6 +61,7 @@ func main() {
 		repositoryID: *repositoryID, readDataSubset: *readDataSubset, prune: *prune,
 		resticBinary: *resticBinary, runtimeDir: *runtimeDir, cacheDir: *cacheDir,
 		caCert: *caCert, account: *account, logLevel: *logLevel,
+		panelName: *panelName,
 	}); err != nil && !errors.Is(err, context.Canceled) {
 		fmt.Fprintf(os.Stderr, "gniza-maintenance: %v\n", err)
 		os.Exit(1)
@@ -76,6 +81,29 @@ type runConfig struct {
 	caCert         string
 	account        string
 	logLevel       string
+	panelName      string
+}
+
+// layoutFor is the layout of the panel this maintenance run is about.
+//
+// Maintenance runs away from the servers it serves and never talks to a
+// panel, so unlike the agent it cannot ask a provider which one wrote a
+// snapshot. It is told, and an empty answer means cPanel, which is what
+// every deployment that predates the flag is running.
+//
+// A name nobody wrote a layout for is refused rather than defaulted:
+// checking a DirectAdmin snapshot against cPanel's layout fails on every
+// account, with an error about a missing cpmove tree that says nothing
+// about the actual mistake.
+func layoutFor(name string) (panel.Layout, error) {
+	switch name {
+	case "", "cpanel":
+		return cpmove.Layout{}, nil
+	case "directadmin":
+		return dabackup.Layout{}, nil
+	default:
+		return nil, fmt.Errorf("unknown -panel %q: cpanel or directadmin", name)
+	}
 }
 
 func run(ctx context.Context, cfg runConfig) error {
@@ -84,6 +112,10 @@ func run(ctx context.Context, cfg runConfig) error {
 		maintenance.KindCheck, maintenance.KindDrill:
 	default:
 		return fmt.Errorf("unknown -kind %q", cfg.kind)
+	}
+	layout, err := layoutFor(cfg.panelName)
+	if err != nil {
+		return err
 	}
 	if cfg.databaseURL == "" {
 		return errors.New("-database-url is required")
@@ -119,7 +151,7 @@ func run(ctx context.Context, cfg runConfig) error {
 		CacheDir:   cfg.cacheDir,
 		CACertPath: cfg.caCert,
 	}, nil)
-	runner := maintenance.New(db, v, restic, log, cpmove.Layout{})
+	runner := maintenance.New(db, v, restic, log, layout)
 
 	switch cfg.kind {
 	case maintenance.KindProvision:

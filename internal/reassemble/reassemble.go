@@ -273,6 +273,11 @@ func restoreMonolithic(ctx context.Context, restorer Restorer, req Request,
 		return Result{}, err
 	}
 	return Result{
+		// The account travels with the result, as it does for a split
+		// rebuild: whatever checks this afterwards has to read it
+		// against the same account it was rebuilt for, not against a
+		// filename or a tag.
+		Account:       req.Account,
 		ArchivePath:   archive,
 		Layout:        req.Layout,
 		Mode:          pkgacct.ModeMonolithic,

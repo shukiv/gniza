@@ -123,8 +123,41 @@ func (Layout) PlaceDatabaseUsers(root string) error { return nil }
 // restic tag and a filename are not authoritative: the panel's restore
 // reads what is inside.
 func (Layout) ValidateArchive(ctx context.Context, filename, account string) error {
-	_, err := inspect(ctx, filename, account)
+	_, err := inspect(ctx, filename, account, false)
 	return err
+}
+
+// DrillArchive rehearses this archive: it checks everything
+// ValidateArchive checks, and reads the body of every database dump it
+// carries.
+//
+// A dump that came back empty restores an empty database, and a dump
+// that came back truncated does the same thing less obviously. On
+// cPanel those are caught in the rebuilt tree; a DirectAdmin snapshot
+// has no tree, so without this a rehearsal of one proved the archive
+// arrived and nothing about what is in it.
+//
+// Reading the bodies is why this is separate from ValidateArchive: a
+// dump is the largest thing in the archive after the home directory,
+// and a backup must not pay for a rehearsal's work on every run.
+func (Layout) DrillArchive(ctx context.Context, filename, account string) ([]string, error) {
+	found, err := inspect(ctx, filename, account, true)
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(found)
+	found = slices.Compact(found)
+	if len(found) == 0 {
+		// An account may genuinely have none, and DirectAdmin may carry
+		// them somewhere this cannot read. Neither is a failure, and
+		// neither is a check that can be claimed.
+		return nil, nil
+	}
+	noun := "database dumps parse"
+	if len(found) == 1 {
+		noun = "database dump parses"
+	}
+	return []string{fmt.Sprintf("%d %s", len(found), noun)}, nil
 }
 
 // ArchiveDatabases names the account's database dumps that the archive
@@ -142,7 +175,7 @@ func (Layout) ValidateArchive(ctx context.Context, filename, account string) err
 // has to stay quiet rather than fail every restore of an account that
 // has databases. ADR 0019 question 8 says what that leaves open.
 func ArchiveDatabases(ctx context.Context, filename, account string) ([]string, error) {
-	found, err := inspect(ctx, filename, account)
+	found, err := inspect(ctx, filename, account, false)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +183,10 @@ func ArchiveDatabases(ctx context.Context, filename, account string) ([]string, 
 	return slices.Compact(found), nil
 }
 
-func inspect(ctx context.Context, filename, account string) ([]string, error) {
+// inspect walks the archive once. It always checks the identity record;
+// readDumps says whether to read the body of each dump as well, which is
+// a rehearsal's work and not a restore's.
+func inspect(ctx context.Context, filename, account string, readDumps bool) ([]string, error) {
 	if !validUser(account) {
 		return nil, fmt.Errorf("dabackup: invalid expected account %q", account)
 	}
@@ -224,6 +260,17 @@ func inspect(ctx context.Context, filename, account string) ([]string, error) {
 		}
 		if database, ok := databaseIn(name, account, h.Typeflag); ok {
 			databases = append(databases, database)
+			if readDumps {
+				restores, err := dumpRestoresSomething(tr)
+				if err != nil {
+					return nil, fmt.Errorf("dabackup: read dump %s: %w", name, err)
+				}
+				if !restores {
+					return nil, fmt.Errorf(
+						"dabackup: the dump %s carries nothing to restore -- a database "+
+							"put back from it would come back empty", name)
+				}
+			}
 		}
 		if name != path.Join(BackupDir, UserConf) {
 			continue
@@ -331,6 +378,47 @@ func ArchiveAccount(base string) (string, error) {
 		return fields[2], nil
 	}
 	return "", fmt.Errorf("dabackup: unsupported account archive filename %q", base)
+}
+
+// dumpRestoresSomething says whether a database dump would put anything
+// back, reading it as a stream.
+//
+// A dump is the largest member of the archive after the home directory,
+// and a rehearsal that read one into memory would fail on exactly the
+// accounts most worth rehearsing. So it is scanned in fixed-size pieces,
+// carrying the tail of each one forward so a CREATE split across two of
+// them is still found.
+//
+// Empty is the case that matters most: an empty dump restores an empty
+// database, which is worse than an obvious failure. A dump with a header
+// and no CREATE in it is the truncated version of the same thing. This
+// is the check the cpmove path makes against the rebuilt tree, made
+// against the archive instead.
+func dumpRestoresSomething(r io.Reader) (bool, error) {
+	const want = "CREATE"
+	buf := make([]byte, 64<<10)
+	carry := ""
+	for {
+		n, err := r.Read(buf)
+		if n > 0 {
+			chunk := carry + strings.ToUpper(string(buf[:n]))
+			if strings.Contains(chunk, want) {
+				return true, nil
+			}
+			if len(chunk) > len(want)-1 {
+				chunk = chunk[len(chunk)-(len(want)-1):]
+			}
+			carry = chunk
+		}
+		if err == io.EOF {
+			// An empty dump reaches here having found nothing, which is
+			// the answer it should give.
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+	}
 }
 
 func validUser(value string) bool {

@@ -83,6 +83,12 @@ type Server struct {
 	// Unix uid. Team users share the owner's uid, and arbitrary website
 	// processes run under it too, so SO_PEERCRED alone is not enough.
 	userAuth *accountSessionAuth
+	// daSessions asks DirectAdmin whose session a plugin request carries.
+	// On DirectAdmin there is no uid worth reading -- the plugin runs as
+	// a service account of Gniza's own -- so this is the whole of the
+	// authorization on that socket. Nil on a cPanel server, where no
+	// DirectAdmin socket is opened.
+	daSessions daVerifier
 }
 
 // assets is the stylesheet and script, embedded in the page.

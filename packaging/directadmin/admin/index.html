@@ -1,29 +1,65 @@
 #!/bin/sh
-# Gniza's admin page on DirectAdmin.
+# Gniza's administrator page on DirectAdmin.
 #
-# It says what is true rather than drawing an interface that cannot work
-# yet. DirectAdmin does not run a plugin script as root -- the two
-# third-party plugins on a real host that need root both ship a
-# setuid-root helper to get there -- and Gniza's administrative
-# interface is a root-only socket, so this page cannot reach it.
+# DirectAdmin runs this as the account named in plugin.conf's
+# admin_run_as, and hands it the caller's panel session as SESSION_ID and
+# SESSION_KEY. This forwards the request to Gniza over that account's own
+# socket with the session on it, and Gniza puts the session to
+# DirectAdmin before it serves anything: the account this runs as is a
+# service account, so it proves nothing about who is at the keyboard, and
+# the session is the whole of the authorization. See ADR 0020.
 #
-# What DirectAdmin does hand a plugin is the caller's panel session, as
-# SESSION_ID and SESSION_KEY in the environment, which a plugin replays
-# to DirectAdmin's own API to have it say whose session that is. That is
-# the bridge to build, and building it is a decision about who may read
-# every customer's backups rather than a detail to be arranged quietly
-# here. See ADR 0019.
+# The output is the page body. DirectAdmin's skin supplies the document
+# around it, which is why nothing here writes CGI headers.
 set -eu
-printf '%s' '<div class="ui-widget">
-<h1>Gniza</h1>
-<p>The backup service is installed, and its account lifecycle hooks are
-running: DirectAdmin tells Gniza when an account is created, suspended,
-restored or removed, which is what keeps one customer'"'"'s backups from
-being handed to the next holder of the same username.</p>
-<p>The administrative interface is not available on DirectAdmin yet.
-DirectAdmin does not run this page as root, and Gniza'"'"'s administration
-is a socket only root may open. Until that is settled, administer this
-server with the <code>gniza</code> command line as root.</p>
-<p>What remains to be settled is written down in ADR 0019 in the Gniza
-documentation.</p>
-</div>'
+umask 077
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+SOCKET=/var/run/gniza/directadmin/plugin.sock
+METHOD=${REQUEST_METHOD:-GET}
+QUERY=${QUERY_STRING:-}
+
+fail() {
+	# The message is the whole page, so it says what to do rather than
+	# what went wrong internally. Nothing about the session appears in it.
+	printf '<div class="ui-widget"><h1>Gniza</h1><p>%s</p></div>\n' "$1"
+	exit 0
+}
+
+command -v curl >/dev/null 2>&1 ||
+	fail 'curl is not installed on this server, and this page reaches the backup service through it.'
+[ -S "$SOCKET" ] ||
+	fail 'The Gniza service is not running. Start it with <code>systemctl start gniza</code> and reload this page.'
+
+# The session values travel as headers rather than cookies: nothing here
+# is a browser, and the only thing that may set them is this script.
+# Whatever arrives in them is a claim until DirectAdmin confirms it.
+#
+# What Gniza answers is passed through as it is, refusals included, so an
+# operator reads Gniza's own words about why a page did not open. Only a
+# request that never reached it falls through to the message below.
+set -- \
+	--silent --max-time 300 \
+	--unix-socket "$SOCKET" \
+	--header "X-Gniza-DA-Session: ${SESSION_ID:-}" \
+	--header "X-Gniza-DA-Key: ${SESSION_KEY:-}"
+
+if [ "$METHOD" = POST ]; then
+	# Only the bytes the request said it has. Without the count curl
+	# would read until the web server closed the connection, which on a
+	# kept-alive connection is not at the end of this request.
+	LENGTH=${CONTENT_LENGTH:-0}
+	case $LENGTH in
+	'' | *[!0-9]*) fail 'That form did not arrive in one piece. Reload the page and try again.' ;;
+	esac
+	set -- "$@" \
+		--request POST \
+		--header "Content-Type: ${CONTENT_TYPE:-application/x-www-form-urlencoded}" \
+		--data-binary @-
+	head -c "$LENGTH" | curl "$@" "http://gniza/?$QUERY" 2>/dev/null && exit 0
+else
+	curl "$@" --get "http://gniza/?$QUERY" 2>/dev/null && exit 0
+fi
+
+fail 'The backup service did not answer. Check <code>systemctl status gniza</code>.'

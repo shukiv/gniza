@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/shukiv/gniza/internal/directadmin"
 	"github.com/shukiv/gniza/internal/node"
 	"github.com/shukiv/gniza/internal/nodestore"
 	"github.com/shukiv/gniza/internal/vault"
@@ -107,13 +108,24 @@ func runStandalone(ctx context.Context, cfg config, log *slog.Logger) error {
 		log.Info("created repositories", "count", created)
 	}
 
-	ui, err := webui.New(engine, log)
+	uiOptions, daSocket, err := directAdminUI(cfg)
+	if err != nil {
+		return err
+	}
+	ui, err := webui.New(engine, log, uiOptions...)
 	if err != nil {
 		return err
 	}
 
-	errs := make(chan error, 4)
+	errs := make(chan error, 5)
 	go func() { errs <- ui.Listen(ctx, cfg.socketPath) }()
+	// DirectAdmin's own page. It is a third socket rather than the
+	// root-only one above widened: that one's mode is its authorization,
+	// and this one's owner is a service account that is nobody in
+	// particular, so a verified DirectAdmin session takes its place.
+	if daSocket != "" {
+		go func() { errs <- ui.ListenDirectAdmin(ctx, daSocket, cfg.daPluginUser) }()
+	}
 	// The account-facing interface, which cPanel users reach through
 	// their own plugin. It is a separate socket because it answers a
 	// different question: not "what is on this server" but "what is mine".
@@ -159,4 +171,24 @@ func openOrCreateVault(path string, log *slog.Logger) (*vault.Vault, error) {
 		return nil, err
 	}
 	return vault.New(key)
+}
+
+// directAdminUI is how the interface is built and where DirectAdmin's
+// plugin reaches it. On a cPanel server it is nothing at all.
+//
+// The panel's address is read from DirectAdmin's own configuration
+// rather than assumed: what travels to it is a live session credential,
+// its certificate is verified, and that certificate carries the name
+// written there. A server that cannot say where its panel is does not
+// start, because the alternative is a socket that refuses every request
+// for a reason no operator would guess.
+func directAdminUI(cfg config) ([]webui.Option, string, error) {
+	if cfg.panelName != "directadmin" || cfg.daSocketPath == "" || cfg.daPluginUser == "" {
+		return nil, "", nil
+	}
+	panelURL, err := directadmin.PanelURL(cfg.daConfPath)
+	if err != nil {
+		return nil, "", err
+	}
+	return []webui.Option{webui.WithDirectAdmin(panelURL)}, cfg.daSocketPath, nil
 }

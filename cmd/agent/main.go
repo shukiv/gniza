@@ -57,6 +57,9 @@ type config struct {
 	userSocketPath      string
 	masterKeyPath       string
 	lifecycleSocketPath string
+	daSocketPath        string
+	daPluginUser        string
+	daConfPath          string
 	cpanelHookEvent     string
 	panelHookEvent      string
 	hookSpoolDir        string
@@ -221,6 +224,16 @@ func parseFlags() config {
 		"standalone: key that encrypts stored destination credentials")
 	flag.StringVar(&cfg.lifecycleSocketPath, "lifecycle-socket", "/var/run/gniza/hooks/lifecycle.sock",
 		"root-only socket used by cPanel account lifecycle hooks")
+	// DirectAdmin will not run a plugin as root, so its page cannot open
+	// the root-only socket above. It gets one of its own, owned by the
+	// account named in plugin.conf's admin_run_as, where a DirectAdmin
+	// session takes the place of the uid. See docs/adr/0020.
+	flag.StringVar(&cfg.daSocketPath, "directadmin-socket", "/var/run/gniza/directadmin/plugin.sock",
+		"directadmin: unix socket the DirectAdmin plugin connects to; empty serves no plugin")
+	flag.StringVar(&cfg.daPluginUser, "directadmin-plugin-user", "gniza-plugin",
+		"directadmin: the account plugin.conf runs the page as, which owns that socket")
+	flag.StringVar(&cfg.daConfPath, "directadmin-conf", directadmin.DefaultConfPath,
+		"directadmin: where DirectAdmin records the name and port its own panel answers on")
 	flag.StringVar(&cfg.hookSpoolDir, "hook-spool", hookspool.DefaultDir,
 		"where a cPanel lifecycle hook leaves an account event this service was not running to hear")
 	flag.StringVar(&cfg.cpanelHookEvent, "cpanel-hook", "",

@@ -8,6 +8,12 @@
 # merely runs as the account has neither value -- and it is the half
 # that is missing here. IS_LOGIN_AS says when the host, not the
 # customer, is at the keyboard. See ADR 0019.
+#
+# The half that exists is the verifier the administrator's page is built
+# on: ADR 0020. What this page still needs beyond it is everything the
+# account interface reads out of cPanel -- which unix account a panel
+# name means, and whether the host has this turned on for them -- with
+# DirectAdmin's answers in place of cPanel's.
 set -eu
 printf '%s' '<div class="ui-widget">
 <h1>Backups</h1>

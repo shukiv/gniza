@@ -593,6 +593,14 @@
 
   function swap(fresh) {
     var swapped = false;
+    // A fold the operator opened is theirs until they close it. The
+    // markup is replaced every three seconds, so which ones were open is
+    // remembered across the replacement -- otherwise reading the list of
+    // waiting accounts is impossible: it shuts under the cursor.
+    var open = {};
+    document.querySelectorAll("details[data-fold][open]").forEach(function (fold) {
+      open[fold.dataset.fold] = true;
+    });
     Array.prototype.forEach.call(fresh.querySelectorAll("[data-live]"), function (node) {
       var here = document.querySelector('[data-live="' + node.dataset.live + '"]');
       if (here && here.innerHTML !== node.innerHTML) {
@@ -602,6 +610,9 @@
         var atEnd = here.dataset.liveScroll === "end";
         here.innerHTML = node.innerHTML;
         if (atEnd) { here.scrollTop = here.scrollHeight; }
+        here.querySelectorAll("details[data-fold]").forEach(function (fold) {
+          if (open[fold.dataset.fold]) { fold.open = true; }
+        });
         swapped = true;
       }
     });

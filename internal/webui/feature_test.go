@@ -479,3 +479,162 @@ func TestABasketOfOneStillNamesItsPart(t *testing.T) {
 		t.Fatalf("restore = %+v", restore)
 	}
 }
+
+// A server with hundreds of accounts queues hundreds of backups, and the
+// strip is at the top of every page. Drawn a line per account it was the
+// page: on a real DirectAdmin host one account was being backed up and
+// the three hundred behind it filled the screen, so the one line that
+// said what was actually happening was the only one nobody could see.
+//
+// What is running keeps its line and its bar. What is waiting becomes one
+// line with a count, and the names are still there for whoever opens it.
+func TestAQueueOfAccountsIsOneLineAndNotThreeHundred(t *testing.T) {
+	store, err := nodestore.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	started, err := store.PutJob(nodestore.Job{
+		Account: "clinicco", Status: job.StatusRunning, QueuedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetJobProgress(started.ID, nodestore.JobProgress{Percent: 99}); err != nil {
+		t.Fatal(err)
+	}
+	for _, account := range []string{"coilco", "com2com", "compninjas", "connectivity", "dad"} {
+		if _, err := store.PutJob(nodestore.Job{
+			Account: account, Status: job.StatusPending, QueuedAt: time.Now(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	running, err := runningWorkFor(store, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(running.Now()) != 1 || running.Now()[0].Account != "clinicco" {
+		t.Errorf("what is happening now is %+v", running.Now())
+	}
+	if len(running.Queue()) != 5 {
+		t.Errorf("the queue holds %d", len(running.Queue()))
+	}
+	if !running.Folded() {
+		t.Error("five accounts behind the one running are still five lines")
+	}
+	if summary := running.QueueSummary(); !strings.Contains(summary, "5") ||
+		!strings.Contains(summary, "waiting to back up") {
+		t.Errorf("the queue summary is %q", summary)
+	}
+}
+
+// One account behind the one running is not a queue, and hiding it behind
+// a count somebody has to open would be worse than the line it replaces.
+func TestAShortQueueIsStillJustItsLines(t *testing.T) {
+	store, err := nodestore.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	if _, err := store.PutJob(nodestore.Job{
+		Account: "studio", Status: job.StatusRunning, QueuedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PutJob(nodestore.Job{
+		Account: "coilco", Status: job.StatusPending, QueuedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	running, err := runningWorkFor(store, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if running.Folded() {
+		t.Error("one account waiting was folded away behind a count")
+	}
+}
+
+// A queue with both kinds in it says both, because "312 accounts waiting"
+// over a restore somebody is waiting on is the wrong thing to read.
+func TestAQueueOfBothKindsSaysBoth(t *testing.T) {
+	store, err := nodestore.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	for _, account := range []string{"a", "b", "c", "d"} {
+		if _, err := store.PutJob(nodestore.Job{
+			Account: account, Status: job.StatusPending, QueuedAt: time.Now(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := store.PutRestore(nodestore.Restore{
+		Account: "e", Status: job.StatusPending, Kind: protocol.RestoreAccount,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	running, err := runningWorkFor(store, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary := running.QueueSummary()
+	if !strings.Contains(summary, "4") || !strings.Contains(summary, "back up") {
+		t.Errorf("the summary does not count the backups: %q", summary)
+	}
+	if !strings.Contains(summary, "restore") {
+		t.Errorf("the summary does not mention the restore waiting behind them: %q", summary)
+	}
+}
+
+// The strip said which copy was being written by its repository id --
+// "Backing up clinicco — 08d0a595086a4a984a2737a6341d3788" -- which is
+// not a name anybody gave anything. The destination has a name, and that
+// is what an operator recognises.
+func TestTheStripNamesTheDestinationRatherThanItsIdentifier(t *testing.T) {
+	store, err := nodestore.Open(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	destination, err := store.PutDestination(nodestore.Destination{Name: "the vault"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository, err := store.PutRepository(nodestore.Repository{
+		DestinationID: destination.ID, Path: "uscp",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	backup, err := store.PutJob(nodestore.Job{
+		Account: "clinicco", Status: job.StatusRunning, QueuedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetJobProgress(backup.ID, nodestore.JobProgress{
+		Percent: 99, Repository: repository.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	running, err := runningWorkFor(store, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	label := running.Now()[0].Label()
+	if strings.Contains(label, repository.ID) {
+		t.Errorf("the strip shows the repository id: %q", label)
+	}
+	if !strings.Contains(label, "the vault") {
+		t.Errorf("the strip does not name the destination: %q", label)
+	}
+}

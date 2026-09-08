@@ -486,6 +486,37 @@
   border:1.5px solid currentColor; opacity:.45;
 }
 
+/* The queue, folded. The summary is a run line that happens to open, so
+   it is laid out as one; the marker sits where the spinner would be on
+   the lines above it. */
+.gniza .cpr-queue > summary {
+  display:flex; align-items:center; gap:var(--s2);
+  font-weight:500; cursor:pointer; list-style:none;
+}
+.gniza .cpr-queue > summary::-webkit-details-marker { display:none; }
+.gniza .cpr-runline + .cpr-queue,
+.gniza .cpr-progress + .cpr-queue { margin-top:var(--s1); }
+.gniza .cpr-queue > summary::after {
+  content:"\203A"; margin-left:var(--s1); opacity:.6;
+  transition:transform .15s ease; display:inline-block;
+}
+.gniza .cpr-queue[open] > summary::after { transform:rotate(90deg); }
+@media (prefers-reduced-motion:reduce) {
+  .gniza .cpr-queue > summary::after { transition:none; }
+}
+.gniza .cpr-queue > summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+/* The names themselves. Columns rather than one long list: three hundred
+   accounts down the page is the thing this fold exists to prevent, and
+   the list is capped so opening it never buries the page either. */
+.gniza .cpr-queue-list {
+  margin:var(--s1) 0 0; padding:0 0 0 calc(9px + var(--s2));
+  list-style:none; font-weight:400;
+  columns:16ch; column-gap:var(--s3);
+  max-height:14rem; overflow-y:auto;
+}
+.gniza .cpr-queue-list li { break-inside:avoid; overflow-wrap:anywhere; }
+
 /* Named for what it is, not what it looks like: .cpr-bar is already the
    app bar at the top of every page. */
 .gniza .cpr-progress {

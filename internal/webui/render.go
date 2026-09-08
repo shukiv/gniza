@@ -29,7 +29,7 @@ type page struct {
 	// Running is every backup and restore happening now. It is on the
 	// page rather than in one place that lists runs, because somebody
 	// who has just asked for one and sees nothing asks again.
-	Running []runningWork
+	Running runningSet
 	// Update is a published release newer than this build, when there is
 	// one. It is on every operator page rather than on a page somebody
 	// would have to think to visit: a backup program running a version

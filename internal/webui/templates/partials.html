@@ -58,17 +58,38 @@
      it has got. One line per run, with a bar under the ones restic can
      count -- a bar for a stage nothing can count would sit at nothing and
      be read as stuck, which is the question the strip exists to answer. */}}
+{{/* What is running keeps its line and its bar. What is waiting behind it
+     is a count that opens: a server with three hundred accounts queued
+     them one behind the other, and this strip sits at the top of every
+     page, so a line each made the queue the page and pushed the one line
+     that mattered off the top of it. A <details>, not a scripted widget,
+     for the same reason the tabs above are links. */}}
 {{define "runningnow"}}
-  {{range .}}
+  {{range .Now}}
   <div class="cpr-runline">
-    {{if .Waiting}}<span class="cpr-wait" aria-hidden="true"></span>
-    {{else}}<span class="cpr-spin" aria-hidden="true"></span>{{end}}{{.Label}}
+    <span class="cpr-spin" aria-hidden="true"></span>{{.Label}}
   </div>
   {{if .Known}}
   <div class="cpr-progress cpr-progress-wide" role="progressbar"
        aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{printf "%.0f" .Percent}}"
        aria-label="{{.Doing}} {{.Account}}">
     <i style="{{barwidth .Percent}}"></i>
+  </div>
+  {{end}}
+  {{end}}
+  {{if .Folded}}
+  <details class="cpr-queue" data-fold="cpr-queue">
+    <summary>
+      <span class="cpr-wait" aria-hidden="true"></span>{{.QueueSummary}}
+    </summary>
+    <ul class="cpr-queue-list">
+      {{range .Queue}}<li>{{.Account}}</li>{{end}}
+    </ul>
+  </details>
+  {{else}}
+  {{range .Queue}}
+  <div class="cpr-runline">
+    <span class="cpr-wait" aria-hidden="true"></span>{{.Label}}
   </div>
   {{end}}
   {{end}}

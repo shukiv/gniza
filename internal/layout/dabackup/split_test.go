@@ -33,8 +33,8 @@ func TestAnArchiveComesBackTheSameAfterItIsTakenApart(t *testing.T) {
 	if err := (Layout{}).UnpackArchive(context.Background(), original, account, dir); err != nil {
 		t.Fatalf("taking the archive apart: %v", err)
 	}
-	rebuilt := filepath.Join(t.TempDir(), filepath.Base(original))
-	if err := (Layout{}).PackArchive(context.Background(), dir, account, rebuilt); err != nil {
+	rebuilt, err := (Layout{}).PackArchive(context.Background(), dir, account, t.TempDir())
+	if err != nil {
 		t.Fatalf("putting the archive back together: %v", err)
 	}
 	sameArchive(t, original, rebuilt)
@@ -119,8 +119,8 @@ func TestTwoMembersThatWantTheSameFileBothSurvive(t *testing.T) {
 	if err := (Layout{}).UnpackArchive(context.Background(), original, account, dir); err != nil {
 		t.Fatalf("taking the archive apart: %v", err)
 	}
-	rebuilt := filepath.Join(t.TempDir(), filepath.Base(original))
-	if err := (Layout{}).PackArchive(context.Background(), dir, account, rebuilt); err != nil {
+	rebuilt, err := (Layout{}).PackArchive(context.Background(), dir, account, t.TempDir())
+	if err != nil {
 		t.Fatalf("putting the archive back together: %v", err)
 	}
 	sameArchive(t, original, rebuilt)
@@ -136,8 +136,8 @@ func TestAnArchiveWithNoNestedHomeStillComesBack(t *testing.T) {
 	if err := (Layout{}).UnpackArchive(context.Background(), original, account, dir); err != nil {
 		t.Fatalf("taking the archive apart: %v", err)
 	}
-	rebuilt := filepath.Join(t.TempDir(), filepath.Base(original))
-	if err := (Layout{}).PackArchive(context.Background(), dir, account, rebuilt); err != nil {
+	rebuilt, err := (Layout{}).PackArchive(context.Background(), dir, account, t.TempDir())
+	if err != nil {
 		t.Fatalf("putting the archive back together: %v", err)
 	}
 	sameArchive(t, original, rebuilt)
@@ -162,8 +162,8 @@ func TestAGzipHostsArchiveComesBackTheSame(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(HomedirPart(dir), ".bashrc")); err != nil {
 		t.Errorf("the gzip nested archive was not opened: %v", err)
 	}
-	rebuilt := filepath.Join(t.TempDir(), filepath.Base(original))
-	if err := (Layout{}).PackArchive(context.Background(), dir, account, rebuilt); err != nil {
+	rebuilt, err := (Layout{}).PackArchive(context.Background(), dir, account, t.TempDir())
+	if err != nil {
 		t.Fatalf("putting the archive back together: %v", err)
 	}
 	sameArchive(t, original, rebuilt)
@@ -185,8 +185,8 @@ func TestAnUncompressedArchiveComesBackTheSame(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(HomedirPart(dir), ".bashrc")); err != nil {
 		t.Errorf("the uncompressed nested archive was not opened: %v", err)
 	}
-	rebuilt := filepath.Join(t.TempDir(), filepath.Base(original))
-	if err := (Layout{}).PackArchive(context.Background(), dir, account, rebuilt); err != nil {
+	rebuilt, err := (Layout{}).PackArchive(context.Background(), dir, account, t.TempDir())
+	if err != nil {
 		t.Fatalf("putting the archive back together: %v", err)
 	}
 	sameArchive(t, original, rebuilt)
@@ -207,8 +207,8 @@ func TestTheExtendedAttributesOfAMemberSurvive(t *testing.T) {
 	if err := (Layout{}).UnpackArchive(context.Background(), original, account, dir); err != nil {
 		t.Fatalf("taking the archive apart: %v", err)
 	}
-	rebuilt := filepath.Join(t.TempDir(), filepath.Base(original))
-	if err := (Layout{}).PackArchive(context.Background(), dir, account, rebuilt); err != nil {
+	rebuilt, err := (Layout{}).PackArchive(context.Background(), dir, account, t.TempDir())
+	if err != nil {
 		t.Fatalf("putting the archive back together: %v", err)
 	}
 	sameArchive(t, original, rebuilt)
@@ -284,8 +284,7 @@ func TestATreeFromAnotherAccountIsNotRepacked(t *testing.T) {
 		buildSplitFixture(t, account), account, dir); err != nil {
 		t.Fatalf("taking the archive apart: %v", err)
 	}
-	err := (Layout{}).PackArchive(context.Background(), dir, "someone-else",
-		filepath.Join(t.TempDir(), "user.admin.someone-else.tar.zst"))
+	_, err := (Layout{}).PackArchive(context.Background(), dir, "someone-else", t.TempDir())
 	if err == nil {
 		t.Fatal("a tree was repacked into another account's archive")
 	}
@@ -315,8 +314,7 @@ func TestATreeFromAnotherVersionIsRefused(t *testing.T) {
 	if err := os.WriteFile(manifest, []byte(changed), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := (Layout{}).PackArchive(context.Background(), dir, account,
-		filepath.Join(t.TempDir(), "user.admin."+account+".tar.zst")); err == nil {
+	if _, err := (Layout{}).PackArchive(context.Background(), dir, account, t.TempDir()); err == nil {
 		t.Fatal("a tree from another version of Gniza was repacked")
 	}
 }
@@ -335,8 +333,7 @@ func TestATreeWithNoManifestIsNotRepacked(t *testing.T) {
 	if err := os.Remove(filepath.Join(MetadataPart(dir), ManifestFile)); err != nil {
 		t.Fatal(err)
 	}
-	err := (Layout{}).PackArchive(context.Background(), dir,
-		account, filepath.Join(t.TempDir(), "user.admin."+account+".tar.zst"))
+	_, err := (Layout{}).PackArchive(context.Background(), dir, account, t.TempDir())
 	if err == nil {
 		t.Fatal("a tree with no manifest was repacked")
 	}
@@ -357,8 +354,7 @@ func TestABodyThatIsNotItsRecordedSizeIsRefused(t *testing.T) {
 	if err := os.WriteFile(victim, []byte("truncated"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	err := (Layout{}).PackArchive(context.Background(), dir,
-		account, filepath.Join(t.TempDir(), "user.admin."+account+".tar.zst"))
+	_, err := (Layout{}).PackArchive(context.Background(), dir, account, t.TempDir())
 	if err == nil {
 		t.Fatal("a body that changed size was packed")
 	}
@@ -716,4 +712,73 @@ func decompress(t *testing.T, name string, body []byte) []byte {
 func digest(body []byte) string {
 	sum := sha256.Sum256(body)
 	return hex.EncodeToString(sum[:])
+}
+
+// A tree reaches the checks in two shapes: an archive extracted whole,
+// which has backup/ at the top, and the two parts a split backup was
+// taken apart into, where the account's records are one of them. Both are
+// this account's records, and what reads them -- the list of database
+// dumps a restore is about to put back, among others -- has to find them
+// either way.
+func TestTheAccountsRecordsAreFoundInEitherShapeOfTree(t *testing.T) {
+	account := "gzv0908a"
+	split := t.TempDir()
+	if err := (Layout{}).UnpackArchive(context.Background(),
+		buildSplitFixture(t, account), account, split); err != nil {
+		t.Fatalf("taking the archive apart: %v", err)
+	}
+	root, err := (Layout{}).AccountRoot(split, account)
+	if err != nil {
+		t.Fatalf("the records of an unpacked archive were not found: %v", err)
+	}
+	if root != MetadataPart(split) {
+		t.Errorf("the records were found at %s", root)
+	}
+	// The dumps are read from under that root, so the path the layout
+	// names has to be the one they are actually at.
+	if _, err := os.Stat(filepath.Join(root, (Layout{}).DatabaseDir(), account+"_shop.sql")); err != nil {
+		t.Errorf("the database dump is not under the account root: %v", err)
+	}
+
+	// An extracted whole archive is the other shape, and is unchanged.
+	extracted := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(extracted, BackupDir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	root, err = (Layout{}).AccountRoot(extracted, account)
+	if err != nil {
+		t.Fatalf("the records of an extracted archive were not found: %v", err)
+	}
+	if root != extracted {
+		t.Errorf("the records were found at %s", root)
+	}
+
+	// And a directory that is neither is not an account.
+	if _, err := (Layout{}).AccountRoot(t.TempDir(), account); err == nil {
+		t.Error("an empty directory was read as an account tree")
+	}
+}
+
+// The home directory of a rebuilt DirectAdmin account is the one place
+// domains/, imap/ and the nested archive were put back together into. It
+// used to be domains/, which is a third of it.
+func TestTheHomeDirectoryTheLayoutNamesIsTheWholeHomeDirectory(t *testing.T) {
+	if (Layout{}).HomedirDir() != HomeTreeDir {
+		t.Fatalf("the layout says the home directory is %q", (Layout{}).HomedirDir())
+	}
+	account := "gzv0908a"
+	dir := t.TempDir()
+	if err := (Layout{}).UnpackArchive(context.Background(),
+		buildSplitFixture(t, account), account, dir); err != nil {
+		t.Fatalf("taking the archive apart: %v", err)
+	}
+	home := filepath.Join(dir, (Layout{}).HomedirDir())
+	for _, want := range []string{
+		".bashrc", "domains/gzv0908a.gniza-test.invalid/public_html/index.html",
+		"imap/gzv0908a.gniza-test.invalid/sales/Maildir/cur/1.eml",
+	} {
+		if _, err := os.Stat(filepath.Join(home, want)); err != nil {
+			t.Errorf("%s is not in the home directory the layout names: %v", want, err)
+		}
+	}
 }

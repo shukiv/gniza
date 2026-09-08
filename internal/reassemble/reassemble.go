@@ -288,6 +288,17 @@ func restoreMonolithic(ctx context.Context, restorer Restorer, req Request,
 func restoreSplit(ctx context.Context, restorer Restorer, req Request,
 	snapshot resticrun.Snapshot, found Parts) (Result, error) {
 
+	// A panel that will not produce the parts had them taken out of its
+	// own archive, and they go back into it rather than into the tree
+	// below. The rest of this function is cPanel's shape: a metadata
+	// archive to extract, and a rebuild that walks the tree and tars what
+	// it finds. Walking a DirectAdmin tree would write whatever this
+	// server's own group file says, and restore an account whose mail
+	// directory Dovecot cannot write.
+	if packer, ok := req.Layout.(panel.ArchivePacker); ok {
+		return restorePacked(ctx, restorer, req, snapshot, found, packer)
+	}
+
 	var bytesRestored uint64
 	restore := func(stage, subpath, target string) error {
 		req.stage(stage)
@@ -360,6 +371,79 @@ func restoreSplit(ctx context.Context, restorer Restorer, req Request,
 		ArchivePath:   rebuilt,
 		TreeDir:       treeDir,
 		RootDir:       root,
+		Layout:        req.Layout,
+		Mode:          pkgacct.ModeSplit,
+		BytesRestored: bytesRestored,
+	}, nil
+}
+
+// restorePacked rebuilds an account whose panel produced one archive
+// rather than parts.
+//
+// The parts are what Gniza took out of that archive, and the panel's own
+// layout is what puts them back: the tar headers the account's files
+// arrived with are carried alongside them, and only the thing that wrote
+// them down can write them again.
+func restorePacked(ctx context.Context, restorer Restorer, req Request,
+	snapshot resticrun.Snapshot, found Parts, packer panel.ArchivePacker) (Result, error) {
+
+	// A part this shape of backup does not have is a snapshot some other
+	// version wrote. Rebuilding it while quietly leaving that part out is
+	// a restore missing whatever was in it.
+	if found.Databases != "" {
+		return Result{}, fmt.Errorf(
+			"reassemble: this snapshot has a separate database part, which a %s "+
+				"backup does not: it keeps the dumps with the account's own records",
+			req.Layout.Panel())
+	}
+
+	var bytesRestored uint64
+	// The parts go back beside each other under the names they were
+	// staged with, because that is where the panel's own repack looks for
+	// them.
+	tree := filepath.Join(req.WorkDir, "tree")
+	restore := func(stage, subpath string) error {
+		req.stage(stage)
+		restored, err := restorer.Restore(ctx, req.Repo, resticrun.RestoreSpec{
+			SnapshotID: snapshot.ID,
+			Subpath:    subpath,
+			Target:     filepath.Join(tree, filepath.Base(subpath)),
+			OnProgress: req.OnProgress,
+		})
+		if err != nil {
+			return err
+		}
+		bytesRestored += restored.BytesRestored
+		return nil
+	}
+	if err := restore("reading the account settings", found.Metadata); err != nil {
+		return Result{}, fmt.Errorf("reassemble: restore metadata: %w", err)
+	}
+	if err := restore("reading the home directory", found.Homedir); err != nil {
+		return Result{}, fmt.Errorf("reassemble: restore home directory: %w", err)
+	}
+
+	// Built whether or not a rehearsal asked for it. TreeOnly exists
+	// because cPanel's restore takes a directory as readily as an
+	// archive, so the tar is a second full copy of the account and
+	// answers nothing the tree does not. This panel's restore reads an
+	// archive and nothing else, so here the archive is not an extra --
+	// it is the thing being rehearsed.
+	req.stage("building the account archive")
+	archive, err := packer.PackArchive(ctx, tree, req.Account, req.WorkDir)
+	if err != nil {
+		return Result{}, err
+	}
+	// Checked again after the rebuild, not only before it: what the panel
+	// is about to restore is this file, and what said whose account it is
+	// was a manifest Gniza wrote.
+	if err := req.Layout.ValidateArchive(ctx, archive, req.Account); err != nil {
+		return Result{}, err
+	}
+	return Result{
+		Account:       req.Account,
+		ArchivePath:   archive,
+		TreeDir:       tree,
 		Layout:        req.Layout,
 		Mode:          pkgacct.ModeSplit,
 		BytesRestored: bytesRestored,

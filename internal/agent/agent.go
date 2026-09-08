@@ -353,7 +353,7 @@ func (a *Agent) RunJob(ctx context.Context, assignment protocol.JobAssignment) p
 	if assignment.SizeEstimate > size {
 		size = assignment.SizeEstimate
 	}
-	estimate := stagingEstimate(size, pkgacct.Mode(assignment.PayloadMode))
+	estimate := stagingEstimate(size, pkgacct.Mode(assignment.PayloadMode), a.provider.Layout())
 	if system {
 		// Configuration files and an EasyApache profile: megabytes, and
 		// the same every night.
@@ -547,12 +547,23 @@ const (
 )
 
 // stagingEstimate is how much room a payload of this shape needs.
-func stagingEstimate(size uint64, mode pkgacct.Mode) uint64 {
+//
+// The layout is asked because split does not mean the same thing on every
+// panel. cPanel is asked for the parts and backs the home directory up
+// where it lies, so staging holds a fraction of the account. A panel that
+// will not produce the parts has its whole archive written into staging
+// and taken apart there, so at the peak the account is on that disk
+// twice -- once compressed and once not -- and a fifth of it is the
+// estimate that lets a run fill the disk instead of being refused.
+func stagingEstimate(size uint64, mode pkgacct.Mode, layout panel.ArchiveLayout) uint64 {
 	if mode != pkgacct.ModeSplit {
 		// One archive of the whole account, written into staging.
 		return size
 	}
 	share := uint64(float64(size) * splitStagingShare)
+	if _, packs := layout.(panel.ArchivePacker); packs {
+		share = 2 * size
+	}
 	if share < splitStagingFloor {
 		return splitStagingFloor
 	}

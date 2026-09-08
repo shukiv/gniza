@@ -552,3 +552,45 @@ fixture to answer, not a source question, and it is what stands between
 this and split mode on DirectAdmin.
 
 See docs/directadmin-validation-2026-09-08.md for the listing.
+
+## The round trip that stood between this and split mode — 2026-09-08
+
+Answered, and split mode is no longer refused.
+
+The archive is taken apart into two directories — the account's own
+records and its home directory, the latter put back together from the
+three places the archive keeps it in — and the tar headers of both
+archives are written down beside them in a manifest. The bodies are what
+restic deduplicates; the manifest is what makes the repack faithful. A
+rebuild that walked the staged tree instead would write whatever the
+rebuilding server's own group file said, which is the failure the section
+above named.
+
+All 74 members of the retained 1.709 fixture come back with the same
+name, type, mode, uid, gid, owner and group names, mtime, size, link
+target and contents, and GNU tar's listing of the original and the
+rebuilt archive differ in one line: the nested archive's own length,
+because compressing the same bytes twice does not produce the same file.
+The three groups that motivated the manifest are visible in that listing
+— `gzv0908a/apache`, `gzv0908a/mail`, `gzv0908a/access`.
+
+Three things follow from a panel that will not produce its own parts, and
+all three are decided by asking the layout rather than by naming
+DirectAdmin:
+
+- The restore does not rebuild the tree into an archive by walking it. It
+  restores the parts and asks the panel's own layout to repack them.
+- A rehearsal builds the archive even when it was told to stop at the
+  tree. That option exists because cPanel's restore takes a directory as
+  readily as an archive, so the tar answers nothing the tree does not.
+  DirectAdmin's restore reads an archive and nothing else, so here the
+  archive is the thing being rehearsed.
+- The staging estimate is the whole account twice rather than a fifth of
+  it. On cPanel a split payload stages metadata and dumps and backs the
+  home directory up where it lies; here the archive is written into
+  staging and taken apart there, so at the peak the account is on that
+  disk twice.
+
+Still open: no account has been restored from an archive Gniza rebuilt.
+That is a restore on a production host, and it is the last question this
+record is waiting on.

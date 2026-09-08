@@ -129,15 +129,16 @@ func TestTheDatabaseDumpsAreWhereTheLayoutSaysTheyAre(t *testing.T) {
 }
 
 // TestTheHomeDirectoryIsInThreePlaces records the shape of a DirectAdmin
-// account, which is the reason split mode is still refused.
+// account, which is what split mode has to put back together.
 //
 // A cpmove tree has the account's files in one directory. This archive
 // has the websites under domains/, the messages under imap/, and
 // everything else in the home -- the dotfiles, and anything a customer
 // keeps outside a domain -- inside a second compressed archive at
-// backup/home.tar.zst. Reassembling that into one tree, and back, is what
-// ADR 0019 still has open, and HomedirDir naming only the first of the
-// three is why it says of itself that it is not for split reassembly.
+// backup/home.tar.zst. They are three views of one directory,
+// /home/<account>, and taking the archive apart puts them back into it:
+// see split.go. So HomedirDir names that directory rather than domains/,
+// which is a third of it.
 func TestTheHomeDirectoryIsInThreePlaces(t *testing.T) {
 	members := fixture(t, "account.tar.list")
 	for _, place := range []string{"domains", "imap", "backup/home.tar.zst"} {
@@ -145,12 +146,12 @@ func TestTheHomeDirectoryIsInThreePlaces(t *testing.T) {
 			t.Errorf("a real archive no longer keeps account files in %q", place)
 		}
 	}
-	if (Layout{}).HomedirDir() != "domains" {
-		t.Fatal("HomedirDir changed without the split-mode question being settled")
+	if (Layout{}).HomedirDir() == DomainsDir {
+		t.Fatal("HomedirDir names domains/, which is a third of the home directory")
 	}
-	// The nested archive is the part nothing here can reach yet. What is
-	// in it is listed beside the outer one so that the day somebody
-	// implements split mode, they are not guessing either.
+	// What is in the nested archive is listed beside the outer one, so
+	// that what puts the three back together is held to a real archive
+	// rather than to what was expected of one.
 	home := fixture(t, "home.tar.list")
 	if !carries(home, ".bashrc") {
 		t.Error("the nested home archive no longer holds the account's dotfiles")

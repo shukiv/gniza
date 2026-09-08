@@ -116,6 +116,31 @@ type ArchiveDrill interface {
 	DrillArchive(ctx context.Context, filename, account string) ([]string, error)
 }
 
+// ArchivePacker is a panel whose account archive Gniza takes apart
+// itself, because the panel will not produce the parts.
+//
+// cPanel is asked for them: pkgacct has --skiphomedir and the home
+// directory is backed up in place. DirectAdmin has nothing of the kind --
+// admin-backup writes one compressed archive and its documentation says
+// nothing about telling it to leave anything out -- and restic cannot
+// deduplicate a compressed archive, so a nightly backup of one stores
+// close to a full copy every night (docs/DESIGN.md §4). The parts are
+// taken out of the archive it does write, and put back into it before
+// its own restore sees them.
+//
+// A layout implements this only if it can do both halves. The pair is the
+// point: a backup that could be taken apart and not put back together is
+// a backup nothing can restore, which is worse than one that was never
+// split.
+type ArchivePacker interface {
+	// UnpackArchive takes an account archive apart into dir, which
+	// becomes the parts a split payload hands restic.
+	UnpackArchive(ctx context.Context, archivePath, account, dir string) error
+	// PackArchive puts it back together into outDir, under the name the
+	// panel's own restore expects, and reports where it put it.
+	PackArchive(ctx context.Context, dir, account, outDir string) (string, error)
+}
+
 // UsableDomainName refuses anything that is not a domain name.
 //
 // A name reaches this from an operator's choice in the interface and is

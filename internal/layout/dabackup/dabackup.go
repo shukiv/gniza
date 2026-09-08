@@ -4,9 +4,13 @@
 // # What is known, and what is not
 //
 // The whole-account path is checked against native DirectAdmin 1.709
-// archives, including zstd and the backup/user.conf identity. Split and
-// granular selectors below are still provisional: native archives have a
-// nested backup/home.tar.zst as well as outer domains/ and imap/ trees.
+// archives, including zstd and the backup/user.conf identity. Split mode
+// is here too, in split.go: DirectAdmin will not produce the parts, so
+// the archive it does produce is taken apart into them and put back
+// together before its own restore sees it, and every member of a real
+// 1.709 archive comes back header for header. What has not happened is
+// an account restored from an archive Gniza rebuilt. The granular
+// selectors below remain provisional.
 //
 // ADR 0019 lists what a DirectAdmin host has to answer before any of this
 // is run against a customer's server. Until it does, Provisional is what
@@ -81,8 +85,10 @@ const (
 // It is a value rather than a comment because the agent prints it: an
 // operator who selects DirectAdmin is told, in the log and on the page,
 // that the restore path is unproven here.
-const Provisional = "DirectAdmin whole-account archives were validated on 1.709; " +
-	"split/granular restore and the session bridge remain experimental: see ADR 0019"
+const Provisional = "DirectAdmin archives were validated on 1.709 and split mode " +
+	"rebuilds one header for header, but no account has yet been restored from an " +
+	"archive Gniza rebuilt, and granular restore and the session bridge remain " +
+	"experimental: see ADR 0019"
 
 // Layout answers where DirectAdmin keeps the parts of an account.
 type Layout struct{}
@@ -90,26 +96,36 @@ type Layout struct{}
 // Panel names the panel this layout belongs to.
 func (Layout) Panel() string { return "directadmin" }
 
-// HomedirDir is where, under the account's own directory in the archive,
+// HomedirDir is where, under the account's own directory in the tree,
 // the account's files belong.
 //
-// Not suitable for split reassembly. DirectAdmin does not lay an account out as one home directory
-// beside one database directory the way a cpmove tree does; its archive
-// carries the domains separately. This is the seam a DirectAdmin host has
-// to settle first.
-func (Layout) HomedirDir() string { return DomainsDir }
+// DirectAdmin's archive does not lay an account out as one home directory
+// the way a cpmove tree does: it carries domains/ and imap/ separately
+// and the rest of the home directory in a second archive inside the
+// first. Those are three views of one directory, and taking the archive
+// apart puts them back into it -- so this names that directory, and not
+// domains/, which is a third of it. See split.go.
+func (Layout) HomedirDir() string { return HomeTreeDir }
 
 // DatabaseDir is where native SQL dumps live.
 func (Layout) DatabaseDir() string { return DatabaseDirName }
 
-// AccountRoot returns the account's own directory inside an extracted
-// tree.
+// AccountRoot returns the account's own records inside a tree.
 //
-// A DirectAdmin archive unpacks its contents at the top rather than
-// inside one directory named after the account, so the root is the tree
-// itself -- but only once something in it identifies the account, which
-// is what ValidateArchive is for.
+// A tree arrives in one of two shapes. An archive extracted whole unpacks
+// its contents at the top rather than inside one directory named after
+// the account, so the root is the tree itself. A backup taken apart into
+// parts keeps those records in the metadata part, beside the home
+// directory rather than above it, so the root is that part.
+//
+// Neither shape says whose account it is. That is what ValidateArchive is
+// for, and it reads the archive rather than the tree.
 func (Layout) AccountRoot(treeDir, account string) (string, error) {
+	// The parts first: a split tree has a metadata part with the records
+	// in it, and an extracted archive has no metadata directory at all.
+	if _, err := os.Stat(filepath.Join(treeDir, MetadataTreeDir, BackupDir)); err == nil {
+		return filepath.Join(treeDir, MetadataTreeDir), nil
+	}
 	if _, err := os.Stat(filepath.Join(treeDir, BackupDir)); err != nil {
 		return "", fmt.Errorf("dabackup: no %s directory in the extracted tree: %w", BackupDir, err)
 	}

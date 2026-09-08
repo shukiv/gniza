@@ -16,7 +16,14 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/zstd"
+
+	"github.com/shukiv/gniza/internal/panel"
 )
+
+// Taking an archive apart and putting it back together are one thing, not
+// two: a backup that could be split and not rebuilt is a backup nothing
+// can restore.
+var _ panel.ArchivePacker = Layout{}
 
 // Split mode on DirectAdmin.
 //
@@ -78,6 +85,12 @@ const (
 type Manifest struct {
 	Version int    `json:"version"`
 	Account string `json:"account"`
+	// ArchiveName is what DirectAdmin called the archive this came out
+	// of. The repack writes it back under that name because
+	// DirectAdmin's own restore reads the account out of the filename
+	// before it reads anything inside, and a name Gniza made up is one
+	// its restore refuses.
+	ArchiveName string `json:"archive_name"`
 	// Outer is the archive DirectAdmin wrote. Home is the one inside it,
 	// absent for an account with nothing outside its domains.
 	Outer ArchivePart  `json:"outer"`
@@ -169,9 +182,10 @@ func (Layout) UnpackArchive(ctx context.Context, archivePath, account, dir strin
 
 	out := &unpacker{root: root, bodies: map[string]bool{}}
 	manifest := Manifest{
-		Version: manifestVersion,
-		Account: account,
-		Outer:   ArchivePart{Compression: compressionOf(archivePath)},
+		Version:     manifestVersion,
+		Account:     account,
+		ArchiveName: filepath.Base(archivePath),
+		Outer:       ArchivePart{Compression: compressionOf(archivePath)},
 	}
 	reader, closer, err := decompressed(contextReader{ctx, f}, archivePath)
 	if err != nil {
@@ -334,24 +348,34 @@ func (u *unpacker) reserveBody(preferred string) string {
 	return duplicate
 }
 
-// PackArchive writes the archive back from the manifest and the tree.
+// PackArchive writes the archive back from the manifest and the tree,
+// into outDir under the name DirectAdmin gave it, and reports where it
+// put it.
 //
 // What comes out is the archive DirectAdmin wrote, header for header. The
 // compression is not byte for byte -- compressing the same bytes twice
 // does not produce the same file -- and does not need to be: what reads
 // it is tar.
-func (Layout) PackArchive(ctx context.Context, dir, account, archivePath string) error {
+func (Layout) PackArchive(ctx context.Context, dir, account, outDir string) (string, error) {
 	manifest, err := readManifest(dir)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if manifest.Account != account {
-		return fmt.Errorf("dabackup: this tree was taken from %s, not from %s",
+		return "", fmt.Errorf("dabackup: this tree was taken from %s, not from %s",
 			manifest.Account, account)
 	}
+	// The name comes out of the manifest, so it is checked the way a name
+	// from outside is checked: it has to be one filename, and it has to
+	// be this account's.
+	name := manifest.ArchiveName
+	if name == "" || filepath.Base(name) != name || !nameMatchesArchive(name, account) {
+		return "", fmt.Errorf("dabackup: the manifest does not name an archive belonging to %s", account)
+	}
+	archivePath := filepath.Join(outDir, name)
 	root, err := os.OpenRoot(dir)
 	if err != nil {
-		return fmt.Errorf("dabackup: open %s: %w", dir, err)
+		return "", fmt.Errorf("dabackup: open %s: %w", dir, err)
 	}
 	defer func() { _ = root.Close() }()
 
@@ -362,42 +386,45 @@ func (Layout) PackArchive(ctx context.Context, dir, account, archivePath string)
 	if manifest.Home != nil {
 		nested, err = writeNested(ctx, root, manifest.Home, archivePath)
 		if err != nil {
-			return err
+			return "", err
 		}
 		defer func() { _ = os.Remove(nested) }()
 	}
 
 	out, err := os.OpenFile(archivePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
-		return fmt.Errorf("dabackup: create %s: %w", archivePath, err)
+		return "", fmt.Errorf("dabackup: create %s: %w", archivePath, err)
 	}
 	defer out.Close()
 	writer, finish, err := compressed(out, manifest.Outer.Compression)
 	if err != nil {
-		return err
+		return "", err
 	}
 	tw := tar.NewWriter(writer)
 	for _, member := range manifest.Outer.Members {
 		if err := ctx.Err(); err != nil {
-			return err
+			return "", err
 		}
 		if member.Nested {
 			if err := copyNested(tw, member, nested); err != nil {
-				return err
+				return "", err
 			}
 			continue
 		}
 		if err := writeBack(tw, root, member); err != nil {
-			return err
+			return "", err
 		}
 	}
 	if err := tw.Close(); err != nil {
-		return fmt.Errorf("dabackup: finish %s: %w", archivePath, err)
+		return "", fmt.Errorf("dabackup: finish %s: %w", archivePath, err)
 	}
 	if err := finish(); err != nil {
-		return fmt.Errorf("dabackup: finish %s: %w", archivePath, err)
+		return "", fmt.Errorf("dabackup: finish %s: %w", archivePath, err)
 	}
-	return out.Close()
+	if err := out.Close(); err != nil {
+		return "", fmt.Errorf("dabackup: finish %s: %w", archivePath, err)
+	}
+	return archivePath, nil
 }
 
 // writeNested rebuilds the archive that goes inside the archive and

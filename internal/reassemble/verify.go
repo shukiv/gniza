@@ -82,7 +82,14 @@ func Verify(ctx context.Context, rebuilt Result) ([]string, error) {
 		return passed, fmt.Errorf("reassemble: the restore produced neither an archive nor a tree")
 	}
 
-	if rebuilt.Mode == pkgacct.ModeMonolithic {
+	// A rebuild whose panel would not produce the parts is checked the
+	// same way, and for the same reason. The tree it was restored from is
+	// Gniza's own staging shape, not an account as this panel lays one
+	// out; what the panel restores is the archive that was built from it,
+	// so that is what is read. Walking the tree instead would count files
+	// in a directory the panel's restore never sees.
+	_, packed := rebuilt.Layout.(panel.ArchivePacker)
+	if rebuilt.Mode == pkgacct.ModeMonolithic || packed {
 		// There is no tree to walk: the archive is the panel's own, and
 		// its restore is what reads inside it. A panel that can read
 		// inside its own archive says what that proved; one that cannot

@@ -85,16 +85,17 @@ func TestWhatIsNotEstablishedIsRefusedRatherThanGuessed(t *testing.T) {
 	provider := fakeHost(t, "studio")
 	ctx := t.Context()
 
-	_, splitErr := provider.Stage(ctx, panel.StageRequest{
-		Account:    panel.AccountInfo{User: "studio", HomeDir: "/home/studio"},
-		StagingDir: t.TempDir(),
-		Mode:       pkgacct.ModeSplit,
+	_, partialErr := provider.Stage(ctx, panel.StageRequest{
+		Account:     panel.AccountInfo{User: "studio", HomeDir: "/home/studio"},
+		StagingDir:  t.TempDir(),
+		Mode:        pkgacct.ModeSplit,
+		SkipHomedir: true,
 	})
 	_, systemErr := provider.StageSystem(ctx, t.TempDir())
 	_, applyErr := provider.Apply(ctx, "/staging/user.admin.studio.tar", panel.ApplyOptions{})
 
 	for what, err := range map[string]error{
-		"staging in parts":      splitErr,
+		"staging part of one":   partialErr,
 		"staging the server":    systemErr,
 		"applying an archive":   applyErr,
 		"putting files back":    provider.PutHomeDir(ctx, "studio", "/staging/tree"),

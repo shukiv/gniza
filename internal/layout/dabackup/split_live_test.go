@@ -42,9 +42,14 @@ func TestLiveARealArchiveComesBackTheSame(t *testing.T) {
 	if err := (Layout{}).UnpackArchive(context.Background(), archive, account, dir); err != nil {
 		t.Fatalf("taking the archive apart: %v", err)
 	}
-	rebuilt := filepath.Join(t.TempDir(), filepath.Base(archive))
-	if err := (Layout{}).PackArchive(context.Background(), dir, account, rebuilt); err != nil {
+	rebuilt, err := (Layout{}).PackArchive(context.Background(), dir, account, t.TempDir())
+	if err != nil {
 		t.Fatalf("putting the archive back together: %v", err)
+	}
+	// And it came back under the name DirectAdmin gave it, which is the
+	// name DirectAdmin's own restore reads the account out of.
+	if filepath.Base(rebuilt) != filepath.Base(archive) {
+		t.Errorf("the rebuilt archive is called %s", filepath.Base(rebuilt))
 	}
 	sameArchive(t, archive, rebuilt)
 

@@ -1,9 +1,13 @@
 package agent
 
 import (
-	"github.com/shukiv/gniza/internal/pkgacct"
 	"strings"
 	"testing"
+
+	"github.com/shukiv/gniza/internal/layout/cpmove"
+	"github.com/shukiv/gniza/internal/layout/dabackup"
+	"github.com/shukiv/gniza/internal/panel"
+	"github.com/shukiv/gniza/internal/pkgacct"
 )
 
 func TestTrimDetailKeepsTheTail(t *testing.T) {
@@ -54,18 +58,26 @@ func TestStagingEstimateFollowsWhatIsActuallyStaged(t *testing.T) {
 	const gigabyte = 1 << 30
 
 	for _, tc := range []struct {
-		what string
-		size uint64
-		mode pkgacct.Mode
-		want uint64
+		what   string
+		size   uint64
+		mode   pkgacct.Mode
+		layout panel.ArchiveLayout
+		want   uint64
 	}{
-		{"a monolithic backup stages the whole account", 10 * gigabyte, pkgacct.ModeMonolithic, 10 * gigabyte},
-		{"an unset mode is monolithic", 10 * gigabyte, "", 10 * gigabyte},
-		{"a split backup stages a fraction", 10 * gigabyte, pkgacct.ModeSplit, 2 * gigabyte},
-		{"a small split account still gets room to work", 100 << 20, pkgacct.ModeSplit, 512 << 20},
-		{"an account of no known size gets the floor", 0, pkgacct.ModeSplit, 512 << 20},
+		{"a monolithic backup stages the whole account", 10 * gigabyte, pkgacct.ModeMonolithic, cpmove.Layout{}, 10 * gigabyte},
+		{"an unset mode is monolithic", 10 * gigabyte, "", cpmove.Layout{}, 10 * gigabyte},
+		{"a split backup stages a fraction", 10 * gigabyte, pkgacct.ModeSplit, cpmove.Layout{}, 2 * gigabyte},
+		{"a small split account still gets room to work", 100 << 20, pkgacct.ModeSplit, cpmove.Layout{}, 512 << 20},
+		{"an account of no known size gets the floor", 0, pkgacct.ModeSplit, cpmove.Layout{}, 512 << 20},
+		// A panel that will not produce the parts stages the whole
+		// account and then takes it apart, so it is on the disk twice at
+		// the peak rather than a fifth of it being there at all.
+		{"a split backup of an archive panel stages the account twice",
+			10 * gigabyte, pkgacct.ModeSplit, dabackup.Layout{}, 20 * gigabyte},
+		{"and a small one still gets room to work",
+			100 << 20, pkgacct.ModeSplit, dabackup.Layout{}, 512 << 20},
 	} {
-		if got := stagingEstimate(tc.size, tc.mode); got != tc.want {
+		if got := stagingEstimate(tc.size, tc.mode, tc.layout); got != tc.want {
 			t.Errorf("%s: estimate = %d, want %d", tc.what, got, tc.want)
 		}
 	}

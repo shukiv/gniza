@@ -373,23 +373,22 @@ func usableAccountName(user string) error {
 
 // Stage materialises one account's payload.
 //
-// Only the whole-account shape is established: DirectAdmin's admin-backup
-// writes one archive and its documentation says nothing about telling it
-// to leave the home directory or the databases out. Split mode is what
-// makes restic deduplicate, so a split payload built by guessing at those
-// options is exactly the kind of backup that looks fine until it is
-// needed.
+// DirectAdmin's admin-backup writes one archive and its documentation
+// says nothing about telling it to leave the home directory or the
+// databases out, so nothing here asks it to. What split mode does instead
+// is take the archive apart afterwards -- see stageSplit -- because
+// restic cannot deduplicate a compressed archive and a nightly backup of
+// one stores close to a full copy every night.
 func (r *Real) Stage(ctx context.Context, req panel.StageRequest) (pkgacct.Payload, error) {
 	if err := usableAccountName(req.Account.User); err != nil {
 		return pkgacct.Payload{}, err
 	}
-	if req.Mode == pkgacct.ModeSplit {
-		return pkgacct.Payload{}, unverified(
-			"staging an account in parts needs admin-backup options that are not documented")
-	}
 	if req.SkipHomedir || req.SkipDatabases || req.SkipEmail {
 		return pkgacct.Payload{}, unverified(
 			"leaving part of an account out of a DirectAdmin backup")
+	}
+	if req.Mode == pkgacct.ModeSplit {
+		return r.stageSplit(ctx, req)
 	}
 	if req.Mode != pkgacct.ModeMonolithic {
 		return pkgacct.Payload{}, fmt.Errorf("directadmin: select monolithic mode for a native whole-account backup")
@@ -410,6 +409,58 @@ func (r *Real) Stage(ctx context.Context, req panel.StageRequest) (pkgacct.Paylo
 		payload.Degraded = true
 		payload.Reason = "DirectAdmin compressed this archive, so restic deduplication " +
 			"will be close to zero and every run stores a full copy"
+	}
+	return payload, payload.Verify()
+}
+
+// stageSplit stages the account as files rather than as one compressed
+// archive.
+//
+// DirectAdmin writes the archive; Gniza takes it apart into the two parts
+// restic is pointed at, and the archive is removed once it has. What
+// comes out is a home directory and the account's own records, at paths
+// that are the same tonight as they were last night, which is what lets
+// restic store one night's changes rather than one night's archive. The
+// same code puts them back before DirectAdmin's own restore sees them:
+// see dabackup's split.go.
+func (r *Real) stageSplit(ctx context.Context, req panel.StageRequest) (pkgacct.Payload, error) {
+	account := req.Account.User
+	if _, err := r.userConf(account); err != nil {
+		return pkgacct.Payload{}, err
+	}
+	// The account is on this disk twice at the peak: the archive
+	// DirectAdmin wrote, and the tree it is taken apart into. stageNative
+	// checks for one of those; this is the other.
+	if err := os.MkdirAll(req.StagingDir, 0o700); err != nil {
+		return pkgacct.Payload{}, err
+	}
+	if err := nativeSpace(req.StagingDir, req.Account.SizeBytes, 2); err != nil {
+		return pkgacct.Payload{}, err
+	}
+	archive, err := r.stageNative(ctx, account, req.StagingDir, req.Account.SizeBytes)
+	if err != nil {
+		return pkgacct.Payload{}, err
+	}
+	// stageNative has already bound the archive's own identity record to
+	// this account, so what is taken apart below is known to be theirs.
+	if err := (dabackup.Layout{}).UnpackArchive(ctx, archive, account, req.StagingDir); err != nil {
+		os.Remove(archive)
+		return pkgacct.Payload{}, err
+	}
+	// Removed rather than kept: leaving it beside the parts is the
+	// account twice on a disk that had to fit it once, and restic would
+	// store the compressed copy as well -- which is the cost split mode
+	// exists to avoid.
+	if err := os.Remove(archive); err != nil {
+		return pkgacct.Payload{}, fmt.Errorf("directadmin: remove the staged archive: %w", err)
+	}
+	payload := pkgacct.Payload{
+		Mode:    pkgacct.ModeSplit,
+		Account: account,
+		Parts: []pkgacct.Part{
+			{Kind: pkgacct.PartMetadata, Path: dabackup.MetadataPart(req.StagingDir)},
+			{Kind: pkgacct.PartHomedir, Path: dabackup.HomedirPart(req.StagingDir)},
+		},
 	}
 	return payload, payload.Verify()
 }

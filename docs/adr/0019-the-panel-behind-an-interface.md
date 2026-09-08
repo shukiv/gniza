@@ -414,3 +414,97 @@ reason to stop checking.
 
 What the two pages ship today still says the interface is unavailable,
 because saying so is honest until that path exists.
+
+## What a plugin on the host answered — 2026-09-08
+
+The section above recorded a preference and named the one experiment
+that would turn it into a decision. That experiment has now run, on the
+same DirectAdmin 1.709 host: a diagnostic plugin, installed into its own
+directory and removed again, printing the unix user it ran as and the
+*names and lengths* of the session variables it was handed. No session
+value was ever printed; each one is a live credential.
+
+### A plugin keeps its session after run_as changes the user
+
+With `admin_run_as=nobody` in `plugin.conf`, the admin page reported:
+
+```text
+level=admin
+uid=65534 user=nobody
+SESSION_KEY=<39 characters>
+SESSION_ID=<39 characters>
+```
+
+DirectAdmin changed the user *and still handed over the session*. That
+was the assumption the second design rested on and the only thing that
+could have sunk it. So the design is now the decision: DirectAdmin runs
+Gniza's admin page as an account Gniza installs for it, the
+administrative socket is owned by that account rather than by root, and
+no setuid-root binary is installed anywhere. ADR 0012 has a change to
+record.
+
+The account page reported `uid=1000 user=admin` with no `user_run_as`
+set, which is DirectAdmin running it as whoever is logged in, as its
+documentation says. Leaving it at that keeps `SO_PEERCRED` attributing
+the customer on the account socket, with the session proof checked on
+top -- the shape question 7 settled on.
+
+### What a plugin is actually handed
+
+Observed, at both levels:
+
+```text
+USERNAME
+SESSION_ID
+SESSION_KEY
+IS_LOGIN_AS
+IS_LOGIN_KEY
+SESSION_SELECTED_DOMAIN
+```
+
+`IS_LOGIN_AS` does reach a plugin, which question 4 could not assume.
+`LOGIN_AS_MASTER` and `LOGIN_KEY_NAME` did not appear -- consistent with
+being set only during an actual impersonation, which this session was
+not, and still unconfirmed. `USERTYPE` is not handed over at all.
+
+None of these is believed on its own. `USERNAME` is an environment
+variable, and an environment variable is what the process was started
+with rather than proof of anything; it is DirectAdmin's own answer that
+authorises.
+
+### Which endpoint answers, and which does not
+
+Asked with the session replayed as `session=<id>; key=<key>`:
+
+```text
+/CMD_API_GET_SESSION      error=1  Cannot Execute Your Request
+                          details=The requested command requires POST but GET was used
+/CMD_API_LOGIN_TEST       error=0  Login OK
+/CMD_API_SHOW_USER_CONFIG (the session's own record: username, usertype, and ~50 more)
+```
+
+`CMD_API_GET_SESSION` is the endpoint whose name says it answers this,
+and it is the wrong one twice over: it refuses a GET, and its documented
+answer carries the session's password. `CMD_API_SHOW_USER_CONFIG`
+answers a GET, names the session's own account when asked about nobody
+in particular, and carries no password at all. It is what the verifier
+asks.
+
+`CMD_API_LOGIN_TEST` confirms a session is live without saying whose, so
+it adds nothing to a check that has to know the account.
+
+### Two things a login-as session would still settle
+
+What `usertype` reads for a real customer -- `user` is what the values
+of `SHOW_USER_CONFIG` imply, and the session observed was an
+administrator's. And whether `LOGIN_AS_MASTER` appears during an actual
+impersonation, which is what closes the audit gap in question 4. Both
+need one more session on a host and neither blocks the design.
+
+### Packaging, learnt the hard way
+
+A plugin directory on disk is not a plugin. `plugin.conf` needs `id=`
+and `installed=yes` as well as `active=yes`; the entry point DirectAdmin
+serves is `index.html` in each level directory, not `index.raw`; and the
+menu entry comes from `hooks/admin_txt.html` and `hooks/user_txt.html`.
+Without those the page is a 404 with the plugin sitting right there.

@@ -17,7 +17,18 @@ import (
 const (
 	// daSessionEndpoint is DirectAdmin's own answer to whose session a
 	// pair of session values belongs to.
-	daSessionEndpoint = "/CMD_API_GET_SESSION"
+	//
+	// Asked with no parameters, it answers about the session doing the
+	// asking, which is the question here. Naming a user would ask about
+	// that user instead, and an administrator's session may name anyone.
+	//
+	// CMD_API_GET_SESSION is the endpoint whose name says it answers
+	// this, and it is not the one used. Two reasons, both from a real
+	// 1.709 host: it refuses a GET -- "The requested command requires
+	// POST but GET was used" -- and its answer carries the session's
+	// password. This one answers a GET and carries no password at all,
+	// so nothing here ever holds one.
+	daSessionEndpoint = "/CMD_API_SHOW_USER_CONFIG"
 	// daCACertPath is the certificate DirectAdmin serves its own panel
 	// with. A server whose panel has a certificate from a public
 	// authority verifies through the system pool without it; one still
@@ -182,15 +193,18 @@ func readDASession(body string) (daPrincipal, error) {
 	if err != nil {
 		return daPrincipal{}, fmt.Errorf("%w: its answer is not one", errDASessionDenied)
 	}
-	// First, before anything reads the rest: the password is in here and
-	// is wanted by nothing.
+	// First, before anything reads the rest. This endpoint does not
+	// answer with a password, and the deletion is here anyway: it costs
+	// one line, and the day somebody points this at an endpoint that
+	// does is the day it matters.
 	delete(fields, "password")
 
-	// DirectAdmin says no with error=1. It does not promise to say
-	// error=0 when the answer is one, so an absent field is read as an
-	// answer rather than as a refusal -- refusing it would refuse every
-	// real login on a version that omits it. Nothing is lost: what keeps
-	// the login page out is that it names no account, below.
+	// DirectAdmin says no with error=1, and says it that way for a
+	// refused session and for a malformed request alike. A real answer
+	// from this endpoint carries no error field at all, so an absent one
+	// is read as an answer rather than as a refusal. Nothing is lost:
+	// what keeps a refusal and the login page out is that neither names
+	// an account, below.
 	if reported, present := fields["error"]; present && (len(reported) != 1 || reported[0] != "0") {
 		return daPrincipal{}, fmt.Errorf("%w: it reported no such session", errDASessionDenied)
 	}

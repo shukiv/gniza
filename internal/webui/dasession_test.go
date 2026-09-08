@@ -22,7 +22,7 @@ func TestDirectAdminIsAskedWhoTheSessionBelongsTo(t *testing.T) {
 	var seen *http.Request
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = r.Clone(context.Background())
-		_, _ = w.Write([]byte("error=0&username=studio&usertype=user&password=" + testDAPassword))
+		_, _ = w.Write([]byte("account=ON&username=studio&usertype=user&password=" + testDAPassword))
 	}))
 	defer server.Close()
 	verifier := newDASessionVerifierOver(server.URL, server.Client())
@@ -34,8 +34,16 @@ func TestDirectAdminIsAskedWhoTheSessionBelongsTo(t *testing.T) {
 	if who.Username != "studio" || who.UserType != "user" {
 		t.Errorf("DirectAdmin said studio/user, this read %+v", who)
 	}
-	if seen.URL.Path != "/CMD_API_GET_SESSION" {
+	if seen.URL.Path != "/CMD_API_SHOW_USER_CONFIG" {
 		t.Errorf("asked %s", seen.URL.Path)
+	}
+	if seen.Method != http.MethodGet {
+		t.Errorf("asked with %s", seen.Method)
+	}
+	if seen.URL.RawQuery != "" {
+		// Naming a user asks about that user rather than about the
+		// session, which is the opposite of what this is for.
+		t.Errorf("the request named somebody: %q", seen.URL.RawQuery)
 	}
 	if got := seen.Header.Get("Cookie"); got != "session="+testDASession+"; key="+testDAKey {
 		t.Errorf("the session was not replayed as DirectAdmin's own plugins replay it: %q", got)
@@ -68,8 +76,11 @@ func TestAnExpiredSessionIsRefusedRatherThanFollowed(t *testing.T) {
 	var asked int
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		asked++
-		if r.URL.Path == "/CMD_API_GET_SESSION" {
-			http.Redirect(w, r, "/CMD_LOGIN?return-to=/CMD_API_GET_SESSION", http.StatusFound)
+		// What a real DirectAdmin answers an unauthenticated request
+		// with: 302 to /evo/login, carrying the path back.
+		if r.URL.Path == "/CMD_API_SHOW_USER_CONFIG" {
+			http.Redirect(w, r,
+				"/evo/login?return-to=%2FCMD_API_SHOW_USER_CONFIG", http.StatusFound)
 			return
 		}
 		_, _ = w.Write([]byte("error=0&username=somebody&usertype=admin"))

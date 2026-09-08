@@ -117,9 +117,9 @@ None of these can be answered from documentation, and each changes code:
 3. **Plugin scripts run as the requesting unix user, and an admin plugin
    therefore runs as `admin`, not as root.** Gniza's admin interface is a
    root-only unix socket (ADR 0012). That model does not survive the move
-   as it stands. (The half of this that a real host confirmed is that a
-   plugin is not root; which user it is instead turned out not to be the
-   question. See "What the installed plugins answered" below.)
+   as it stands. (Confirmed, and DirectAdmin will not run a plugin as
+   root even when asked. See "What the installed plugins answered"
+   below.)
 4. How `login-as` affects the unix user a `user/` script runs as, which is
    what the account socket attributes a request by (`SO_PEERCRED`).
 5. Whether DirectAdmin's record of an account's databases is a file or a
@@ -252,9 +252,11 @@ which this fixture had none of.
 
 Questions 3, 4 and 7 were written as a problem about unix users: which
 account a plugin script runs as, and what a `SO_PEERCRED` socket can
-therefore conclude from it. Reading the plugins already installed on the
-DirectAdmin host shows that the unix user is the wrong thing to ask
-about, and that DirectAdmin hands a plugin something better.
+therefore conclude from it. The plugins already installed on the
+DirectAdmin host, read alongside DirectAdmin's own documentation and the
+1.709 binary, answer that -- and show that the unix user was only half
+of what was needed, because DirectAdmin hands a plugin the caller's
+session as well.
 
 ### What the other plugins do
 
@@ -267,24 +269,20 @@ an ordinary script owned by `diradmin`, and the binary it calls,
 `/usr/local/jetapps/usr/bin/jetbackup5/jetbackup_admin`, is setuid root
 (`-rwsr-xr-x root root`).
 
-A setuid helper is needed by a process that is not already root. That is
-strong evidence rather than proof: both vendors ship the same product
-for cPanel and Plesk, and Installatron's environment allowlist carries
-`cp_security_token` and a dozen `plesk_*` names alongside the
-DirectAdmin ones, so its wrapper would be setuid for cPanel's sake even
-if DirectAdmin needed none.
+DirectAdmin's own documentation says why, and it is stronger than the
+inference from the two plugins. A plugin runs as whoever is logged in --
+"DA will run as the User that is logged in to DA, just like plugins
+already do" -- and `plugin.conf` can name a different one per level with
+`admin_run_as`, `reseller_run_as` and `user_run_as`. What it cannot name
+is root: "you can set 'user' to any value you wish, as long as it's not
+uid=0". The installed 1.709 binary carries all three option names and
+the refusal that enforces it, `User %s is not a valid apache user.  Must
+not be uid=0 and must exist.`
 
-DirectAdmin's own binary points the same way. Immediately before the
-block of CGI variable names it sets for a script -- `SCRIPT_FILENAME`,
-`GATEWAY_INTERFACE`, `CGI/1.1`, `SERVER_ADDR`, `SERVER_NAME` -- sit
-`error setting privileges`, `still has root privilege`, `uid %d gid %d`
-and `Calling %s as a script`. That is adjacency in a string table rather
-than a read of the code, so it is corroboration and not proof either.
-
-Taken together: **a plugin script is very unlikely to be root**, which
-is the part of question 3 that matters, and the design below is the one
-that holds whether or not it is. Which non-root user it runs as was not
-established.
+So question 3 is answered, and answered more firmly than it was asked:
+an admin plugin runs as `admin`, and **no plugin can be configured to
+run as root**. A setuid helper is not one way to reach root from a
+plugin, it is the only one.
 
 ### What DirectAdmin passes a plugin
 
@@ -319,27 +317,43 @@ answers `Login OK`, and `CMD_API_GET_SESSION` describes the session.
 
 ### What this settles
 
-**3 — the unix user stops being the question, under one design.** A
-plugin script is very unlikely to be root, so a root-only socket cannot
-be opened from one directly. Both plugins here answer that the same way,
-and it is the answer to copy: a small setuid-root helper that allowlists
-the environment and execs the real program. Gniza's helper would carry
-`SESSION_ID`, `SESSION_KEY`, `IS_LOGIN_AS`, `LOGIN_AS_MASTER`,
-`IS_LOGIN_KEY`, `LOGIN_KEY_NAME` and the request's own CGI variables to
-the existing root-only socket. ADR 0012 then survives unchanged --
-`SO_PEERCRED` sees root -- and which user DirectAdmin ran the script as
-stops mattering.
+**3 — a plugin cannot be root, so something has to carry it there.**
+The root-only socket cannot be opened from a plugin script. There are
+two ways to bridge that, and they are not equally good.
 
-The alternative, widening the socket to whatever user DirectAdmin uses,
-needs that user established first and, for a `user/` page, may need a
-socket any account can connect to. That is a decision about who may read
-every customer's backups; the helper is not.
+The first is what both plugins here do: a small setuid-root helper that
+allowlists the environment and execs the real program. It leaves ADR
+0012 untouched -- `SO_PEERCRED` sees root. It also puts a setuid-root
+binary on every DirectAdmin server Gniza is installed on, which
+DirectAdmin's own documentation warns about in the same breath as
+describing it.
 
-**4 — `login-as` is declared, not inferred.** `IS_LOGIN_AS` says the
-session is an impersonation and `LOGIN_AS_MASTER` names who is behind
-it, so a `user/` page does not have to work out from a uid whether the
-customer or their host is at the keyboard. `IS_LOGIN_KEY` and
-`LOGIN_KEY_NAME` say the same for a login key.
+The second uses `admin_run_as`. DirectAdmin will run the admin plugin as
+a named account, so Gniza can install one of its own -- an account
+nothing else runs as, that no customer can log in to, and that only root
+can become. The administrative socket is then owned by that account
+rather than by root, and `SO_PEERCRED` attributes a connection to it as
+tightly as it attributes one to root: on a machine where only root can
+setuid to that account, a connection from it is a connection from
+DirectAdmin's plugin runner. No setuid binary is installed at all.
+
+The second is the one to build. It widens ADR 0012's socket from root to
+one dedicated system account, which is a change to write down there
+rather than to make quietly here, and it is a smaller widening than a
+setuid-root binary is an addition.
+
+**4 — `login-as` is asked about, not inferred.** `IS_LOGIN_AS` says the
+session is an impersonation, `LOGIN_AS_MASTER` names who is behind it,
+and `IS_LOGIN_KEY` and `LOGIN_KEY_NAME` say the same for a login key.
+
+Whether all four reach a plugin's environment is not established: the
+binary lists them beside `always_load_all_script_env_vars`, an option
+that is off by default and that the changelog describes in terms of
+DirectAdmin's own `all_pre.sh` and `all_post.sh` rather than plugins.
+`SESSION_ID` and `SESSION_KEY` are not in doubt -- a plugin installed on
+this host depends on them and works -- so the answer that does not
+depend on the option is to ask DirectAdmin. `CMD_API_GET_SESSION`
+answers `username` and `usertype` for the session those two identify.
 
 **7 — this is the equivalent cPanel has.** cPanel's plugin proves the
 request came from that customer's own logged-in session; a DirectAdmin
@@ -354,12 +368,13 @@ calling and then tells the daemon is only as trustworthy as the path
 between them. The helper carries the two session values; the daemon
 replays them to DirectAdmin and believes only DirectAdmin's answer.
 
-Two things that decides nothing about yet. A Go program that runs setuid
-meets the runtime's own handling of a privileged start, so whether the
-helper is Go or a hundred lines of C like Installatron's is a question
-to answer before writing it. And the daemon calling DirectAdmin back on
-loopback meets DirectAdmin's own certificate, which is a decision about
-what to pin rather than a reason to stop checking.
+Two things that decides nothing about yet. `CMD_API_GET_SESSION` returns
+the session's `password`, base64 encoded, alongside the `username` and
+`usertype` that are wanted -- so whatever reads that response has to
+take the two fields it needs and never keep, log or forward the third.
+And the daemon calling DirectAdmin back on loopback meets DirectAdmin's
+own certificate, which is a decision about what to pin rather than a
+reason to stop checking.
 
 What the two pages ship today still says the interface is unavailable,
 because saying so is honest until that path exists.

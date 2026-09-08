@@ -324,9 +324,8 @@ two ways to bridge that, and they are not equally good.
 The first is what both plugins here do: a small setuid-root helper that
 allowlists the environment and execs the real program. It leaves ADR
 0012 untouched -- `SO_PEERCRED` sees root. It also puts a setuid-root
-binary on every DirectAdmin server Gniza is installed on, which
-DirectAdmin's own documentation warns about in the same breath as
-describing it.
+binary on every DirectAdmin server Gniza is installed on, which is a
+thing to add to a server only when nothing else will do.
 
 The second uses `admin_run_as`. DirectAdmin will run the admin plugin as
 a named account, so Gniza can install one of its own -- an account
@@ -337,10 +336,25 @@ tightly as it attributes one to root: on a machine where only root can
 setuid to that account, a connection from it is a connection from
 DirectAdmin's plugin runner. No setuid binary is installed at all.
 
-The second is the one to build. It widens ADR 0012's socket from root to
-one dedicated system account, which is a change to write down there
-rather than to make quietly here, and it is a smaller widening than a
-setuid-root binary is an addition.
+The second looks better, and rests on something nobody has tested. Every
+piece of evidence that a plugin is handed `SESSION_ID` and `SESSION_KEY`
+comes from a plugin running under DirectAdmin's default execution, as
+whoever is logged in. Whether DirectAdmin still sets them once
+`admin_run_as` has changed the user is not written down anywhere and
+does not follow from anything above. If it does not, the second design
+has no session to prove and only the first is left.
+
+One experiment settles it, and it needs a plugin installed on a
+DirectAdmin server, which is the user's to authorise: a plugin whose
+`plugin.conf` names an existing unprivileged account in `admin_run_as`
+and whose `admin/index.raw` prints `id -u` and the *names and lengths*
+of the environment variables beginning `SESSION`, `IS_LOGIN` and
+`LOGIN_` -- never their values, which are live credentials for that
+session.
+
+Until that has run, this records a preference and not a decision, and
+ADR 0012 stays as it is. Nothing about socket ownership is written
+before the answer.
 
 **4 — `login-as` is asked about, not inferred.** `IS_LOGIN_AS` says the
 session is an impersonation, `LOGIN_AS_MASTER` names who is behind it,
@@ -355,12 +369,34 @@ this host depends on them and works -- so the answer that does not
 depend on the option is to ask DirectAdmin. `CMD_API_GET_SESSION`
 answers `username` and `usertype` for the session those two identify.
 
-**7 — this is the equivalent cPanel has.** cPanel's plugin proves the
+That answer is enough to authorise and not enough to attribute. Under
+login-as, `username` is the customer being impersonated, which is the
+right answer to what the session may do and silent about who is at the
+keyboard. `LOGIN_AS_MASTER` would say, and whether it reaches a plugin
+is the same open question. So a restore run through a login-as session
+would be recorded against the customer rather than against the reseller
+who ran it: an audit gap, not an authorisation one, and one to close
+before the account page does anything an operator would later want to
+attribute.
+
+**7 — this is the equivalent cPanel has, and the account page is a
+separate decision from the admin page.** cPanel's plugin proves the
 request came from that customer's own logged-in session; a DirectAdmin
-plugin proves the same thing by replaying `SESSION_ID` and
-`SESSION_KEY` and letting DirectAdmin say whose they are. A process
-merely running as the account has neither value, so the bar is the same
-one, not a lower one.
+plugin proves the same thing by replaying `SESSION_ID` and `SESSION_KEY`
+and letting DirectAdmin say whose they are. A process merely running as
+the account has neither value, so the bar is the same one, not a lower
+one.
+
+What the account page should not do is copy the admin page's answer.
+`user_run_as` would run every customer's page as one account, and the
+account socket's `SO_PEERCRED` -- which is the whole of what attributes
+a request to a customer today -- would stop distinguishing them, leaving
+DirectAdmin's answer as the only thing that does. Leaving the `user/`
+page at default execution keeps both: DirectAdmin runs it as the account
+the docs say it does, `SO_PEERCRED` reads that, and the session proof is
+checked on top of it -- the uid the socket sees has to be the account
+DirectAdmin names for the session. Two independent things agreeing,
+which is the shape cPanel's has.
 
 **Still to build.** The proof has to be made on Gniza's side of the
 socket rather than the plugin's: a page that asks DirectAdmin who is

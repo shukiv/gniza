@@ -88,9 +88,22 @@ func Verify(ctx context.Context, rebuilt Result) ([]string, error) {
 		// inside its own archive says what that proved; one that cannot
 		// -- cPanel's format, so far -- adds nothing, and the rehearsal
 		// reports only what it did check.
+		//
+		// Both callers of this are rehearsals, which is what makes the
+		// second pass over the archive affordable: a restore does not
+		// come through here.
 		drill, ok := rebuilt.Layout.(panel.ArchiveDrill)
-		if !ok || rebuilt.ArchivePath == "" || rebuilt.Account == "" {
+		if !ok || rebuilt.ArchivePath == "" {
 			return passed, nil
+		}
+		// A layout that can be asked has to be asked about someone. An
+		// empty account here is a rebuild that lost track of whose
+		// archive this is, and passing it over silently would be the
+		// check that never ran.
+		if rebuilt.Account == "" {
+			return passed, fmt.Errorf(
+				"reassemble: this rebuilt archive records no account, so nothing " +
+					"can check that what is inside it belongs to one")
 		}
 		inside, err := drill.DrillArchive(ctx, rebuilt.ArchivePath, rebuilt.Account)
 		if err != nil {

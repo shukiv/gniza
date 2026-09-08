@@ -1,8 +1,11 @@
 package dabackup
 
 import (
+	"archive/tar"
+	"context"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -152,4 +155,70 @@ func TestTheHomeDirectoryIsInThreePlaces(t *testing.T) {
 	if !carries(home, ".bashrc") {
 		t.Error("the nested home archive no longer holds the account's dotfiles")
 	}
+}
+
+// A dump is read as a stream, so the CREATE that says it would restore
+// something can land across the boundary between two reads. It is looked
+// for in each piece with the tail of the last one carried forward, and
+// this is the case that check exists for.
+func TestACreateAcrossTwoReadsIsStillFound(t *testing.T) {
+	account := "gzv0908a"
+	// Long enough that the padding alone spans several reads, and cut so
+	// the word itself straddles one.
+	padding := strings.Repeat("-- padding\n", 6000)
+	body := padding[:65534] + "CREATE TABLE orders (id int);\n"
+	archive := writeArchive(t, account, map[string]string{
+		account + "_shop.sql": body,
+	})
+	passed, err := (Layout{}).DrillArchive(context.Background(), archive, account)
+	if err != nil {
+		t.Fatalf("a dump with CREATE across a read boundary was refused: %v", err)
+	}
+	if len(passed) != 1 || !strings.Contains(passed[0], "1 database dump parses") {
+		t.Errorf("the drill did not report the dump: %v", passed)
+	}
+}
+
+// SQL is not case sensitive and neither are the tools that write these
+// dumps, so a lowercase statement is the same statement.
+func TestALowercaseCreateIsACreate(t *testing.T) {
+	account := "gzv0908a"
+	archive := writeArchive(t, account, map[string]string{
+		account + "_shop.sql": "create table orders (id int);\n",
+	})
+	if _, err := (Layout{}).DrillArchive(context.Background(), archive, account); err != nil {
+		t.Fatalf("a lowercase dump was refused: %v", err)
+	}
+}
+
+// writeArchive builds a whole-account archive with the identity record
+// DirectAdmin's own restore reads and the dumps asked for.
+func writeArchive(t *testing.T, account string, dumps map[string]string) string {
+	t.Helper()
+	file := filepath.Join(t.TempDir(), "user.admin."+account+".tar")
+	f, err := os.OpenFile(file, os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	tw := tar.NewWriter(f)
+	write := func(name, body string) {
+		t.Helper()
+		if err := tw.WriteHeader(&tar.Header{
+			Name: name, Mode: 0o600, Size: int64(len(body)), Typeflag: tar.TypeReg,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(path.Join(BackupDir, UserConf), "username="+account+"\n")
+	for name, body := range dumps {
+		write(path.Join(BackupDir, name), body)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return file
 }

@@ -267,11 +267,24 @@ an ordinary script owned by `diradmin`, and the binary it calls,
 `/usr/local/jetapps/usr/bin/jetbackup5/jetbackup_admin`, is setuid root
 (`-rwsr-xr-x root root`).
 
-A setuid helper is only needed by a process that is not already root. So
-the part of question 3 that matters is answered: **a plugin script does
-not run as root**, at any of the three levels. Which non-root user it
-runs as was not established, and no longer needs to be, for the reason
-below.
+A setuid helper is needed by a process that is not already root. That is
+strong evidence rather than proof: both vendors ship the same product
+for cPanel and Plesk, and Installatron's environment allowlist carries
+`cp_security_token` and a dozen `plesk_*` names alongside the
+DirectAdmin ones, so its wrapper would be setuid for cPanel's sake even
+if DirectAdmin needed none.
+
+DirectAdmin's own binary points the same way. Immediately before the
+block of CGI variable names it sets for a script -- `SCRIPT_FILENAME`,
+`GATEWAY_INTERFACE`, `CGI/1.1`, `SERVER_ADDR`, `SERVER_NAME` -- sit
+`error setting privileges`, `still has root privilege`, `uid %d gid %d`
+and `Calling %s as a script`. That is adjacency in a string table rather
+than a read of the code, so it is corroboration and not proof either.
+
+Taken together: **a plugin script is very unlikely to be root**, which
+is the part of question 3 that matters, and the design below is the one
+that holds whether or not it is. Which non-root user it runs as was not
+established.
 
 ### What DirectAdmin passes a plugin
 
@@ -306,11 +319,21 @@ answers `Login OK`, and `CMD_API_GET_SESSION` describes the session.
 
 ### What this settles
 
-**3 — the unix user is not the question.** A plugin script is not root,
-so a root-only socket cannot be opened from one. What replaces the check
-is not a widened socket but a proof: the plugin asks DirectAdmin who the
-session belongs to, and only an answer naming an administrator gets
-administrative work done.
+**3 — the unix user stops being the question, under one design.** A
+plugin script is very unlikely to be root, so a root-only socket cannot
+be opened from one directly. Both plugins here answer that the same way,
+and it is the answer to copy: a small setuid-root helper that allowlists
+the environment and execs the real program. Gniza's helper would carry
+`SESSION_ID`, `SESSION_KEY`, `IS_LOGIN_AS`, `LOGIN_AS_MASTER`,
+`IS_LOGIN_KEY`, `LOGIN_KEY_NAME` and the request's own CGI variables to
+the existing root-only socket. ADR 0012 then survives unchanged --
+`SO_PEERCRED` sees root -- and which user DirectAdmin ran the script as
+stops mattering.
+
+The alternative, widening the socket to whatever user DirectAdmin uses,
+needs that user established first and, for a `user/` page, may need a
+socket any account can connect to. That is a decision about who may read
+every customer's backups; the helper is not.
 
 **4 — `login-as` is declared, not inferred.** `IS_LOGIN_AS` says the
 session is an impersonation and `LOGIN_AS_MASTER` names who is behind
@@ -328,5 +351,15 @@ one, not a lower one.
 **Still to build.** The proof has to be made on Gniza's side of the
 socket rather than the plugin's: a page that asks DirectAdmin who is
 calling and then tells the daemon is only as trustworthy as the path
-between them. What the two pages ship today still says the interface is
-unavailable, because saying so is honest until that path exists.
+between them. The helper carries the two session values; the daemon
+replays them to DirectAdmin and believes only DirectAdmin's answer.
+
+Two things that decides nothing about yet. A Go program that runs setuid
+meets the runtime's own handling of a privileged start, so whether the
+helper is Go or a hundred lines of C like Installatron's is a question
+to answer before writing it. And the daemon calling DirectAdmin back on
+loopback meets DirectAdmin's own certificate, which is a decision about
+what to pin rather than a reason to stop checking.
+
+What the two pages ship today still says the interface is unavailable,
+because saying so is honest until that path exists.

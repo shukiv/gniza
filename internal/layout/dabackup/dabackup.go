@@ -27,7 +27,6 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"syscall"
 
@@ -58,6 +57,16 @@ const (
 	// rebuilds an archive. Native per-database SQL and .conf files were
 	// observed here; rebuilding their authentication metadata is not supported.
 	DatabaseDirName = "backup"
+
+	// NestedHomeArchive is the second compressed archive DirectAdmin
+	// writes inside the first, holding the rest of the home directory.
+	// Observed on the 1.709 fixture; testdata lists what is in it.
+	NestedHomeArchive = "home.tar.zst"
+
+	// MailDir is where the archive keeps the messages of each domain's
+	// mailboxes, beside the websites in DomainsDir. Observed on the same
+	// fixture.
+	MailDir = "imap"
 
 	// StagedGrantsFile and StagedRunnableFile are what Gniza names the
 	// grants where it stages them, beside the dumps. They are granular's
@@ -145,19 +154,49 @@ func (Layout) DrillArchive(ctx context.Context, filename, account string) ([]str
 	if err != nil {
 		return nil, err
 	}
-	sort.Strings(found)
-	found = slices.Compact(found)
-	if len(found) == 0 {
-		// An account may genuinely have none, and DirectAdmin may carry
-		// them somewhere this cannot read. Neither is a failure, and
-		// neither is a check that can be claimed.
-		return nil, nil
+	// The split path refuses a rebuilt tree whose home directory came
+	// back empty. An archive carrying the account's identity and none of
+	// its files is that same backup arriving as one file, and it
+	// restores an account with nothing in it.
+	if found.accountFiles == 0 && !found.nestedHome {
+		return nil, fmt.Errorf(
+			"dabackup: the archive carries %s's identity and none of its files -- "+
+				"restoring it would put back an empty account", account)
 	}
-	noun := "database dumps parse"
-	if len(found) == 1 {
-		noun = "database dump parses"
+
+	var passed []string
+	if found.accountFiles > 0 {
+		passed = append(passed, fmt.Sprintf("%d account files in the archive", found.accountFiles))
 	}
-	return []string{fmt.Sprintf("%d %s", len(found), noun)}, nil
+	if found.nestedHome {
+		passed = append(passed, "the rest of the home directory is in "+
+			path.Join(BackupDir, NestedHomeArchive))
+	}
+	names := slices.Compact(slices.Sorted(slices.Values(found.databases)))
+	if len(names) > 0 {
+		// An archive that names none is not a failure: the account may
+		// have none, and DirectAdmin may carry them somewhere this
+		// cannot read. It is not a check that can be claimed either.
+		noun := "database dumps parse"
+		if len(names) == 1 {
+			noun = "database dump parses"
+		}
+		passed = append(passed, fmt.Sprintf("%d %s", len(names), noun))
+	}
+	return passed, nil
+}
+
+// archiveContents is what one walk of an archive found.
+type archiveContents struct {
+	// databases are the account's dumps, by name, in the order met.
+	databases []string
+	// accountFiles is how many of the account's own files the archive
+	// carries loose -- its websites under domains/ and its messages
+	// under imap/ -- as opposed to DirectAdmin's records of it.
+	accountFiles int
+	// nestedHome is whether the rest of the home directory is here, in
+	// the second compressed archive DirectAdmin writes inside the first.
+	nestedHome bool
 }
 
 // ArchiveDatabases names the account's database dumps that the archive
@@ -179,41 +218,40 @@ func ArchiveDatabases(ctx context.Context, filename, account string) ([]string, 
 	if err != nil {
 		return nil, err
 	}
-	sort.Strings(found)
-	return slices.Compact(found), nil
+	return slices.Compact(slices.Sorted(slices.Values(found.databases))), nil
 }
 
 // inspect walks the archive once. It always checks the identity record;
 // readDumps says whether to read the body of each dump as well, which is
 // a rehearsal's work and not a restore's.
-func inspect(ctx context.Context, filename, account string, readDumps bool) ([]string, error) {
+func inspect(ctx context.Context, filename, account string, readDumps bool) (archiveContents, error) {
 	if !validUser(account) {
-		return nil, fmt.Errorf("dabackup: invalid expected account %q", account)
+		return archiveContents{}, fmt.Errorf("dabackup: invalid expected account %q", account)
 	}
 	if !nameMatchesArchive(filepath.Base(filename), account) {
-		return nil, fmt.Errorf("dabackup: archive filename does not belong to %s", account)
+		return archiveContents{}, fmt.Errorf("dabackup: archive filename does not belong to %s", account)
 	}
 	f, err := os.OpenFile(filename, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		return nil, err
+		return archiveContents{}, err
 	}
 	defer f.Close()
 	info, err := f.Stat()
 	if err != nil || !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("dabackup: account archive is not a regular file")
+		return archiveContents{}, fmt.Errorf("dabackup: account archive is not a regular file")
 	}
 	var reader io.Reader = f
 	if strings.HasSuffix(filename, ".gz") {
 		z, err := gzip.NewReader(f)
 		if err != nil {
-			return nil, fmt.Errorf("dabackup: read compressed account archive: %w", err)
+			return archiveContents{}, fmt.Errorf("dabackup: read compressed account archive: %w", err)
 		}
 		defer z.Close()
 		reader = z
 	} else if strings.HasSuffix(filename, ".zst") {
 		z, err := zstd.NewReader(f, zstd.WithDecoderConcurrency(1), zstd.WithDecoderMaxMemory(128<<20))
 		if err != nil {
-			return nil, fmt.Errorf("dabackup: read zstd account archive: %w", err)
+			return archiveContents{}, fmt.Errorf("dabackup: read zstd account archive: %w", err)
 		}
 		defer z.Close()
 		reader = z
@@ -221,17 +259,17 @@ func inspect(ctx context.Context, filename, account string, readDumps bool) ([]s
 	reader = contextReader{ctx, reader}
 	tr := tar.NewReader(reader)
 	identity := false
-	var databases []string
+	found := archiveContents{}
 	for {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return archiveContents{}, err
 		}
 		h, err := tr.Next()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("dabackup: read account archive: %w", err)
+			return archiveContents{}, fmt.Errorf("dabackup: read account archive: %w", err)
 		}
 		// A member that climbs out of the archive is refused. A member
 		// with an awkward name is not: a backslash is an ordinary
@@ -241,12 +279,12 @@ func inspect(ctx context.Context, filename, account string, readDumps bool) ([]s
 		// stop that account being backed up at all. This is the rule
 		// cpmove uses.
 		if path.IsAbs(h.Name) || strings.ContainsRune(h.Name, 0) {
-			return nil, fmt.Errorf("dabackup: unsafe account archive member %q", h.Name)
+			return archiveContents{}, fmt.Errorf("dabackup: unsafe account archive member %q", h.Name)
 		}
 		// Check before cleaning: cleaning would conceal backup/../user.conf.
 		for _, component := range strings.Split(h.Name, "/") {
 			if component == ".." {
-				return nil, fmt.Errorf("dabackup: unsafe account archive member %q", h.Name)
+				return archiveContents{}, fmt.Errorf("dabackup: unsafe account archive member %q", h.Name)
 			}
 		}
 		name := path.Clean(h.Name)
@@ -255,18 +293,26 @@ func inspect(ctx context.Context, filename, account string, readDumps bool) ([]s
 		}
 		for _, component := range strings.Split(name, "/") {
 			if component == ".." {
-				return nil, fmt.Errorf("dabackup: unsafe account archive member %q", h.Name)
+				return archiveContents{}, fmt.Errorf("dabackup: unsafe account archive member %q", h.Name)
+			}
+		}
+		if h.Typeflag == tar.TypeReg {
+			switch {
+			case name == path.Join(BackupDir, NestedHomeArchive):
+				found.nestedHome = true
+			case accountFileIn(name):
+				found.accountFiles++
 			}
 		}
 		if database, ok := databaseIn(name, account, h.Typeflag); ok {
-			databases = append(databases, database)
+			found.databases = append(found.databases, database)
 			if readDumps {
 				restores, err := dumpRestoresSomething(tr)
 				if err != nil {
-					return nil, fmt.Errorf("dabackup: read dump %s: %w", name, err)
+					return archiveContents{}, fmt.Errorf("dabackup: read dump %s: %w", name, err)
 				}
 				if !restores {
-					return nil, fmt.Errorf(
+					return archiveContents{}, fmt.Errorf(
 						"dabackup: the dump %s carries nothing to restore -- a database "+
 							"put back from it would come back empty", name)
 				}
@@ -276,23 +322,23 @@ func inspect(ctx context.Context, filename, account string, readDumps bool) ([]s
 			continue
 		}
 		if identity || h.Typeflag != tar.TypeReg || h.Size > 1<<20 {
-			return nil, fmt.Errorf("dabackup: invalid account identity record %s", h.Name)
+			return archiveContents{}, fmt.Errorf("dabackup: invalid account identity record %s", h.Name)
 		}
 		body, err := io.ReadAll(tr)
 		if err != nil {
-			return nil, err
+			return archiveContents{}, err
 		}
 		named, found := usernameIn(string(body))
 		if !found {
-			return nil, fmt.Errorf("dabackup: %s names no account", h.Name)
+			return archiveContents{}, fmt.Errorf("dabackup: %s names no account", h.Name)
 		}
 		if named != account {
-			return nil, fmt.Errorf("dabackup: archive's account identity is %s, not %s", named, account)
+			return archiveContents{}, fmt.Errorf("dabackup: archive's account identity is %s, not %s", named, account)
 		}
 		identity = true
 	}
 	if !identity {
-		return nil, fmt.Errorf("dabackup: archive has no identity record for %s", account)
+		return archiveContents{}, fmt.Errorf("dabackup: archive has no identity record for %s", account)
 	}
 	// tar.Reader stops at the end marker, before a compressor's checksum.
 	// Consume padding and verify the entire compressed stream; refuse a
@@ -302,14 +348,14 @@ func inspect(ctx context.Context, filename, account string, readDumps bool) ([]s
 		n, err := reader.Read(buf)
 		for _, b := range buf[:n] {
 			if b != 0 {
-				return nil, fmt.Errorf("dabackup: non-padding data after account archive")
+				return archiveContents{}, fmt.Errorf("dabackup: non-padding data after account archive")
 			}
 		}
 		if err == io.EOF {
-			return databases, nil
+			return found, nil
 		}
 		if err != nil {
-			return nil, fmt.Errorf("dabackup: finish account archive: %w", err)
+			return archiveContents{}, fmt.Errorf("dabackup: finish account archive: %w", err)
 		}
 	}
 }
@@ -332,6 +378,18 @@ func inspect(ctx context.Context, filename, account string, readDumps bool) ([]s
 // tarRegular is tar.TypeReg, named so the fixture test can ask about a
 // listing that has no headers to hand.
 const tarRegular = tar.TypeReg
+
+// accountFileIn says whether an archive member is one of the account's
+// own files rather than one of DirectAdmin's records of the account.
+//
+// The websites under domains/ and the messages under imap/ are what a
+// customer would recognise as theirs. backup/ is DirectAdmin's own
+// record -- the identity, the dumps, the password hash -- and an archive
+// with that and nothing else restores an empty account.
+func accountFileIn(name string) bool {
+	root, _, nested := strings.Cut(name, "/")
+	return nested && (root == DomainsDir || root == MailDir)
+}
 
 func databaseIn(name, account string, kind byte) (string, bool) {
 	if kind != tar.TypeReg || path.Dir(name) != DatabaseDirName {

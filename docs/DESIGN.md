@@ -532,8 +532,11 @@ A whole-account snapshot has no tree to walk, so those checks need
 somewhere else to run. A panel whose own archive Gniza can read inside
 answers for it: `gniza-maintenance -panel directadmin` drills a
 DirectAdmin snapshot by streaming the archive, checking the identity
-record and reading every database dump it carries, and refuses one that
-came back empty or truncated. cPanel's format is not one Gniza reads
+record, counting the account's own files inside it and reading every
+database dump it carries. It refuses an archive holding DirectAdmin's
+records of the account and none of its files, and a dump that came back
+empty or truncated -- the same two questions the split path asks of a
+rebuilt tree. cPanel's format is not one Gniza reads
 inside, so a drill of a monolithic cpmove archive still reports only
 that the archive arrived — it says what it checked rather than implying
 the rest.

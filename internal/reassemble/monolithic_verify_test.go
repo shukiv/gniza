@@ -39,6 +39,10 @@ func buildDirectAdminArchive(t *testing.T, account string, dumps map[string]stri
 		}
 	}
 	write(dabackup.BackupDir+"/"+dabackup.UserConf, "username="+account+"\n")
+	// A real DirectAdmin archive carries the account's own files beside
+	// DirectAdmin's records of it, and one that does not is refused as
+	// an account with nothing in it.
+	write(dabackup.DomainsDir+"/example.invalid/public_html/index.html", "<html>")
 	for name, body := range dumps {
 		write(dabackup.BackupDir+"/"+name, body)
 	}

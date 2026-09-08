@@ -99,10 +99,12 @@ type Layout interface {
 // restore reads, so there is no tree to walk and none of those checks
 // have anywhere to run.
 //
-// A panel whose archive Gniza can read inside implements this, and a
-// rehearsal asks it. One whose archive Gniza cannot read -- cPanel's, so
-// far -- does not, and the rehearsal reports what it actually checked
-// rather than more.
+// A panel whose archive Gniza can read inside implements this and makes
+// those same checks against the archive: how much of the account it
+// carries, and whether each dump would restore anything. One whose
+// archive Gniza cannot read -- cPanel's, so far -- does not implement
+// it, and the rehearsal reports what it actually checked rather than
+// more.
 //
 // This is a rehearsal's question and not a restore's. It reads the
 // bodies of what it finds, which is work every backup would otherwise

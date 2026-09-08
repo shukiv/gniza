@@ -174,7 +174,7 @@ func TestACreateAcrossTwoReadsIsStillFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a dump with CREATE across a read boundary was refused: %v", err)
 	}
-	if len(passed) != 1 || !strings.Contains(passed[0], "1 database dump parses") {
+	if !strings.Contains(strings.Join(passed, "; "), "1 database dump parses") {
 		t.Errorf("the drill did not report the dump: %v", passed)
 	}
 }
@@ -214,11 +214,63 @@ func writeArchive(t *testing.T, account string, dumps map[string]string) string 
 		}
 	}
 	write(path.Join(BackupDir, UserConf), "username="+account+"\n")
+	// A real archive always carries the account's own files as well as
+	// DirectAdmin's records of it, so every archive built here does too.
+	// The one test about an archive that does not says so by name.
+	if _, bare := dumps["bare"]; !bare {
+		write(path.Join(DomainsDir, "example.invalid", "public_html", "index.html"), "<html>")
+	}
+	delete(dumps, "bare")
 	for name, body := range dumps {
-		write(path.Join(BackupDir, name), body)
+		// A name beginning ../ is one outside backup/, which is how a
+		// caller asks for a member elsewhere in the archive.
+		write(path.Clean(path.Join(BackupDir, name)), body)
 	}
 	if err := tw.Close(); err != nil {
 		t.Fatal(err)
 	}
 	return file
+}
+
+// The split path refuses a rebuilt tree whose home directory came back
+// empty. A whole-account archive carrying nothing but the account's
+// identity is the same backup, arriving as one file instead of a tree,
+// and a rehearsal has to refuse it for the same reason: it restores an
+// account with no files in it.
+func TestAnArchiveWithNothingButTheAccountsIdentityIsRefused(t *testing.T) {
+	account := "gzv0908a"
+	archive := writeArchive(t, account, map[string]string{"bare": ""})
+	if _, err := (Layout{}).DrillArchive(context.Background(), archive, account); err == nil {
+		t.Fatal("an archive carrying none of the account's files rehearsed clean")
+	}
+}
+
+// And an archive that does carry them says how many, the way the split
+// path reports the files it counted in the rebuilt home directory.
+func TestTheDrillCountsTheAccountFilesTheArchiveCarries(t *testing.T) {
+	account := "gzv0908a"
+	archive := writeArchive(t, account, map[string]string{
+		"../imap/example.invalid/sales/Maildir/cur/1.eml": "Subject: hello",
+	})
+	passed, err := (Layout{}).DrillArchive(context.Background(), archive, account)
+	if err != nil {
+		t.Fatalf("an archive with account files was refused: %v", err)
+	}
+	if !strings.Contains(strings.Join(passed, "; "), "2 account files") {
+		t.Errorf("the drill does not say what the archive carries: %v", passed)
+	}
+}
+
+// The nested home archive is the rest of the home directory, so an
+// archive carrying it carries the account's files even when nothing
+// sits loose in domains/ or imap/.
+func TestTheNestedHomeArchiveCountsAsTheAccountsFiles(t *testing.T) {
+	account := "gzv0908a"
+	archive := writeArchive(t, account, map[string]string{
+		"bare":         "",
+		"home.tar.zst": "not really zstd, and not opened here",
+	})
+	if _, err := (Layout{}).DrillArchive(context.Background(), archive, account); err != nil {
+		t.Fatalf("an archive with the nested home archive was refused: %v", err)
+	}
 }

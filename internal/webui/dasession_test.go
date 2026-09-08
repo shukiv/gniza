@@ -118,6 +118,26 @@ func TestOnlyAnAnswerNamingOneAccountIsAccepted(t *testing.T) {
 	}
 }
 
+// DirectAdmin's documentation describes error=1 as how it says no. It
+// does not promise that a live session says error=0, and an answer that
+// names one account is an answer whether or not the field is there.
+// Refusing it would refuse every real login on a version that omits it.
+func TestAnAnswerWithNoErrorFieldStillNamesTheAccount(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("username=studio&usertype=user"))
+	}))
+	defer server.Close()
+	verifier := newDASessionVerifierOver(server.URL, server.Client())
+
+	who, err := verifier.verify(context.Background(), testDASession, testDAKey)
+	if err != nil {
+		t.Fatalf("an answer naming the account was refused for saying nothing about error: %v", err)
+	}
+	if who.Username != "studio" {
+		t.Errorf("read %+v", who)
+	}
+}
+
 // An account type DirectAdmin does have is read as itself, because what
 // a page may do depends on which one it is.
 func TestEachAccountTypeIsReadAsItself(t *testing.T) {

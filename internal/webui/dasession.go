@@ -75,8 +75,18 @@ type daSessionVerifier struct {
 
 // newDASessionVerifier talks to the panel at baseURL, which is
 // DirectAdmin's own address on this server -- https://<host>:2222.
+//
+// The host has to be the name DirectAdmin's certificate carries, not an
+// address that reaches the same machine: the certificate is checked, and
+// a panel with a real certificate for its hostname does not answer to
+// 127.0.0.1. That name is DirectAdmin's own to say, so it is read from
+// its configuration rather than assumed here.
 func newDASessionVerifier(baseURL string) *daSessionVerifier {
 	return newDASessionVerifierOver(baseURL, &http.Client{
+		// Deliberately not http.DefaultTransport, and deliberately
+		// without a Proxy: DirectAdmin is on this machine, and an
+		// HTTPS_PROXY in the environment would send a live session
+		// credential through whatever it names.
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				MinVersion: tls.VersionTLS12,
@@ -176,7 +186,12 @@ func readDASession(body string) (daPrincipal, error) {
 	// is wanted by nothing.
 	delete(fields, "password")
 
-	if fields.Get("error") != "0" {
+	// DirectAdmin says no with error=1. It does not promise to say
+	// error=0 when the answer is one, so an absent field is read as an
+	// answer rather than as a refusal -- refusing it would refuse every
+	// real login on a version that omits it. Nothing is lost: what keeps
+	// the login page out is that it names no account, below.
+	if reported, present := fields["error"]; present && (len(reported) != 1 || reported[0] != "0") {
 		return daPrincipal{}, fmt.Errorf("%w: it reported no such session", errDASessionDenied)
 	}
 	// Exactly one of each. A repeated field is an answer that names two
@@ -210,8 +225,13 @@ func usableDASessionValue(value string) error {
 	if len(value) > maxDASessionValue {
 		return fmt.Errorf("%w: the session value is too long to be one", errDASessionDenied)
 	}
+	// A cookie's value is printable ASCII without space, and without the
+	// three characters that end one or start another. Real DirectAdmin
+	// session identifiers are narrower still -- letters, digits and
+	// underscore -- but this is the boundary the header itself draws,
+	// and drawing it wider than DirectAdmin does costs nothing here.
 	for _, char := range value {
-		if char < 0x20 || char > 0x7e || char == ';' || char == ',' || char == '"' {
+		if char <= 0x20 || char > 0x7e || char == ';' || char == ',' || char == '"' {
 			return fmt.Errorf("%w: the session value is not one", errDASessionDenied)
 		}
 	}

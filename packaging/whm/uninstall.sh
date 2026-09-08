@@ -2,6 +2,15 @@
 # Remove the Gniza WHM plugin. Backups already stored remotely are not
 # touched, and neither is the local state file, so a reinstall picks up
 # where this left off.
+#
+# Almost nothing here is deleted. What this script takes off the server is
+# moved into one dated directory under /var/lib/gniza/removed, which it
+# names on its way out, so an uninstall can be undone by moving those
+# files back and deleting them stays a decision somebody makes on purpose.
+# The two exceptions are named where they happen: restic's cache, which is
+# rebuilt from the repository and is the one thing here that reaches
+# gigabytes, and the scratch directory this script makes for cPanel's own
+# plugin remover.
 set -eu
 
 PATH=/usr/local/cpanel/3rdparty/bin:/usr/local/cpanel/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -10,17 +19,35 @@ export PATH
 [ "$(id -u)" = 0 ] || { echo "run this as root" >&2; exit 1; }
 
 SOURCE_DIR=$(cd "$(dirname "$0")" && pwd)
+ATTIC=/var/lib/gniza/removed/$(date -u +%Y%m%dT%H%M%SZ)
+
+# retire moves one path into the attic under a name that says what it was.
+# A path that is not there is not an error: an uninstall run twice, or run
+# after an install that stopped half way, still finishes.
+#
+# The attic can be on another filesystem, in which case mv copies and then
+# unlinks. That is still a move: the files are at the destination before
+# the originals go.
+retire() {
+	if [ ! -e "$1" ] && [ ! -L "$1" ]; then
+		return 0
+	fi
+	mkdir -p "$ATTIC"
+	chmod 0700 "$ATTIC"
+	mv -- "$1" "$ATTIC/$2"
+}
 
 systemctl stop gniza 2>/dev/null || true
 systemctl disable gniza 2>/dev/null || true
-rm -f /etc/systemd/system/gniza.service
+retire /etc/systemd/system/gniza.service gniza.service
 systemctl daemon-reload 2>/dev/null || true
 
 if [ -x /usr/local/cpanel/bin/unregister_appconfig ]; then
     /usr/local/cpanel/bin/unregister_appconfig Gniza || true
 fi
-rm -f /var/cpanel/apps/gniza.conf
-rm -f /usr/local/cpanel/whostmgr/docroot/cgi/gniza.cgi /usr/local/cpanel/cgi/gniza.cgi
+retire /var/cpanel/apps/gniza.conf gniza-appconfig.conf
+retire /usr/local/cpanel/whostmgr/docroot/cgi/gniza.cgi whostmgr-gniza.cgi
+retire /usr/local/cpanel/cgi/gniza.cgi cgi-gniza.cgi
 
 if [ -x /usr/local/cpanel/bin/manage_hooks ]; then
     # Current releases describe every registration, including the blocking
@@ -38,11 +65,12 @@ if [ -x /usr/local/cpanel/bin/manage_hooks ]; then
             --action="--cpanel-hook=$action" >/dev/null 2>&1 || true
     done
 fi
-rm -f /usr/local/cpanel/3rdparty/bin/gniza-hook
-rm -f /usr/local/bin/gniza-agent
-rm -f /usr/local/cpanel/Cpanel/API/Gniza.pm
-rm -f /var/cpanel/perl/Cpanel/Admin/Modules/Gniza/Session.pm
-rmdir /var/cpanel/perl/Cpanel/Admin/Modules/Gniza 2>/dev/null || true
+retire /usr/local/cpanel/3rdparty/bin/gniza-hook gniza-hook
+retire /usr/local/bin/gniza-agent gniza-agent
+retire /usr/local/cpanel/Cpanel/API/Gniza.pm Gniza.pm
+# The whole directory, so the session module goes with the one thing that
+# was ever in it and no empty directory is left behind to tidy up.
+retire /var/cpanel/perl/Cpanel/Admin/Modules/Gniza admin-module
 
 # Remove the account-facing registration with the same supported mechanism
 # used at install time. Older releases wrote DynamicUI directly, so that
@@ -60,21 +88,24 @@ if [ -x /usr/local/cpanel/scripts/uninstall_plugin ] &&
     PLUGIN_META=
     trap - 0 1 2 15
 fi
-rm -f "$FRONTEND/dynamicui/dynamicui_gniza.conf"
-rm -rf -- "$FRONTEND/gniza"
-rm -f "$FRONTEND/assets/application_icons/gniza.png" \
-    /usr/local/cpanel/whostmgr/docroot/addon_plugins/gniza.svg
+retire "$FRONTEND/dynamicui/dynamicui_gniza.conf" dynamicui_gniza.conf
+retire "$FRONTEND/gniza" jupiter-plugin
+retire "$FRONTEND/assets/application_icons/gniza.png" gniza.png
+retire /usr/local/cpanel/whostmgr/docroot/addon_plugins/gniza.svg gniza.svg
 
-# restic's cache. It is rebuilt from the repository on the next backup, and
-# it is the one thing here that can reach gigabytes, so leaving it behind is
-# not caution, only clutter.
+# restic's cache is the one thing here that is deleted rather than moved.
+# It is rebuilt from the repository on the next backup, and it is the one
+# thing here that reaches gigabytes: moving it into the attic would free
+# no disk at all on a server somebody is uninstalling to make room.
 rm -rf -- /var/cache/gniza
 
 # Account events the hooks left for a service that is now going away. The
 # hooks are unregistered above, so nothing will add more and nothing will
 # ever read these; reinstalling later must not replay account changes from
-# whenever Gniza was last installed.
-rm -rf -- /var/lib/gniza/hooks
+# whenever Gniza was last installed. Moved rather than deleted, because an
+# account created or removed while Gniza was installed is exactly what
+# somebody investigating a gap in the history will want to read.
+retire /var/lib/gniza/hooks hooks
 
 cat <<'DONE'
 Gniza removed.
@@ -91,7 +122,17 @@ Reinstalling picks up from there: the same destinations, schedules and
 history come back with it.
 DONE
 
+if [ -d "$ATTIC" ]; then
+	cat <<DONE
+
+What was taken off the server is in $ATTIC.
+Move it back to undo this, or delete it when you are sure.
+DONE
+fi
+
 # Last, because this script is reading itself out of that directory: the copy
 # of the uninstaller the installer left behind, and the two cPanel files it
-# needs to remove the account-facing tile.
-rm -rf -- /usr/local/share/gniza
+# needs to remove the account-facing tile. Moving a running script's own
+# directory is safe -- the shell reads it through an open descriptor -- and
+# it means the uninstaller that was run is still there to be read.
+retire /usr/local/share/gniza share

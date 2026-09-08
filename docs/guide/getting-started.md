@@ -175,6 +175,15 @@ The installer leaves that copy on the server, so this never means finding the
 package again. It stops the service and unregisters the WHM plugin, the cPanel
 hooks and the account tile, and clears restic's cache.
 
+What it takes off the server it moves rather than deletes. The binaries, the
+hook, the unit file, the plugin files and the spooled account events all go
+into one dated directory under `/var/lib/gniza/removed`, and the script prints
+where. Moving them back undoes the uninstall; deleting them is left for you to
+do on purpose. restic's cache is the exception, and is deleted: it is rebuilt
+from the repository on the next backup and it is the one thing here that
+reaches gigabytes, so moving it aside would free no disk on a server you are
+uninstalling to make room on.
+
 It keeps `/etc/gniza/master.key` and `/var/lib/gniza/state.db`, so a
 reinstall comes back with the same destinations, schedules and history.
 Deleting the key deletes the only way to read the backups in those

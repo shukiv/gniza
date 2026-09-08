@@ -111,9 +111,13 @@ func TestInstallerDeploysAndRemovesTheSessionBridge(t *testing.T) {
 			t.Errorf("installer is missing %q", required)
 		}
 	}
+	// The uninstaller takes the admin module off the server by retiring
+	// the whole directory it lives in, which is the only thing ever put
+	// there, so Session.pm goes with it and no empty directory is left
+	// behind for a later run to tidy up.
 	for _, required := range []string{
-		`/usr/local/cpanel/Cpanel/API/Gniza.pm`,
-		`/var/cpanel/perl/Cpanel/Admin/Modules/Gniza/Session.pm`,
+		`retire /usr/local/cpanel/Cpanel/API/Gniza.pm `,
+		`retire /var/cpanel/perl/Cpanel/Admin/Modules/Gniza `,
 	} {
 		if !strings.Contains(uninstaller, required) {
 			t.Errorf("uninstaller is missing %q", required)

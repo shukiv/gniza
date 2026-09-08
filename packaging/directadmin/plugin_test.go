@@ -303,3 +303,21 @@ func TestTheMenuEntriesAreLinksDirectAdminCanFollow(t *testing.T) {
 		}
 	}
 }
+
+// Evolution opens a plugin through its own wrapper, /evo/plugin?src=...,
+// and that wrapper arrives as a POST with no form in it -- a page view,
+// not a submission. Forwarding it as a post asked Gniza to post to the
+// overview, which only answers GET, and the administrator got
+//
+//	Method Not Allowed
+//
+// inside DirectAdmin's chrome. What tells the two apart is whether
+// DirectAdmin put a form in POST: a real submission always carries at
+// least the token, and a page view carries nothing.
+func TestAPageViewIsNotForwardedAsASubmission(t *testing.T) {
+	page := read(t, "admin/index.html")
+	// The method is decided by the form as well as by REQUEST_METHOD.
+	if !regexp.MustCompile(`\[ "\$METHOD" = POST \] && \[ -n "\$\{POST:-\}" \]`).MatchString(page) {
+		t.Error("the page forwards a post without asking whether there is a form in it")
+	}
+}

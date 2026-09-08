@@ -62,7 +62,14 @@ set -- \
 	--header "X-Gniza-DA-Session: ${SESSION_ID:-}" \
 	--header "X-Gniza-DA-Key: ${SESSION_KEY:-}"
 
-if [ "$METHOD" = POST ]; then
+# A post with a form in it is a submission. A post with nothing in it is
+# Evolution opening the page through its own wrapper,
+# /evo/plugin?src=..., which arrives as a POST carrying no form at all --
+# and forwarding that as a post asked Gniza to post to the overview,
+# which answers GET. The administrator got "Method Not Allowed" inside
+# DirectAdmin's chrome. A real submission always carries at least the
+# token, so the form is what decides, not the method alone.
+if [ "$METHOD" = POST ] && [ -n "${POST:-}" ]; then
 	# DirectAdmin does not hand a plugin the request body. It reads the
 	# body itself and puts the whole url-encoded form in POST, leaving
 	# CONTENT_LENGTH empty and stdin at end of file -- measured on 1.709,

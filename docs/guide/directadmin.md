@@ -4,19 +4,34 @@ Gniza runs on cPanel/WHM. DirectAdmin support exists and is unfinished,
 and this page says exactly how far it goes so that nobody finds out from
 a restore.
 
-## What works
+## Validation status — 2026-09-08
+
+A disposable account passed a **native DirectAdmin** backup/restore round
+trip. That did not run through Gniza. The test found staging-permission
+requirements, failure results with exit code zero, and zstd/nested-home
+archive layouts that still need to be handled in this integration. See the
+[live validation report](../directadmin-validation-2026-09-08.md).
+
+The admin and account plugin pages are placeholders, not a working
+configuration or restore interface. Treat this package as development work;
+do not enable backup schedules for production accounts or rely on it for
+recovery yet. Pushing the source does not publish a DirectAdmin release.
+
+## Implemented paths, not yet certified
 
 - **Account lifecycle.** DirectAdmin's own hooks tell Gniza when an
   account is created, suspended, reactivated or removed. This is what
   keeps one customer's backups from being handed to the next holder of
-  the same username, and it is fully in place.
+  the same username. The scripts exist, but lifecycle isolation has not
+  been validated on the live host.
 - **Listing accounts.** Every account DirectAdmin knows about, its home
   directory, its primary domain, and whether that home directory is
   actually there.
-- **Backing up a whole account.** `directadmin admin-backup` writes one
-  archive per account and Gniza stores it in every destination the
-  schedule names, with the same retention, the same append-only
-  protection and the same nightly check as on cPanel.
+- **Whole-account backup adapter.** The provider calls
+  `directadmin admin-backup` and returns its archive to the shared backup
+  worker. Its root-private staging assumptions need correction before
+  the native command can work through the standard Gniza staging path.
+  A Gniza-to-destination round trip has not been validated on DirectAdmin.
 
 ## What is refused
 
@@ -31,18 +46,20 @@ Gniza refuses these rather than guessing, and says so by name:
   a file;
 - backing up **the server's own configuration**.
 
-A DirectAdmin backup taken today is therefore a full copy every night,
-and getting anything back out of it is a manual job with `tar` and
-`mysql`.
+Native backups on the tested host were compressed archives. Split-mode
+deduplication has not been validated. Native DirectAdmin can restore the
+tested archive, but Gniza's restore implementation remains unfinished.
 
 ## Why
 
-Each of those needs an answer that only a running DirectAdmin server can
-give — whether its backup tool can be told to leave the home directory
+These paths need answers from a running DirectAdmin server — whether its
+backup tool can be told to leave the home directory
 out, how a queued restore reports that it failed, what the archive's
 members are actually called. They are listed as six questions in
 `docs/adr/0019-the-panel-behind-an-interface.md`, with a seventh about
-who is allowed to read an account's backups through the panel.
+who is allowed to read an account's backups through the panel. Some answers
+are now recorded in the live validation report; implementing and testing
+them in Gniza is still required.
 
 A backup provider that guesses produces backups that look successful and
 restore into nothing. That is the one failure this program exists to

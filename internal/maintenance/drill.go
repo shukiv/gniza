@@ -95,8 +95,10 @@ func (r *Runner) Drill(ctx context.Context, req DrillRequest) (DrillResult, erro
 		if err != nil {
 			return "", err
 		}
-		// A drill stops at the tree, so it is one copy rather than two.
-		if required := reassemble.TreeBytes(sourceBytes); available < required {
+		// A drill stops at the tree, so it is one copy rather than two --
+		// unless the panel's parts are not the account's own files, and
+		// checking them means building the archive as well.
+		if required := reassemble.RehearsalBytes(sourceBytes, r.layout); available < required {
 			return "", &staging.ErrInsufficientSpace{Required: required, Available: available}
 		}
 

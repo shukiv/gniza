@@ -1235,8 +1235,11 @@ func (e *Engine) Drill(ctx context.Context, repositoryID, account string) (
 	}
 	// A rehearsal stops at the tree, so it needs room for one copy of the
 	// account rather than two. Asking for two is what stopped a 48.7 GiB
-	// account being rehearsed on a server with 63 GiB free.
-	dir, err := e.staging.Allocate("drill-"+account, reassemble.TreeBytes(sourceBytes))
+	// account being rehearsed on a server with 63 GiB free. On a panel
+	// whose rehearsal has to build the archive to check it, two is the
+	// honest figure and the layout says so.
+	dir, err := e.staging.Allocate("drill-"+account,
+		reassemble.RehearsalBytes(sourceBytes, e.provider.Layout()))
 	if err != nil {
 		return nil, nil, err
 	}

@@ -3,6 +3,9 @@ package reassemble
 import (
 	"math"
 	"testing"
+
+	"github.com/shukiv/gniza/internal/layout/cpmove"
+	"github.com/shukiv/gniza/internal/layout/dabackup"
 )
 
 // TestScratchIsSizedForWhatEachRestoreActuallyWrites.
@@ -43,5 +46,20 @@ func TestScratchIsSizedForWhatEachRestoreActuallyWrites(t *testing.T) {
 		if got != math.MaxUint64 {
 			t.Errorf("%s overflowed and made a huge restore look small: %d", name, got)
 		}
+	}
+}
+
+// A rehearsal stops at the tree only where the tree is the account. On a
+// panel whose parts are not the account's own files, the archive is, so
+// the rehearsal builds it and the tree and the archive are on the disk at
+// once. Sizing that one for a tree is how a rehearsal fills a disk.
+func TestARehearsalIsSizedForWhatThePanelMakesItWrite(t *testing.T) {
+	const account = 10 << 30
+
+	if got, want := RehearsalBytes(account, cpmove.Layout{}), TreeBytes(account); got != want {
+		t.Errorf("a cPanel rehearsal is sized at %d, not the tree's %d", got, want)
+	}
+	if got, want := RehearsalBytes(account, dabackup.Layout{}), ArchiveBytes(account); got != want {
+		t.Errorf("a DirectAdmin rehearsal is sized at %d, not the %d it writes", got, want)
 	}
 }

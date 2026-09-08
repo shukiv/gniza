@@ -282,6 +282,10 @@ func inspect(ctx context.Context, filename, account string) ([]string, error) {
 // restore to that name would fail a restore that worked, on an account
 // that is fine, every time -- and a restore reported as failed is a
 // restore somebody runs again.
+// tarRegular is tar.TypeReg, named so the fixture test can ask about a
+// listing that has no headers to hand.
+const tarRegular = tar.TypeReg
+
 func databaseIn(name, account string, kind byte) (string, bool) {
 	if kind != tar.TypeReg || path.Dir(name) != DatabaseDirName {
 		return "", false

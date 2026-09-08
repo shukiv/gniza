@@ -184,3 +184,63 @@ cPanel side has, and it stays this way until a host says where the dumps
 are on it. What settles this is a listing of a real archive from more than
 one DirectAdmin version -- question 6 above -- which nothing in the repo
 records yet.
+
+## What a real archive answered — 2026-09-08
+
+The whole-account archive from the disposable 1.709 fixture was listed
+member by member, and the listing is checked in at
+`internal/layout/dabackup/testdata/account.tar.list` with the nested home
+archive beside it. It settles questions 1, 5 and 6, narrows 8, and opens
+a ninth.
+
+**1 — no.** `directadmin admin-backup` takes `--destination` and `--user`
+and nothing else. There is no flag that leaves the home directory or the
+databases out, so a schedule that backs up less than the whole account
+cannot be expressed through it and stays refused. The archive records what
+it did include, in `backup/backup_options.list`.
+
+**5 — there is no file.** `/usr/local/directadmin/data/users/<user>/`
+holds no list of the account's databases; the only per-account database
+record is inside DirectAdmin's own `user.db`. The naming convention plus a
+MySQL query, which is what the provider already does, is the record.
+
+**6 — settled for 1.709, and the documentation was wrong.** An account's
+per-domain records live with the domain, under `backup/<domain>/`: that
+domain's mail configuration, its FTP logins, its zone file as
+`<domain>.db`, and its own settings. Only what belongs to the account as
+a whole sits directly in `backup/` -- `user.conf`, `crontab.conf`,
+`.shadow`, `user.db`, and the database dumps. The websites are under
+`domains/<domain>/public_html`, the messages under
+`imap/<domain>/<mailbox>/Maildir`, and the rest of the home directory is a
+second compressed archive at `backup/home.tar.zst`.
+
+Every member table in `dabackup` has been rewritten from that listing.
+Twelve of the paths taken from documentation named nothing a real archive
+carries; a fixture test now holds the tables to the listing.
+
+**8 — the rule holds.** `backup/gzv0908a_shop.sql` sits directly in
+`backup/`, which is what the restore check already required, with a
+`.conf` beside it carrying that database's grants and password hash.
+
+### 9. A layout cannot be asked for one domain's FTP or mail
+
+`FTPMembers` and `MailMembers` take no arguments, because on cPanel each
+is one file for the whole account. DirectAdmin keeps both per domain, and
+the directory that contains them contains that domain's zone and mail as
+well, so there is no path that means "this account's FTP logins" and
+nothing else.
+
+Both now return nothing, which makes a restore of either refuse rather
+than hand over the containing directory -- `backup/` holds the account's
+password hash and every database dump. Restoring a mailbox still brings
+back its messages; what it does not bring back is that domain's
+forwarders and autoresponders.
+
+Settling this means giving those two methods the domain names the other
+three already take, which changes the interface for both panels. It is
+worth doing when granular restore on DirectAdmin is worth having.
+
+**Still open.** The plugin session bridge (questions 3, 4 and 7), split
+mode -- which needs the nested `home.tar.zst` reassembled into one tree
+and back -- new-account recovery, lifecycle isolation, and where
+DirectAdmin puts a certificate, which this fixture had none of.

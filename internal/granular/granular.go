@@ -309,10 +309,15 @@ func buildMailbox(layout panel.ItemLayout, parts reassemble.Parts, req Request) 
 		return Plan{}, err
 	}
 	// Forwarders and filters are configuration, not maildir, so they only
-	// come back if the metadata part is in the snapshot too.
-	if parts.Metadata != "" {
+	// come back if the metadata part is in the snapshot too -- and only
+	// if this panel's layout can name where they are inside it. A panel
+	// that keeps them somewhere the layout cannot ask for leaves nothing
+	// to take out, and restoring the account's whole configuration to
+	// take nothing out of it is time and scratch space a customer waiting
+	// for one mailbox pays for.
+	if members := layout.MailMembers(); parts.Metadata != "" && len(members) > 0 {
 		plan.Metadata = parts.Metadata
-		plan.Members = layout.MailMembers()
+		plan.Members = members
 		plan.Include = append(plan.Include, parts.Metadata)
 	}
 	return plan, nil

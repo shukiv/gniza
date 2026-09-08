@@ -318,3 +318,50 @@ func TestAMailboxNameCannotReachOutsideTheAccount(t *testing.T) {
 		}
 	}
 }
+
+// TestAMailboxRestoreDoesNotFetchMetadataItCannotUse covers a panel whose
+// mail configuration this layout cannot name.
+//
+// Restoring one mailbox pulls the metadata part out of the snapshot so
+// that the domain's forwarders and autoresponders come back with the
+// messages. Where the layout has no member to take out of it, that
+// download is the whole account's configuration -- fetched, paid for in
+// time and in scratch space, and then not used for anything.
+//
+// On a large account the metadata part is not small, and a customer
+// waiting for one mailbox waits for it.
+func TestAMailboxRestoreDoesNotFetchMetadataItCannotUse(t *testing.T) {
+	parts := reassemble.Parts{Homedir: "/home", Metadata: "/meta"}
+	req := Request{Kind: KindMailbox, Account: "studio", Names: []string{"sales@studio.co.il"}}
+
+	plan, err := Build(namelessMailLayout{}, parts, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, include := range plan.Include {
+		if include == parts.Metadata {
+			t.Error("the account's metadata was restored with nothing to take out of it")
+		}
+	}
+	if plan.Metadata != "" {
+		t.Errorf("the plan claims metadata it named no members of: %q", plan.Metadata)
+	}
+
+	// A layout that does name mail configuration still gets it.
+	plan, err = Build(cpmove.Layout{}, parts, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Members) == 0 || plan.Metadata != parts.Metadata {
+		t.Error("a layout that names its mail configuration did not get the metadata")
+	}
+}
+
+// namelessMailLayout keeps a panel's mail configuration somewhere this
+// interface cannot ask for, which is DirectAdmin's shape.
+type namelessMailLayout struct{ panel.ItemLayout }
+
+func (namelessMailLayout) MailMembers() []string { return nil }
+func (l namelessMailLayout) MailboxPaths(names []string) []string {
+	return cpmove.Layout{}.MailboxPaths(names)
+}

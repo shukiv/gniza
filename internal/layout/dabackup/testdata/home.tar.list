@@ -1,0 +1,14 @@
+# The members of backup/home.tar.zst from the same archive: what is in the
+# account's home directory and not under domains/ or imap/. Paths here are
+# relative to the home directory itself.
+.bash_logout
+.bash_profile
+.bashrc
+.myimunify_id
+.php/
+.php/php-mail.log.2
+.php/php-mail.log.1
+.php/php-mail.log
+Maildir/
+private-fixtures/
+private-fixtures/orders.csv

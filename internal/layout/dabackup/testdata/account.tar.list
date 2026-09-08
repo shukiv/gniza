@@ -1,0 +1,89 @@
+# Every member of a real DirectAdmin 1.709 account backup, as tar lists
+# them. Taken from the disposable account gzv0908a on the validation host
+# on 2026-09-08; the domain is under .invalid and there is no customer
+# data here. This is the evidence ADR 0019 question 6 was waiting for, and
+# dabackup's member tables are checked against it.
+#
+# The account's own files are in three places, not one: domains/ has the
+# websites, imap/ has the messages, and the rest of the home directory --
+# the dotfiles and anything outside a domain -- is a second compressed
+# archive at backup/home.tar.zst, listed in home.tar.list beside this.
+backup/
+backup/gzv0908a.gniza-test.invalid/
+backup/gzv0908a.gniza-test.invalid/email/
+backup/gzv0908a.gniza-test.invalid/email/passwd
+backup/gzv0908a.gniza-test.invalid/email/data/
+backup/gzv0908a.gniza-test.invalid/email/data/webmail/
+backup/gzv0908a.gniza-test.invalid/email/data/roundcube.xml
+backup/gzv0908a.gniza-test.invalid/email/data/squirrelmail/
+backup/gzv0908a.gniza-test.invalid/email/data/limit/
+backup/gzv0908a.gniza-test.invalid/email/data/limit/gzv0908a
+backup/gzv0908a.gniza-test.invalid/email/data/limit/sales
+backup/gzv0908a.gniza-test.invalid/email/data/imap/
+backup/gzv0908a.gniza-test.invalid/email/data/imap/.direct_imap_backup
+backup/gzv0908a.gniza-test.invalid/email/quota
+backup/gzv0908a.gniza-test.invalid/email/aliases
+backup/gzv0908a.gniza-test.invalid/email/reply/
+backup/gzv0908a.gniza-test.invalid/email/autoresponder.conf
+backup/gzv0908a.gniza-test.invalid/email/vacation.conf
+backup/gzv0908a.gniza-test.invalid/email/majordomo/
+backup/gzv0908a.gniza-test.invalid/email/email.conf
+backup/gzv0908a.gniza-test.invalid/ftp.passwd
+backup/gzv0908a.gniza-test.invalid/ftp.conf
+backup/gzv0908a.gniza-test.invalid/subdomain.list
+backup/gzv0908a.gniza-test.invalid/domain.conf
+backup/gzv0908a.gniza-test.invalid/domain.usage
+backup/gzv0908a.gniza-test.invalid/domain.ip_list
+backup/gzv0908a.gniza-test.invalid/domain.mime.types
+backup/gzv0908a.gniza-test.invalid/gzv0908a.gniza-test.invalid.db
+backup/email_data/
+backup/email_data/webmail/
+backup/gzv0908a_shop.conf
+backup/gzv0908a_shop.sql
+backup/php/
+backup/user.conf
+backup/user.usage
+backup/crontab.conf
+backup/bandwidth.tally
+backup/ticket.conf
+backup/.shadow
+backup/user.db
+backup/apache_owned_files.list
+backup/backup_options.list
+backup/home.tar.zst
+domains/
+domains/gzv0908a.gniza-test.invalid/
+domains/gzv0908a.gniza-test.invalid/public_html/
+domains/gzv0908a.gniza-test.invalid/public_html/cgi-bin/
+domains/gzv0908a.gniza-test.invalid/public_html/cgi-bin/.htaccess
+domains/gzv0908a.gniza-test.invalid/public_html/index.html
+domains/gzv0908a.gniza-test.invalid/public_ftp/
+domains/gzv0908a.gniza-test.invalid/public_ftp/incoming/
+domains/gzv0908a.gniza-test.invalid/stats/
+domains/gzv0908a.gniza-test.invalid/stats/webalizer.current
+domains/gzv0908a.gniza-test.invalid/stats/daily_usage_202609.png
+domains/gzv0908a.gniza-test.invalid/stats/hourly_usage_202609.png
+domains/gzv0908a.gniza-test.invalid/stats/usage_202609.html
+domains/gzv0908a.gniza-test.invalid/stats/ctry_usage_202609.png
+domains/gzv0908a.gniza-test.invalid/stats/webalizer.hist
+domains/gzv0908a.gniza-test.invalid/stats/usage.png
+domains/gzv0908a.gniza-test.invalid/stats/index.html
+domains/gzv0908a.gniza-test.invalid/logs/
+domains/gzv0908a.gniza-test.invalid/logs/Sep-2026.tar.gz.1
+domains/gzv0908a.gniza-test.invalid/logs/Sep-2026.tar.gz
+imap/
+imap/gzv0908a.gniza-test.invalid/
+imap/gzv0908a.gniza-test.invalid/sales/
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/cur/
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/new/
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/new/1788834830.M718273P39779.uscp,S=444,W=455
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/tmp/
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/dovecot.list.index.log
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/maildirfolder
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/dovecot.index.log
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/dovecot-uidvalidity.6a9f740e
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/dovecot-uidvalidity
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/dovecot-uidlist
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/maildirsize
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/dovecot.index.cache

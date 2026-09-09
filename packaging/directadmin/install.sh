@@ -147,6 +147,17 @@ for image in "$SOURCE_DIR"/directadmin/images/*; do
 	[ -f "$image" ] || continue
 	install -m 0644 "$image" "$PLUGIN_DIR/images/$(basename "$image")"
 done
+# The typefaces, as files. Everything the plugin script prints is wrapped
+# in DirectAdmin's skin, so a font fetched through it is HTML with a woff2
+# inside; the images directory is served as files, which is where every
+# other plugin on a DirectAdmin server keeps its own web fonts.
+if [ -d "$SOURCE_DIR/directadmin/images/fonts" ]; then
+	install -d -m 0755 "$PLUGIN_DIR/images/fonts"
+	for font in "$SOURCE_DIR"/directadmin/images/fonts/*; do
+		[ -f "$font" ] || continue
+		install -m 0644 "$font" "$PLUGIN_DIR/images/fonts/$(basename "$font")"
+	done
+fi
 install -m 0755 "$SOURCE_DIR/directadmin/admin/index.html" "$PLUGIN_DIR/admin/index.html"
 install -m 0755 "$SOURCE_DIR/directadmin/user/index.html" "$PLUGIN_DIR/user/index.html"
 

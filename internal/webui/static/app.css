@@ -1,27 +1,3 @@
-/* The typefaces travel with the plugin; see internal/webui/fonts/README.md.
-   The url is query-only so it resolves against gniza.cgi itself, session
-   token and all, whatever path WHM is serving the plugin from. */
-@font-face {
-  font-family:"Fira Sans"; font-style:normal; font-weight:400; font-display:swap;
-  src:url("?p=font&name=fira-sans-400.woff2") format("woff2");
-}
-@font-face {
-  font-family:"Fira Sans"; font-style:normal; font-weight:500; font-display:swap;
-  src:url("?p=font&name=fira-sans-500.woff2") format("woff2");
-}
-@font-face {
-  font-family:"Fira Sans"; font-style:normal; font-weight:600; font-display:swap;
-  src:url("?p=font&name=fira-sans-600.woff2") format("woff2");
-}
-@font-face {
-  font-family:"Fira Sans"; font-style:normal; font-weight:700; font-display:swap;
-  src:url("?p=font&name=fira-sans-700.woff2") format("woff2");
-}
-@font-face {
-  font-family:"Fira Code"; font-style:normal; font-weight:400 500; font-display:swap;
-  src:url("?p=font&name=fira-code.woff2") format("woff2");
-}
-
 /* Gniza interface styles.
  *
  * Inlined into every page: cpsrvd strips Content-Type from what the plugin

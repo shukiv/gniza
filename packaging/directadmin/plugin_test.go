@@ -3,6 +3,7 @@ package directadmin_test
 import (
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -133,6 +134,14 @@ func TestTheFormIsForwardedFromWhereDirectAdminPutsIt(t *testing.T) {
 		if strings.Contains(stripComments(page), reading) {
 			t.Errorf("the page still reads the request body with %q, which DirectAdmin never fills", reading)
 		}
+	}
+	// And the method is left to curl. Forcing it holds POST across the
+	// redirect the form answers with, so the browser posted again to a
+	// page that only answers GET: pressing Run now on a schedule did the
+	// work and then printed "Method Not Allowed" inside DirectAdmin's
+	// chrome. Without the flag curl turns the 303 into the GET it means.
+	if regexp.MustCompile(`(--request|-X)\s+POST`).MatchString(stripComments(page)) {
+		t.Error("the page forces the method, which re-posts to the page the redirect lands on")
 	}
 }
 
@@ -319,5 +328,29 @@ func TestAPageViewIsNotForwardedAsASubmission(t *testing.T) {
 	// The method is decided by the form as well as by REQUEST_METHOD.
 	if !regexp.MustCompile(`\[ "\$METHOD" = POST \] && \[ -n "\$\{POST:-\}" \]`).MatchString(page) {
 		t.Error("the page forwards a post without asking whether there is a form in it")
+	}
+}
+
+// A page that asks the plugin script for a font gets DirectAdmin's skin
+// wrapped around a woff2, which the browser drops -- the console on 1.709
+// said so for all five faces. DirectAdmin serves a plugin's images
+// directory as files, so the fonts have to be installed there.
+func TestTheTypefacesAreInstalledWhereDirectAdminServesFiles(t *testing.T) {
+	installer := read(t, "install.sh")
+	if !strings.Contains(installer, "images/fonts") {
+		t.Error("the installer does not put the typefaces where DirectAdmin serves them")
+	}
+	if !regexp.MustCompile(`install -m 0644 "\$font"`).MatchString(installer) {
+		t.Error("the typefaces are not installed readable")
+	}
+	// And the package has to carry them, or the installer has nothing to
+	// install: they live once in the repository, embedded in the agent
+	// for WHM and copied into the package for DirectAdmin.
+	makefile, err := os.ReadFile(filepath.Join("..", "..", "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(makefile), "internal/webui/fonts/*.woff2") {
+		t.Error("the DirectAdmin package does not carry the typefaces")
 	}
 }

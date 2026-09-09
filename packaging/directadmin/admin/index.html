@@ -77,8 +77,13 @@ if [ "$METHOD" = POST ] && [ -n "${POST:-}" ]; then
 	# POST=gniza_probe_field=...&csrf=... and stdin held nothing. So the
 	# form is forwarded from there, and reading stdin would forward an
 	# empty body to every save.
+	# The method is curl's to choose: --data-raw makes this a POST, and
+	# curl turns the redirect that answers it into the GET a 303 means.
+	# Forcing it with --request held POST across that redirect, so the
+	# page it landed on -- which answers GET -- refused it, and pressing
+	# Run now on a schedule queued the work and then printed "Method Not
+	# Allowed" inside DirectAdmin's chrome.
 	set -- "$@" \
-		--request POST \
 		--header "Content-Type: application/x-www-form-urlencoded" \
 		--data-raw "${POST:-}"
 fi

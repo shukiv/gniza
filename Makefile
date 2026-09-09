@@ -106,6 +106,15 @@ directadmin-package:
 		packaging/directadmin/admin packaging/directadmin/user \
 		packaging/directadmin/images \
 		$(BIN)/gniza-directadmin/directadmin/
+	@# The typefaces. DirectAdmin wraps everything a plugin prints in its
+	@# own skin, so a font asked for through the plugin script arrives as
+	@# HTML with a woff2 inside it; DirectAdmin serves the images
+	@# directory as files, and that is where they have to be. One copy in
+	@# the repository, in internal/webui/fonts, embedded in the agent for
+	@# WHM and copied here for DirectAdmin.
+	mkdir -p $(BIN)/gniza-directadmin/directadmin/images/fonts
+	cp internal/webui/fonts/*.woff2 internal/webui/fonts/OFL.txt \
+		$(BIN)/gniza-directadmin/directadmin/images/fonts/
 	chmod +x $(BIN)/gniza-directadmin/install.sh $(BIN)/gniza-directadmin/uninstall.sh
 	tar -C $(BIN) --owner=0 --group=0 --numeric-owner --mode='u+rwX,go+rX,go-w' \
 		-czf $(BIN)/gniza-directadmin-$(PLUGIN_ARCH).tar.gz gniza-directadmin

@@ -36,6 +36,10 @@ type page struct {
 	// with a known fault should say so where it is being used.
 	Update *updateNotice
 	Assets assets
+	// Fonts are the @font-face rules for this request. Where the
+	// typefaces are fetched from depends on the panel, so they are
+	// written per request rather than embedded in the stylesheet.
+	Fonts template.CSS
 }
 
 // updateNotice is a release newer than the one running here.
@@ -68,6 +72,7 @@ func (s *Server) renderWithCSRF(
 	view := page{
 		Title: title, Nav: nav, CSRF: csrf,
 		Flash: flashFrom(r), Data: data, Assets: s.assets,
+		Fonts:          fontFaces(fontBaseFor(r)),
 		RunningVersion: agent.Version,
 	}
 	// An account-facing request is confined to the account that opened

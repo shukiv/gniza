@@ -72,6 +72,12 @@ const (
 	// manifestVersion is what the reader checks. A tree written by a
 	// later Gniza is refused rather than misread.
 	manifestVersion = 1
+	// leanManifestVersion is the version of a tree whose home directory
+	// was read where it lies (ADR 0021). It is a separate number rather
+	// than a field on version 1 because a Gniza that does not know to
+	// rebuild the account's own files out of the tree would repack an
+	// archive without them and call it a restore.
+	leanManifestVersion = 2
 	// reservedPrefix is what everything in the tree that is Gniza's
 	// rather than DirectAdmin's is named. An archive whose own members
 	// would land there is refused; see reserveBody for the other thing
@@ -97,6 +103,16 @@ type Manifest struct {
 	// absent for an account with nothing outside its domains.
 	Outer ArchivePart  `json:"outer"`
 	Home  *ArchivePart `json:"home,omitempty"`
+
+	// Lean says the account's own files were never in this archive: they
+	// were read from the home directory in place, and the members for
+	// them are built out of the restored tree when the archive is put
+	// back. See ADR 0021.
+	Lean bool `json:"lean,omitempty"`
+	// HomeArchiveName and HomeCompression are what the nested archive is
+	// written back as, since there was none to copy the name from.
+	HomeArchiveName string `json:"home_archive_name,omitempty"`
+	HomeCompression string `json:"home_compression,omitempty"`
 }
 
 // ArchivePart is one tar.
@@ -228,6 +244,9 @@ type unpacker struct {
 	// ordinal counts members across both archives, so a body that has to
 	// be put somewhere else has somewhere unique to go.
 	ordinal int
+	// lean marks an archive that was asked for without the account's own
+	// files. See leanMember for what that changes.
+	lean bool
 }
 
 // readTar walks one archive, recording every header and writing every
@@ -247,6 +266,15 @@ func (u *unpacker) readTar(ctx context.Context, tr *tar.Reader, manifest *Manife
 		clean, err := safeMemberName(header.Name)
 		if err != nil {
 			return err
+		}
+		if u.lean && !home {
+			skip, err := leanMember(clean, header.Typeflag)
+			if err != nil {
+				return err
+			}
+			if skip {
+				continue
+			}
 		}
 		u.ordinal++
 		member := Member{
@@ -392,6 +420,18 @@ func (Layout) PackArchive(ctx context.Context, dir, account, outDir string) (str
 		return "", fmt.Errorf("dabackup: open %s: %w", dir, err)
 	}
 	defer func() { _ = root.Close() }()
+
+	// An account read where it lies has no members in the manifest for
+	// its own files. They are built from the tree restic restored, and
+	// the archive says it holds a whole account, because it does.
+	if manifest.Lean {
+		if err := hydrate(dir, &manifest); err != nil {
+			return "", err
+		}
+		if err := sayItHoldsEverything(root, &manifest); err != nil {
+			return "", err
+		}
+	}
 
 	// The nested archive is built first, into a file beside the one being
 	// written, because its length is a header in the outer archive and is
@@ -579,10 +619,15 @@ func readManifest(dir string) (Manifest, error) {
 	if err := json.Unmarshal(body, &manifest); err != nil {
 		return Manifest{}, fmt.Errorf("dabackup: read the archive manifest: %w", err)
 	}
-	if manifest.Version != manifestVersion {
+	if manifest.Version != manifestVersion && manifest.Version != leanManifestVersion {
 		return Manifest{}, fmt.Errorf(
-			"dabackup: this tree was written by another version of Gniza (manifest %d, this reads %d)",
-			manifest.Version, manifestVersion)
+			"dabackup: this tree was written by another version of Gniza (manifest %d, this reads %d and %d)",
+			manifest.Version, manifestVersion, leanManifestVersion)
+	}
+	if manifest.Lean != (manifest.Version == leanManifestVersion) {
+		return Manifest{}, fmt.Errorf(
+			"dabackup: manifest %d does not agree with itself about where this account's files were read",
+			manifest.Version)
 	}
 	if len(manifest.Outer.Members) == 0 {
 		return Manifest{}, fmt.Errorf("dabackup: the archive manifest describes no archive")

@@ -1,0 +1,114 @@
+# What DirectAdmin 1.709 writes when the backup task asks for a chosen
+# set of data rather than all of it. Taken from the disposable account
+# gzv0908a on the validation host on 2026-09-09; the domain is under
+# .invalid and there is no customer data here.
+#
+# The task line is the one the admin backup page posts:
+#
+#   action=backup&owner=admin&type=admin&value=multiple&when=now
+#   &where=local&local_path=<dir>&select0=<user>
+#   &what=select&option0=<value>&option1=<value>...
+#
+# run through "directadmin taskq --run=", and the option values are the
+# ones the page's fourth step offers: domain, subdomain, email,
+# email_data, emailsettings, forwarder, autoresponder, vacation, list,
+# ftp, ftpsettings, database, database_data, trash.
+#
+# Leaving out "domain" takes with it both domains/ and the nested
+# backup/home.tar.zst -- the whole of the account's own files. What is
+# left is what Gniza cannot read from /home itself.
+#
+# Leaving out "email" as well takes imap/, but it also takes the
+# mailboxes' own passwords (backup/<domain>/email/passwd), their quotas
+# and their webmail settings, which are not in /home either. So "email"
+# stays, and imap/ is dropped from the metadata part after unpacking
+# instead: the messages are read from /home/<user>/imap in place.
+
+## what=select, every option except domain
+backup/
+backup/gzv0908a.gniza-test.invalid/
+backup/gzv0908a.gniza-test.invalid/email/
+backup/gzv0908a.gniza-test.invalid/email/passwd
+backup/gzv0908a.gniza-test.invalid/email/data/
+backup/gzv0908a.gniza-test.invalid/email/data/webmail/
+backup/gzv0908a.gniza-test.invalid/email/data/roundcube.xml
+backup/gzv0908a.gniza-test.invalid/email/data/squirrelmail/
+backup/gzv0908a.gniza-test.invalid/email/data/limit/
+backup/gzv0908a.gniza-test.invalid/email/data/limit/gzv0908a
+backup/gzv0908a.gniza-test.invalid/email/data/limit/sales
+backup/gzv0908a.gniza-test.invalid/email/data/imap/
+backup/gzv0908a.gniza-test.invalid/email/data/imap/.direct_imap_backup
+backup/gzv0908a.gniza-test.invalid/email/quota
+backup/gzv0908a.gniza-test.invalid/email/aliases
+backup/gzv0908a.gniza-test.invalid/email/reply/
+backup/gzv0908a.gniza-test.invalid/email/autoresponder.conf
+backup/gzv0908a.gniza-test.invalid/email/vacation.conf
+backup/gzv0908a.gniza-test.invalid/email/majordomo/
+backup/gzv0908a.gniza-test.invalid/email/email.conf
+backup/gzv0908a.gniza-test.invalid/ftp.passwd
+backup/gzv0908a.gniza-test.invalid/ftp.conf
+backup/gzv0908a.gniza-test.invalid/subdomain.list
+backup/gzv0908a.gniza-test.invalid/domain.conf
+backup/gzv0908a.gniza-test.invalid/domain.usage
+backup/gzv0908a.gniza-test.invalid/domain.ip_list
+backup/gzv0908a.gniza-test.invalid/domain.mime.types
+backup/gzv0908a.gniza-test.invalid/gzv0908a.gniza-test.invalid.db
+backup/email_data/
+backup/email_data/webmail/
+backup/gzv0908a_shop.conf
+backup/gzv0908a_shop.sql
+backup/php/
+backup/user.conf
+backup/user.usage
+backup/crontab.conf
+backup/bandwidth.tally
+backup/ticket.conf
+backup/.shadow
+backup/user.db
+backup/backup_options.list
+imap/
+imap/gzv0908a.gniza-test.invalid/
+imap/gzv0908a.gniza-test.invalid/sales/
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/cur/
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/new/
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/new/1788834830.M718273P39779.uscp,S=444,W=455
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/tmp/
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/dovecot.list.index.log
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/maildirfolder
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/dovecot.index.log
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/dovecot-uidvalidity.6a9f740e
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/dovecot-uidvalidity
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/dovecot-uidlist
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/maildirsize
+imap/gzv0908a.gniza-test.invalid/sales/Maildir/dovecot.index.cache
+
+## what=select, every option except domain and email -- for comparison only
+backup/
+backup/gzv0908a.gniza-test.invalid/
+backup/gzv0908a.gniza-test.invalid/email/
+backup/gzv0908a.gniza-test.invalid/email/aliases
+backup/gzv0908a.gniza-test.invalid/email/reply/
+backup/gzv0908a.gniza-test.invalid/email/autoresponder.conf
+backup/gzv0908a.gniza-test.invalid/email/vacation.conf
+backup/gzv0908a.gniza-test.invalid/email/majordomo/
+backup/gzv0908a.gniza-test.invalid/email/email.conf
+backup/gzv0908a.gniza-test.invalid/ftp.passwd
+backup/gzv0908a.gniza-test.invalid/ftp.conf
+backup/gzv0908a.gniza-test.invalid/subdomain.list
+backup/gzv0908a.gniza-test.invalid/domain.conf
+backup/gzv0908a.gniza-test.invalid/domain.usage
+backup/gzv0908a.gniza-test.invalid/domain.ip_list
+backup/gzv0908a.gniza-test.invalid/domain.mime.types
+backup/gzv0908a.gniza-test.invalid/gzv0908a.gniza-test.invalid.db
+backup/gzv0908a_shop.conf
+backup/gzv0908a_shop.sql
+backup/php/
+backup/user.conf
+backup/user.usage
+backup/crontab.conf
+backup/bandwidth.tally
+backup/ticket.conf
+backup/.shadow
+backup/user.db
+backup/backup_options.list

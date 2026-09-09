@@ -187,6 +187,13 @@ func (r *Real) NativeExcludes(home string) []string {
 		// compressed, written and read again every night, to restore
 		// something a single command regenerates.
 		".cagefs", "lscache",
+		// And JetBackup's own per-account directory, which belongs to
+		// root rather than to the account. DirectAdmin extracts the home
+		// archive as the account, so carrying a root-owned member takes
+		// the whole restore down on the first utime -- found by the first
+		// restore drill, see ADR 0021. It was empty on all 142 accounts
+		// of the validation host, and JetBackup makes it again.
+		".jb-roundcube",
 	}
 	excludes := make([]string, 0, len(skipped))
 	for _, name := range skipped {

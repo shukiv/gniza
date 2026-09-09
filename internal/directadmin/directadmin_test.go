@@ -140,3 +140,27 @@ func TestTheAccountsOwnBackupDirectoriesAreLeftOut(t *testing.T) {
 		}
 	}
 }
+
+// JetBackup keeps a directory of its own inside every account's home, and
+// it belongs to root rather than to the account. DirectAdmin's own restore
+// extracts the home archive as the account, so a root-owned member in it
+// fails on the first attempt to set its times and takes the whole restore
+// down with it:
+//
+//	Error extracting /home/gzv0908a/backups/backup/home.tar.zst :
+//	/bin/tar: .jb-roundcube: Cannot utime: Operation not permitted
+//
+// It was found by the first restore drill on a live account. Nothing of
+// the customer's is in it -- it was empty on all 142 accounts of the
+// validation host -- and JetBackup makes it again.
+func TestTheDirectoriesTheAccountDoesNotOwnAreLeftOut(t *testing.T) {
+	excludes := (&Real{}).NativeExcludes("/home/studio")
+	found := false
+	for _, exclude := range excludes {
+		found = found || exclude == "/home/studio/.jb-roundcube"
+	}
+	if !found {
+		t.Errorf("JetBackup's own directory is not excluded, and a restore that "+
+			"carries it fails: %v", excludes)
+	}
+}

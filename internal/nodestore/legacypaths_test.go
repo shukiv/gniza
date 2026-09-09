@@ -21,6 +21,10 @@ func TestTheOldInstallationsPathsAreRewritten(t *testing.T) {
 	settings.StagingRoot = "/var/lib/cprest/staging"
 	settings.ResticCache = "/var/cache/cprest/restic"
 	settings.ConfigDir = "/etc/cprest"
+	// An operator's own file, put beside the keys Gniza generates. The
+	// rename moves the directory; a path left pointing into the old one
+	// is handed to every restic run as a file that is not there.
+	settings.ResticCACert = "/etc/cprest/ca.pem"
 	if err := store.SaveSettings(settings); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +52,8 @@ func TestTheOldInstallationsPathsAreRewritten(t *testing.T) {
 	}
 	if after.StagingRoot != "/var/lib/gniza/staging" ||
 		after.ResticCache != "/var/cache/gniza/restic" ||
-		after.ConfigDir != "/etc/gniza" {
+		after.ConfigDir != "/etc/gniza" ||
+		after.ResticCACert != "/etc/gniza/ca.pem" {
 		t.Errorf("settings still name the old directories: %+v", after)
 	}
 

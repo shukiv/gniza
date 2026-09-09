@@ -43,9 +43,16 @@ func (s *Store) MigrateLegacyPaths() (int, error) {
 		moved.StagingRoot = underNewName(settings.StagingRoot)
 		moved.ResticCache = underNewName(settings.ResticCache)
 		moved.ConfigDir = underNewName(settings.ConfigDir)
+		// An operator's own file rather than one Gniza made, and usually
+		// put beside the keys that are: a certificate left pointing into
+		// the old directory is handed to every restic run as a file that
+		// is not there, so every backup to that destination fails after
+		// the rename.
+		moved.ResticCACert = underNewName(settings.ResticCACert)
 		if moved.StagingRoot != settings.StagingRoot ||
 			moved.ResticCache != settings.ResticCache ||
-			moved.ConfigDir != settings.ConfigDir {
+			moved.ConfigDir != settings.ConfigDir ||
+			moved.ResticCACert != settings.ResticCACert {
 			if err := s.SaveSettings(moved); err != nil {
 				return changed, err
 			}

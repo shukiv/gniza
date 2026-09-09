@@ -94,7 +94,15 @@ func TestNativeCommandProcess(t *testing.T) {
 			identity = "victim"
 		}
 		archive := filepath.Join(task.Get("local_path"), "user.admin."+account+".tar.zst")
-		writeNativeArchive(t, archive, identity)
+		// A DirectAdmin that honours the selection writes the account's
+		// records and its messages and nothing of the account's own
+		// files. One that does not -- the "ignores-selection" scenario --
+		// writes the whole account whatever it was asked for.
+		if task.Get("what") == "select" && scenario != "ignores-selection" {
+			writeLeanNativeArchive(t, archive, identity)
+		} else {
+			writeNativeArchive(t, archive, identity)
+		}
 		if scenario == "symlink" {
 			if err := os.Rename(archive, archive+".held"); err != nil {
 				os.Exit(2)
@@ -126,6 +134,45 @@ func TestNativeCommandProcess(t *testing.T) {
 		os.Exit(1)
 	}
 	os.Exit(0)
+}
+
+// writeLeanNativeArchive is what DirectAdmin writes for a backup that
+// asked for everything except "domain": no domains/, no nested home
+// archive, and the messages that come with "email".
+func writeLeanNativeArchive(t *testing.T, filename, account string) {
+	t.Helper()
+	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	z, err := zstd.NewWriter(f, zstd.WithEncoderConcurrency(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tarball := tar.NewWriter(z)
+	for name, body := range map[string]string{
+		"backup/user.conf":                     "username=" + account + "\nusertype=user\n",
+		"backup/backup_options.list":           "email\nsubdomain\n",
+		"imap/studio.example/hi/Maildir/new/1": "a message",
+	} {
+		if err := tarball.WriteHeader(&tar.Header{
+			Name: name, Mode: 0o600, Size: int64(len(body)), Typeflag: tar.TypeReg,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tarball.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tarball.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := z.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func writeNativeArchive(t *testing.T, filename, account string) {

@@ -286,6 +286,14 @@ func (r *Real) runNative(ctx context.Context, action, selection, destination str
 				return transcript, fmt.Errorf("directadmin: native task %s did not match the requested operation", key)
 			}
 		}
+		// A backup that asked for less than the whole account has to have
+		// asked for exactly the set Gniza can put back. A task line that
+		// arrived with one option missing is a backup missing that part
+		// of the account, and it is refused rather than stored.
+		if task.Has("what") && !selectedTheLeanSet(task) {
+			return transcript, fmt.Errorf(
+				"directadmin: native task asked for a set of data this cannot put back together")
+		}
 		if isStart {
 			started++
 		} else {
@@ -301,7 +309,44 @@ func (r *Real) runNative(ctx context.Context, action, selection, destination str
 	return transcript, nil
 }
 
-func (r *Real) stageNative(ctx context.Context, account, staging string, accountBytes uint64) (string, error) {
+// leanOptions is every value DirectAdmin's backup page offers under
+// "What" except "domain", which is the one that carries the account's own
+// files: domains/ and the nested home archive both go with it. "email"
+// stays because leaving it out takes the mailboxes' own passwords and
+// quotas as well, and those are nowhere in the home directory. See ADR
+// 0021 and testdata/lean-account.tar.list.
+var leanOptions = []string{
+	"subdomain", "email", "emailsettings", "forwarder", "autoresponder",
+	"vacation", "list", "ftp", "ftpsettings", "database", "database_data",
+	"trash",
+}
+
+// backupTask is the line DirectAdmin's own backup page posts, which
+// "directadmin taskq --run=" takes. lean asks for the chosen set rather
+// than all of it.
+func backupTask(account, destination string, lean bool) url.Values {
+	task := url.Values{
+		"action": {"backup"}, "local_path": {destination}, "owner": {"admin"},
+		"select0": {account}, "type": {"admin"}, "value": {"multiple"},
+		"when": {"now"}, "where": {"local"},
+	}
+	if !lean {
+		return task
+	}
+	task.Set("what", "select")
+	for i, option := range leanOptions {
+		task.Set("option"+strconv.Itoa(i), option)
+	}
+	return task
+}
+
+// stageNative runs DirectAdmin's own backup and returns the archive it
+// wrote, copied into Gniza's private staging.
+//
+// reserveBytes is what the caller expects the archive to cost. A whole
+// account archive costs the account; one asked for without the account's
+// files costs its mail, which is the only bulk left in it.
+func (r *Real) stageNative(ctx context.Context, account, staging string, reserveBytes uint64, lean bool) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -330,13 +375,32 @@ func (r *Real) stageNative(ctx context.Context, account, staging string, account
 	// Native working data, its completed archive and the private handoff can
 	// coexist. Check BOTH filesystems; the ordinary staging preflight only
 	// knows about the latter. This is an estimate, not a disk reservation.
-	if err := nativeSpace(w.destination, accountBytes, 3); err != nil {
+	// A whole-account run holds three: the account's own files copied
+	// into the working directory, the nested home archive compressed
+	// beside them, and the outer archive around both. A run that asked
+	// for neither of those holds two -- the messages, and the archive
+	// they are compressed into -- and reserving a third of an account's
+	// mail it will never write refuses backups that would have fitted.
+	copies := uint64(3)
+	if lean {
+		copies = 2
+	}
+	if err := nativeSpace(w.destination, reserveBytes, copies); err != nil {
 		return "", err
 	}
-	if err := nativeSpace(staging, accountBytes, 1); err != nil {
+	if err := nativeSpace(staging, reserveBytes, 1); err != nil {
 		return "", err
 	}
-	transcript, err := r.runNative(ctx, "backup", account, w.destination, "admin-backup", "--destination="+w.destination, "--user="+account)
+	// The whole-account backup goes through the command DirectAdmin
+	// documents for it. A selective one has no command -- admin-backup
+	// takes only --destination and --user -- so it goes through the task
+	// line the backup page posts, which is how a native restore already
+	// runs.
+	args := []string{"admin-backup", "--destination=" + w.destination, "--user=" + account}
+	if lean {
+		args = []string{"taskq", "--run=" + backupTask(account, w.destination, true).Encode()}
+	}
+	transcript, err := r.runNative(ctx, "backup", account, w.destination, args...)
 	if err != nil {
 		// Unlike Apply, Stage has no transcript return field. Keep a bounded,
 		// redacted diagnostic in its error so the job record remains useful.
@@ -375,4 +439,26 @@ func nativeSpace(dir string, size, copies uint64) error {
 		return fmt.Errorf("directadmin: native staging needs %d bytes including reserve; %s has %d available", required, dir, available)
 	}
 	return nil
+}
+
+// selectedTheLeanSet says whether this task asked for exactly what a
+// backup that reads the home directory in place asks for.
+func selectedTheLeanSet(task url.Values) bool {
+	if task.Get("what") != "select" {
+		return false
+	}
+	wanted := map[string]bool{}
+	for _, option := range leanOptions {
+		wanted[option] = true
+	}
+	for key, values := range task {
+		if !strings.HasPrefix(key, "option") || len(values) != 1 {
+			continue
+		}
+		if !wanted[values[0]] {
+			return false
+		}
+		delete(wanted, values[0])
+	}
+	return len(wanted) == 0
 }

@@ -90,8 +90,17 @@ decision about their panel, not Gniza's, and Gniza does not set it.
    from that tree's own stat rather than from a manifest that never
    described them, and rewrite `backup/backup_options.list` to the full
    set so DirectAdmin's restore does not skip what it is being handed.
+   A file reached under two names is carried as a link to the first,
+   once per archive, because DirectAdmin's own backup does that and an
+   archive that did not would restore a linked Maildir at twice its
+   size.
 5. Nothing ships until a restore drill on a real archive proves point 4.
-   A backup that cannot be restored is worse than an expensive one.
+   A backup that cannot be restored is worse than an expensive one. So
+   the shape is asked for one server at a time, through the agent's
+   `-directadmin-read-home-in-place`, and a server that was not asked
+   keeps writing the whole account to disk as it did before. The flag
+   goes away, and the shape becomes the only one, when the drill has
+   been run on a server that was restored from.
 
 ## Consequences
 
@@ -101,7 +110,9 @@ decision about their panel, not Gniza's, and Gniza does not set it.
   the snapshot change and there is no parent to compare against.
 - Two shapes of snapshot now exist for the same account. Restore has to
   recognise which it has, and retention has to keep grouping them
-  together rather than ageing the old shape out on its own.
+  together rather than ageing the old shape out on its own. Retention
+  groups on `host,tags` and never on paths, so the home part moving from
+  staging to `/home/<user>` does not split a group.
 - `stagingEstimate` can no longer key on the layout being an
   `ArchivePacker`, because the same layout now packs or does not
   depending on what the server was found to support.

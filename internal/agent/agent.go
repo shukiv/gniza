@@ -353,7 +353,7 @@ func (a *Agent) RunJob(ctx context.Context, assignment protocol.JobAssignment) p
 	if assignment.SizeEstimate > size {
 		size = assignment.SizeEstimate
 	}
-	estimate := stagingEstimate(size, pkgacct.Mode(assignment.PayloadMode), a.provider.Layout())
+	estimate := stagingEstimate(size, pkgacct.Mode(assignment.PayloadMode), a.provider.Layout(), a.provider)
 	if system {
 		// Configuration files and an EasyApache profile: megabytes, and
 		// the same every night.
@@ -555,13 +555,14 @@ const (
 // and taken apart there, so at the peak the account is on that disk
 // twice -- once compressed and once not -- and a fifth of it is the
 // estimate that lets a run fill the disk instead of being refused.
-func stagingEstimate(size uint64, mode pkgacct.Mode, layout panel.ArchiveLayout) uint64 {
+func stagingEstimate(size uint64, mode pkgacct.Mode, layout panel.ArchiveLayout, provider any) uint64 {
 	if mode != pkgacct.ModeSplit {
 		// One archive of the whole account, written into staging.
 		return size
 	}
 	share := uint64(float64(size) * splitStagingShare)
-	if _, packs := layout.(panel.ArchivePacker); packs {
+	inPlace, asked := provider.(panel.InPlaceReader)
+	if _, packs := layout.(panel.ArchivePacker); packs && !(asked && inPlace.ReadsHomeInPlace()) {
 		share = 2 * size
 	}
 	if share < splitStagingFloor {

@@ -2,6 +2,7 @@ package directadmin
 
 import (
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,7 @@ import (
 // blob that is a full copy every night.
 func TestSplitStagingLeavesTheAccountAsFilesResticCanDeduplicate(t *testing.T) {
 	r := nativeHost(t)
+	r.ReadHomeInPlace = true
 	staging := privateStaging(t)
 
 	payload, err := r.Stage(t.Context(), panel.StageRequest{
@@ -41,7 +43,9 @@ func TestSplitStagingLeavesTheAccountAsFilesResticCanDeduplicate(t *testing.T) {
 	if kinds[pkgacct.PartMetadata] != dabackup.MetadataPart(staging) {
 		t.Errorf("the account's records are at %q", kinds[pkgacct.PartMetadata])
 	}
-	if kinds[pkgacct.PartHomedir] != dabackup.HomedirPart(staging) {
+	// The home directory is the one the account is on. Copying it into
+	// staging first is what this stopped doing: see ADR 0021.
+	if kinds[pkgacct.PartHomedir] != filepath.Join(r.HomeRoot, "studio") {
 		t.Errorf("the home directory is at %q", kinds[pkgacct.PartHomedir])
 	}
 	if kinds[pkgacct.PartArchive] != "" {
@@ -67,6 +71,7 @@ func TestSplitStagingLeavesTheAccountAsFilesResticCanDeduplicate(t *testing.T) {
 // together is a backup nothing can restore.
 func TestASplitStagedAccountGoesBackIntoItsOwnArchive(t *testing.T) {
 	r := nativeHost(t)
+	r.ReadHomeInPlace = true
 	staging := privateStaging(t)
 
 	if _, err := r.Stage(t.Context(), panel.StageRequest{
@@ -74,6 +79,9 @@ func TestASplitStagedAccountGoesBackIntoItsOwnArchive(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("staging in parts: %v", err)
 	}
+	// What restic restores beside the metadata part: a copy of the home
+	// directory it read where it lay.
+	restoreHome(t, staging)
 	rebuilt, err := (dabackup.Layout{}).PackArchive(t.Context(), staging, "studio", t.TempDir())
 	if err != nil {
 		t.Fatalf("putting the account back into an archive: %v", err)
@@ -103,5 +111,142 @@ func TestSplitStagingStillRefusesToLeavePartOfTheAccountOut(t *testing.T) {
 		if _, err := r.Stage(t.Context(), req); !errors.Is(err, ErrUnverified) {
 			t.Errorf("leaving out %s: err = %v, want it to say this is not established yet", what, err)
 		}
+	}
+}
+
+// restoreHome puts back what restic stored for the home part, which is
+// the tree a rebuilt archive is made out of.
+func restoreHome(t *testing.T, staging string) {
+	t.Helper()
+	home := dabackup.HomedirPart(staging)
+	if err := os.MkdirAll(filepath.Join(home, "domains", "studio.example", "public_html"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(home, "domains", "studio.example", "public_html", "index.html"),
+		[]byte("fixture"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".bashrc"), []byte("umask 022\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The backup asks DirectAdmin for everything except the account's own
+// files, through the task line its own backup page posts. Asking for all
+// of it is what made a DirectAdmin server read, compress, write, unpack
+// and re-read every account every night.
+func TestTheBackupAsksForEverythingExceptTheAccountsOwnFiles(t *testing.T) {
+	r := nativeHost(t)
+	r.ReadHomeInPlace = true
+	if _, err := r.Stage(t.Context(), panel.StageRequest{
+		Account: panel.AccountInfo{User: "studio"}, StagingDir: privateStaging(t),
+		Mode: pkgacct.ModeSplit,
+	}); err != nil {
+		t.Fatalf("staging in parts: %v", err)
+	}
+	body, err := os.ReadFile(os.Getenv("GNIZA_NATIVE_CAPTURE"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := url.ParseQuery(string(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Get("what") != "select" {
+		t.Errorf("the backup asked for %q rather than a chosen set", task.Get("what"))
+	}
+	asked := map[string]bool{}
+	for key, values := range task {
+		if strings.HasPrefix(key, "option") {
+			asked[values[0]] = true
+		}
+	}
+	if asked["domain"] {
+		t.Error("the backup asked for the account's own files, which restic reads where they lie")
+	}
+	// The mailboxes' passwords, quotas and webmail settings come with
+	// "email" and are nowhere in the home directory.
+	if !asked["email"] {
+		t.Error("the backup did not ask for the mailboxes")
+	}
+	for _, want := range []string{"database", "database_data", "ftp", "subdomain"} {
+		if !asked[want] {
+			t.Errorf("the backup did not ask for %s", want)
+		}
+	}
+}
+
+// A DirectAdmin that reads the selection and backs up the whole account
+// anyway is one this cannot read in place: what it wrote is the account,
+// and unpacking it as though it were records alone would store the files
+// twice. It goes back to taking the archive apart, and says so.
+func TestAServerThatIgnoresTheSelectionGoesBackToTheArchive(t *testing.T) {
+	r := nativeHost(t)
+	r.ReadHomeInPlace = true
+	t.Setenv("GNIZA_NATIVE_SCENARIO", "ignores-selection")
+	staging := privateStaging(t)
+
+	payload, err := r.Stage(t.Context(), panel.StageRequest{
+		Account: panel.AccountInfo{User: "studio"}, StagingDir: staging, Mode: pkgacct.ModeSplit,
+	})
+	if err != nil {
+		t.Fatalf("staging in parts: %v", err)
+	}
+	if !payload.Degraded || payload.Reason == "" {
+		t.Error("a server that writes the whole account every night does not say so")
+	}
+	kinds := map[pkgacct.PartKind]string{}
+	for _, part := range payload.Parts {
+		kinds[part.Kind] = part.Path
+	}
+	if kinds[pkgacct.PartHomedir] != dabackup.HomedirPart(staging) {
+		t.Errorf("the home directory is at %q, not the tree the archive was taken apart into",
+			kinds[pkgacct.PartHomedir])
+	}
+	// And it does not ask again: the next account on this server takes
+	// the whole archive without a wasted attempt at a selective one.
+	if r.leanBackups.Load() != -1 {
+		t.Errorf("the server was not remembered as one that ignores the selection")
+	}
+}
+
+// Reading the account where it lies changes the shape of what a restore
+// is built from, and ADR 0021 says nothing ships on that shape until a
+// restore drill on a real archive proves it can be rebuilt. So the
+// server has to be told to do it, one server at a time, and a server
+// that was not told does what it did before.
+func TestReadingTheHomeDirectoryInPlaceWaitsToBeAskedFor(t *testing.T) {
+	r := nativeHost(t)
+	staging := privateStaging(t)
+	payload, err := r.Stage(t.Context(), panel.StageRequest{
+		Account: panel.AccountInfo{User: "studio"}, StagingDir: staging, Mode: pkgacct.ModeSplit,
+	})
+	if err != nil {
+		t.Fatalf("staging in parts: %v", err)
+	}
+	kinds := map[pkgacct.PartKind]string{}
+	for _, part := range payload.Parts {
+		kinds[part.Kind] = part.Path
+	}
+	if kinds[pkgacct.PartHomedir] != dabackup.HomedirPart(staging) {
+		t.Errorf("the home directory is at %q, and this server was never asked to read one in place",
+			kinds[pkgacct.PartHomedir])
+	}
+	body, err := os.ReadFile(os.Getenv("GNIZA_NATIVE_CAPTURE"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := url.ParseQuery(string(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// No chosen set at all: "admin-backup", which is the command
+	// DirectAdmin documents for a whole account.
+	if task.Has("what") {
+		t.Errorf("the backup asked for the chosen set %q", task.Get("what"))
+	}
+	if r.ReadsHomeInPlace() {
+		t.Error("the server reports that it reads home directories in place")
 	}
 }

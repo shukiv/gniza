@@ -141,6 +141,17 @@ type ArchivePacker interface {
 	PackArchive(ctx context.Context, dir, account, outDir string) (string, error)
 }
 
+// InPlaceReader is a provider that packs an archive but has been found to
+// produce one without the account's own files in it, so the home
+// directory is read where it lies after all.
+//
+// It is asked rather than assumed because the same panel does one or the
+// other depending on what the server it is running on turned out to
+// honour, and the answer is learned from a real backup. See ADR 0021.
+type InPlaceReader interface {
+	ReadsHomeInPlace() bool
+}
+
 // UsableDomainName refuses anything that is not a domain name.
 //
 // A name reaches this from an operator's choice in the interface and is

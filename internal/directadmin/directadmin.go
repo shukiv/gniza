@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/shukiv/gniza/internal/layout/dabackup"
 	"github.com/shukiv/gniza/internal/panel"
@@ -76,7 +77,20 @@ type Real struct {
 	// Empty selects /var/lib/gniza-directadmin-native. Never put it under
 	// an account-writable directory or broaden the service state permissions.
 	NativeRoot string
-	lookupUser func(string) (*user.User, error)
+	// ReadHomeInPlace asks this server for the shape ADR 0021 describes:
+	// a backup of everything except the account's own files, which restic
+	// reads from /home where they already are. It is asked for one server
+	// at a time rather than assumed, because the archive a restore is
+	// built from is rebuilt out of the restored tree rather than copied
+	// out of a manifest, and a server should not be moved onto that shape
+	// until a restore drill on it has proved the rebuild.
+	ReadHomeInPlace bool
+	lookupUser      func(string) (*user.User, error)
+	// leanBackups is what this server was found to do with a backup that
+	// asks for less than the whole account: 0 not yet known, 1 honoured,
+	// -1 ignored. Learned from a real run rather than from a version
+	// number, and learned again after a restart.
+	leanBackups atomic.Int32
 }
 
 var _ panel.Provider = (*Real)(nil)
@@ -166,6 +180,13 @@ func (r *Real) NativeExcludes(home string) []string {
 	skipped := []string{
 		"backups", "user_backups", "admin_backups",
 		"usr", "bin", "etc", "lib", "lib64", "tmp", "var", "sbin", "dev",
+		// Not DirectAdmin's list, and not the customer's data either:
+		// CloudLinux rebuilds .cagefs from the system's own files and
+		// LiteSpeed rebuilds lscache from the site. On the validation
+		// host .cagefs was 3.2 GiB of one 10.8 GiB account -- read,
+		// compressed, written and read again every night, to restore
+		// something a single command regenerates.
+		".cagefs", "lscache",
 	}
 	excludes := make([]string, 0, len(skipped))
 	for _, name := range skipped {
@@ -396,7 +417,7 @@ func (r *Real) Stage(ctx context.Context, req panel.StageRequest) (pkgacct.Paylo
 	if _, err := r.userConf(req.Account.User); err != nil {
 		return pkgacct.Payload{}, err
 	}
-	archive, err := r.stageNative(ctx, req.Account.User, req.StagingDir, req.Account.SizeBytes)
+	archive, err := r.stageNative(ctx, req.Account.User, req.StagingDir, req.Account.SizeBytes, false)
 	if err != nil {
 		return pkgacct.Payload{}, err
 	}
@@ -428,18 +449,48 @@ func (r *Real) stageSplit(ctx context.Context, req panel.StageRequest) (pkgacct.
 	if _, err := r.userConf(account); err != nil {
 		return pkgacct.Payload{}, err
 	}
-	// The account is on this disk twice at the peak: the archive
-	// DirectAdmin wrote, and the tree it is taken apart into. stageNative
-	// checks for one of those; this is the other.
 	if err := os.MkdirAll(req.StagingDir, 0o700); err != nil {
 		return pkgacct.Payload{}, err
 	}
-	if err := nativeSpace(req.StagingDir, req.Account.SizeBytes, 2); err != nil {
-		return pkgacct.Payload{}, err
+	archive := ""
+	ignored := false
+	if r.ReadHomeInPlace && r.leanBackups.Load() >= 0 {
+		payload, whole, err := r.stageInPlace(ctx, req)
+		if err == nil {
+			r.leanBackups.Store(1)
+			return payload, nil
+		}
+		if !errors.Is(err, errSelectionIgnored) {
+			return pkgacct.Payload{}, err
+		}
+		// This DirectAdmin read the selection and backed up the whole
+		// account anyway. Every run on this server from here on takes the
+		// archive apart, which is what it did before ADR 0021, and the
+		// operator is told why through the payload's reason.
+		//
+		// The archive it wrote is the one the old path needs, so it is
+		// taken apart rather than asked for again: a server that does
+		// this should pay for one backup tonight, not two.
+		r.leanBackups.Store(-1)
+		r.debug("this DirectAdmin ignored the backup selection", "account", account, "error", err)
+		ignored = true
+		archive = whole
+		if err := clearParts(req.StagingDir); err != nil {
+			return pkgacct.Payload{}, err
+		}
 	}
-	archive, err := r.stageNative(ctx, account, req.StagingDir, req.Account.SizeBytes)
-	if err != nil {
-		return pkgacct.Payload{}, err
+	if archive == "" {
+		// The account is on this disk twice at the peak: the archive
+		// DirectAdmin wrote, and the tree it is taken apart into.
+		// stageNative checks for one of those; this is the other.
+		if err := nativeSpace(req.StagingDir, req.Account.SizeBytes, 2); err != nil {
+			return pkgacct.Payload{}, err
+		}
+		var err error
+		archive, err = r.stageNative(ctx, account, req.StagingDir, req.Account.SizeBytes, false)
+		if err != nil {
+			return pkgacct.Payload{}, err
+		}
 	}
 	// stageNative has already bound the archive's own identity record to
 	// this account, so what is taken apart below is known to be theirs.
@@ -462,7 +513,121 @@ func (r *Real) stageSplit(ctx context.Context, req panel.StageRequest) (pkgacct.
 			{Kind: pkgacct.PartHomedir, Path: dabackup.HomedirPart(req.StagingDir)},
 		},
 	}
+	if ignored {
+		// Only when this server was asked to read the account where it
+		// lies and would not. A server that was never asked is doing what
+		// it was told, and saying it is degraded would be Gniza
+		// complaining about its own configuration.
+		payload.Degraded = true
+		payload.Reason = "This DirectAdmin backs up the whole account whether or not the " +
+			"backup asks for less, so the account is written to disk and taken apart " +
+			"again every night instead of being read where it lies."
+	}
 	return payload, payload.Verify()
+}
+
+// ReadsHomeInPlace says whether a backup on this server has come back
+// without the account's own files in it. Until one has, the answer is no
+// and the room reserved is the room the old shape needed.
+func (r *Real) ReadsHomeInPlace() bool { return r.leanBackups.Load() == 1 }
+
+// errSelectionIgnored is a DirectAdmin that produced a whole-account
+// archive for a backup that asked for less than one.
+var errSelectionIgnored = errors.New("directadmin: the backup selection was ignored")
+
+// stageInPlace stages the account the way cPanel has always staged one:
+// DirectAdmin writes its records, and the account's own files are handed
+// to restic as the path they are already on.
+//
+// What that costs is DirectAdmin reading the mail once, because asking
+// for the mailboxes' passwords means asking for "email" and "email"
+// brings the messages with it. Those are dropped on the way in; they are
+// under the home path. See ADR 0021.
+//
+// When DirectAdmin ignores the selection this reports errSelectionIgnored
+// and the archive it wrote, which is a whole-account one the caller can
+// take apart rather than ask for a second time.
+func (r *Real) stageInPlace(ctx context.Context, req panel.StageRequest) (pkgacct.Payload, string, error) {
+	account := req.Account.User
+	home := req.Account.HomeDir
+	if home == "" {
+		conf, err := r.userConf(account)
+		if err != nil {
+			return pkgacct.Payload{}, "", err
+		}
+		home = r.homeOf(account, conf)
+	}
+	if stat, err := os.Stat(home); err != nil || !stat.IsDir() {
+		return pkgacct.Payload{}, "", fmt.Errorf(
+			"directadmin: %s is not a home directory to read: %w", home, err)
+	}
+	// Until one archive on this server has come back without the
+	// account's files in it, the room reserved is the room a whole
+	// account would need. A DirectAdmin that ignores the selection then
+	// fails on its own terms rather than on a full disk.
+	reserve := req.Account.SizeBytes
+	if r.leanBackups.Load() == 1 {
+		reserve = r.mailBytes(account, req.Account.SizeBytes)
+	}
+	archive, err := r.stageNative(ctx, account, req.StagingDir, reserve, true)
+	if err != nil {
+		return pkgacct.Payload{}, "", err
+	}
+	if err := (dabackup.Layout{}).UnpackLeanArchive(ctx, archive, account, req.StagingDir); err != nil {
+		if strings.Contains(err.Error(), "ignored the backup selection") {
+			return pkgacct.Payload{}, archive, fmt.Errorf("%w: %w", errSelectionIgnored, err)
+		}
+		os.Remove(archive)
+		return pkgacct.Payload{}, "", err
+	}
+	if err := os.Remove(archive); err != nil {
+		return pkgacct.Payload{}, "", fmt.Errorf("directadmin: remove the staged archive: %w", err)
+	}
+	payload := pkgacct.Payload{
+		Mode:    pkgacct.ModeSplit,
+		Account: account,
+		Parts: []pkgacct.Part{
+			{Kind: pkgacct.PartMetadata, Path: dabackup.MetadataPart(req.StagingDir)},
+			{Kind: pkgacct.PartHomedir, Path: home},
+		},
+	}
+	return payload, "", payload.Verify()
+}
+
+// clearParts takes away what an unpack that did not finish left behind,
+// so the archive can be taken apart again the other way. Only the two
+// directories this program writes, and only under the staging directory
+// it was given.
+func clearParts(staging string) error {
+	for _, part := range []string{dabackup.MetadataPart(staging), dabackup.HomedirPart(staging)} {
+		if err := os.RemoveAll(part); err != nil {
+			return fmt.Errorf("directadmin: clear %s: %w", part, err)
+		}
+	}
+	return nil
+}
+
+// mailBytes is what DirectAdmin says this account's messages come to,
+// which is the only bulk left in an archive asked for without the
+// account's own files. An account whose usage cannot be read is treated
+// as all mail, which reserves too much rather than too little.
+func (r *Real) mailBytes(account string, accountBytes uint64) uint64 {
+	body, err := os.ReadFile(filepath.Join(r.dataDir(), account, "user.usage"))
+	if err != nil {
+		return accountBytes
+	}
+	for _, line := range strings.Split(string(body), "\n") {
+		key, value, found := strings.Cut(strings.TrimSpace(line), "=")
+		if !found || key != "email_quota" {
+			continue
+		}
+		bytes, err := strconv.ParseUint(value, 10, 64)
+		if err != nil {
+			return accountBytes
+		}
+		return bytes
+	}
+	return accountBytes
 }
 
 // StageSystem materialises the server's own configuration.

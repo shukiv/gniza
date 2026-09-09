@@ -161,6 +161,7 @@ func hydrate(dir string, manifest *Manifest) error {
 			HomeTreeDir, err)
 	}
 	names := newNameCache()
+	nestedLinks, outerLinks := newLinkIndex(), newLinkIndex()
 	var nested, outer []Member
 	err := filepath.WalkDir(home, func(full string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -190,7 +191,16 @@ func hydrate(dir string, manifest *Manifest) error {
 			// else is the header alone, as it is for the outer archive.
 			member.Body = ""
 		}
-		if first, _, _ := strings.Cut(rel, "/"); first == DomainsDir || first == MailDir {
+		first, _, _ := strings.Cut(rel, "/")
+		own := first == DomainsDir || first == MailDir
+		links := nestedLinks
+		if own {
+			links = outerLinks
+		}
+		if err := links.link(&member, entry); err != nil {
+			return err
+		}
+		if own {
 			outer = append(outer, member)
 			return nil
 		}
@@ -226,6 +236,46 @@ func afterRecords(existing []Member, nested Member) []Member {
 	out = append(out, existing[:last]...)
 	out = append(out, nested)
 	return append(out, existing[last:]...)
+}
+
+// linkIndex remembers the name each file was first carried under, so a
+// second name for the same file is carried as a link to the first rather
+// than as another copy of its contents. DirectAdmin's own backup does
+// this -- backup_hard_link_check is on by default -- and an archive that
+// did not would restore a Maildir whose messages are linked from two
+// folders at twice the size it was backed up at.
+//
+// There is one of these per archive, not one per account: a link's target
+// is a name in the same tar, and the account's own directories go into
+// the outer archive while the rest of the home directory goes into the
+// nested one.
+type linkIndex struct{ first map[[2]uint64]string }
+
+func newLinkIndex() *linkIndex { return &linkIndex{first: map[[2]uint64]string{}} }
+
+// link turns a member into a link to a name already in this archive,
+// when the file it names is the same file that name carried.
+func (x *linkIndex) link(member *Member, entry fs.DirEntry) error {
+	if member.Typeflag != tar.TypeReg {
+		return nil
+	}
+	info, err := entry.Info()
+	if err != nil {
+		return err
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat.Nlink < 2 {
+		return nil
+	}
+	key := [2]uint64{uint64(stat.Dev), uint64(stat.Ino)}
+	target, seen := x.first[key]
+	if !seen {
+		x.first[key] = member.Name
+		return nil
+	}
+	member.Typeflag, member.Linkname = tar.TypeLink, target
+	member.Size, member.Body = 0, ""
+	return nil
 }
 
 // memberOf reads one entry of the restored tree as a tar header. It

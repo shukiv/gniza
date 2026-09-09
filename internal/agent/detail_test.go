@@ -58,27 +58,40 @@ func TestStagingEstimateFollowsWhatIsActuallyStaged(t *testing.T) {
 	const gigabyte = 1 << 30
 
 	for _, tc := range []struct {
-		what   string
-		size   uint64
-		mode   pkgacct.Mode
-		layout panel.ArchiveLayout
-		want   uint64
+		what     string
+		size     uint64
+		mode     pkgacct.Mode
+		layout   panel.ArchiveLayout
+		provider any
+		want     uint64
 	}{
-		{"a monolithic backup stages the whole account", 10 * gigabyte, pkgacct.ModeMonolithic, cpmove.Layout{}, 10 * gigabyte},
-		{"an unset mode is monolithic", 10 * gigabyte, "", cpmove.Layout{}, 10 * gigabyte},
-		{"a split backup stages a fraction", 10 * gigabyte, pkgacct.ModeSplit, cpmove.Layout{}, 2 * gigabyte},
-		{"a small split account still gets room to work", 100 << 20, pkgacct.ModeSplit, cpmove.Layout{}, 512 << 20},
-		{"an account of no known size gets the floor", 0, pkgacct.ModeSplit, cpmove.Layout{}, 512 << 20},
+		{"a monolithic backup stages the whole account", 10 * gigabyte, pkgacct.ModeMonolithic, cpmove.Layout{}, nil, 10 * gigabyte},
+		{"an unset mode is monolithic", 10 * gigabyte, "", cpmove.Layout{}, nil, 10 * gigabyte},
+		{"a split backup stages a fraction", 10 * gigabyte, pkgacct.ModeSplit, cpmove.Layout{}, nil, 2 * gigabyte},
+		{"a small split account still gets room to work", 100 << 20, pkgacct.ModeSplit, cpmove.Layout{}, nil, 512 << 20},
+		{"an account of no known size gets the floor", 0, pkgacct.ModeSplit, cpmove.Layout{}, nil, 512 << 20},
 		// A panel that will not produce the parts stages the whole
 		// account and then takes it apart, so it is on the disk twice at
 		// the peak rather than a fifth of it being there at all.
 		{"a split backup of an archive panel stages the account twice",
-			10 * gigabyte, pkgacct.ModeSplit, dabackup.Layout{}, 20 * gigabyte},
+			10 * gigabyte, pkgacct.ModeSplit, dabackup.Layout{}, nil, 20 * gigabyte},
 		{"and a small one still gets room to work",
-			100 << 20, pkgacct.ModeSplit, dabackup.Layout{}, 512 << 20},
+			100 << 20, pkgacct.ModeSplit, dabackup.Layout{}, nil, 512 << 20},
+		// Until the same panel is found to produce an archive without
+		// the account's own files in it, at which point staging holds
+		// what it holds on cPanel and reserving the account twice
+		// refuses backups that would have fitted easily.
+		{"an archive panel that reads the home directory in place stages a fraction",
+			10 * gigabyte, pkgacct.ModeSplit, dabackup.Layout{}, inPlace{}, 2 * gigabyte},
 	} {
-		if got := stagingEstimate(tc.size, tc.mode, tc.layout); got != tc.want {
+		if got := stagingEstimate(tc.size, tc.mode, tc.layout, tc.provider); got != tc.want {
 			t.Errorf("%s: estimate = %d, want %d", tc.what, got, tc.want)
 		}
 	}
 }
+
+// inPlace is a provider that has been found to read the account's home
+// directory where it lies.
+type inPlace struct{}
+
+func (inPlace) ReadsHomeInPlace() bool { return true }

@@ -210,6 +210,31 @@ func TestTheRebuiltArchiveCarriesWhatWasReadInPlace(t *testing.T) {
 			t.Errorf("%s is in the nested home archive as well as the outer one: %v", unwanted, home)
 		}
 	}
+	// And it is where DirectAdmin put it: the last member of backup/,
+	// before the account's own directories. Its own restore reads the
+	// archive in order.
+	seen := map[string]int{}
+	for i, name := range outer {
+		if isNestedHomeArchive(path.Clean(name), tar.TypeReg) {
+			seen["home"] = i
+			continue
+		}
+		first, _, _ := strings.Cut(name, "/")
+		if _, already := seen[first]; !already {
+			seen[first] = i
+		}
+		if first == BackupDir {
+			seen["last backup"] = i
+		}
+	}
+	if seen["home"] < seen["last backup"] {
+		t.Errorf("the home archive is at %d, before the last of %s at %d: %v",
+			seen["home"], BackupDir, seen["last backup"], outer)
+	}
+	if seen["home"] > seen[DomainsDir] {
+		t.Errorf("the home archive is at %d, after %s at %d: %v",
+			seen["home"], DomainsDir, seen[DomainsDir], outer)
+	}
 }
 
 // DirectAdmin's restore reads backup_options.list to decide what it is
@@ -333,5 +358,109 @@ func TestTheRebuiltMembersKeepWhatTheTreeSays(t *testing.T) {
 			}
 			return
 		}
+	}
+}
+
+// headersOf reads a rebuilt archive as a name-to-header map, for the
+// outer archive and for the one nested inside it.
+func headersOf(t *testing.T, archivePath string) (outer, home map[string]*tar.Header) {
+	t.Helper()
+	outer, home = map[string]*tar.Header{}, map[string]*tar.Header{}
+	f, err := os.Open(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	tr := tar.NewReader(f)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			return outer, home
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		outer[strings.TrimSuffix(path.Clean(header.Name), "/")] = header
+		if !isNestedHomeArchive(path.Clean(header.Name), header.Typeflag) {
+			continue
+		}
+		reader, closer, err := decompressed(tr, header.Name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		inner := tar.NewReader(reader)
+		for {
+			nested, err := inner.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			home[strings.TrimSuffix(path.Clean(nested.Name), "/")] = nested
+		}
+		closer()
+	}
+}
+
+// DirectAdmin's own backup carries a hard link as a link, and restic
+// restores one as a link. Writing both names as whole files would restore
+// an account larger than the one that was backed up -- a Maildir where
+// every message is linked from two folders comes back twice.
+//
+// A link is only a link inside the archive that carries its target: the
+// account's own directories go into the outer archive and the rest into
+// the nested one, and a name in one cannot point at a name in the other.
+func TestALinkedFileIsCarriedAsALink(t *testing.T) {
+	dir := t.TempDir()
+	archive := writeLeanArchive(t, "gzv0908a", nil)
+	if err := (Layout{}).UnpackLeanArchive(context.Background(), archive, "gzv0908a", dir); err != nil {
+		t.Fatal(err)
+	}
+	homeTree(t, dir)
+	home := HomedirPart(dir)
+	// Two names for one file, both outside the account's own directories.
+	if err := os.Link(filepath.Join(home, ".bashrc"), filepath.Join(home, ".bash_profile")); err != nil {
+		t.Fatal(err)
+	}
+	// And two names for one file either side of the boundary between the
+	// two archives.
+	if err := os.Link(
+		filepath.Join(home, DomainsDir, fixtureDomain, "public_html", "index.html"),
+		filepath.Join(home, ".php", "index.html")); err != nil {
+		t.Fatal(err)
+	}
+
+	rebuilt, err := (Layout{}).PackArchive(context.Background(), dir, "gzv0908a", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	outer, nested := headersOf(t, rebuilt)
+
+	first, second := nested[".bash_profile"], nested[".bashrc"]
+	if first == nil || second == nil {
+		t.Fatalf("the nested archive lost one of the two names: %v", nested)
+	}
+	if first.Typeflag != tar.TypeReg || first.Size == 0 {
+		t.Errorf(".bash_profile is not the file the link points at: %c %d", first.Typeflag, first.Size)
+	}
+	if second.Typeflag != tar.TypeLink {
+		t.Errorf(".bashrc is carried as %c rather than a link", second.Typeflag)
+	}
+	if second.Linkname != ".bash_profile" {
+		t.Errorf(".bashrc points at %q", second.Linkname)
+	}
+	if second.Size != 0 {
+		t.Errorf(".bashrc carries %d bytes of a file that is already in the archive", second.Size)
+	}
+
+	// The two archives are written and read separately, so neither name
+	// may be a link: DirectAdmin's restore would have nothing to point at.
+	across := path.Join(DomainsDir, fixtureDomain, "public_html", "index.html")
+	if header := outer[across]; header == nil || header.Typeflag != tar.TypeReg {
+		t.Errorf("%s is not a whole file in the outer archive: %v", across, header)
+	}
+	if header := nested[".php/index.html"]; header == nil || header.Typeflag != tar.TypeReg {
+		t.Errorf(".php/index.html is not a whole file in the nested archive: %v", header)
 	}
 }

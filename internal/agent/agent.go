@@ -203,21 +203,29 @@ func (a *Agent) Run(ctx context.Context) error {
 	}
 }
 
+// reportBudget is how long a finished job has to say what happened. A
+// variable so a test does not have to take a minute to prove the
+// deadline is not already spent.
+var reportBudget = time.Minute
+
 // execute performs one assignment and reports it.
 //
 // Reporting gets its own deadline. Work that consumed its whole budget must
 // still be able to say what happened, otherwise the lease expires and it is
 // all repeated.
 func (a *Agent) execute(ctx context.Context, assignment protocol.Assignment) {
-	reportCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
-	defer cancel()
-
 	switch assignment.Kind {
 	case protocol.KindBackup:
 		job := *assignment.Backup
 		held, release := a.holdLease(ctx, job.JobID, job.ClaimToken, false, job.LeaseExpiresAt)
 		report := a.RunJob(held, job)
 		release()
+		// Taken now rather than before the work: a backup runs for
+		// minutes or hours, and a deadline started when the assignment
+		// arrived has already passed by the time there is anything to
+		// say.
+		reportCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), reportBudget)
+		defer cancel()
 		if err := a.client.Report(reportCtx, report); err != nil {
 			// The lease will expire and the controller will re-queue it;
 			// restic tolerates the partial write.
@@ -229,6 +237,11 @@ func (a *Agent) execute(ctx context.Context, assignment protocol.Assignment) {
 			restore.LeaseExpiresAt)
 		report := a.RunRestore(held, restore)
 		release()
+		// The same, and it matters more here: a restore that has already
+		// written into a live account and cannot say so is a restore the
+		// controller queues again.
+		reportCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), reportBudget)
+		defer cancel()
 		if err := a.client.ReportRestore(reportCtx, report); err != nil {
 			a.log.Error("report restore", "job_id", report.JobID, "error", err)
 		}

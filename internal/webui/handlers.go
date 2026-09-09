@@ -259,7 +259,7 @@ func addCoverage(view *dashboardView, accounts []accountView) {
 		if account.ExpectedEvery == 0 {
 			view.Unscheduled++
 		}
-		switch account.State() {
+		switch account.settled() {
 		case StateFailed:
 			view.Failed++
 		case StatePartial:
@@ -1699,9 +1699,19 @@ const (
 )
 
 func (a accountView) State() State {
-	switch {
-	case a.Running:
+	if a.Running {
 		return StateWorking
+	}
+	return a.settled()
+}
+
+// settled is the same judgement with work in flight left out: what this
+// account has stored right now, whether or not another backup is on its
+// way to it. Coverage is counted from this rather than from State, so
+// that asking for a backup of every account does not read, one second
+// later, as every account having lost the copy it already had.
+func (a accountView) settled() State {
+	switch {
 	case a.LastBackup == nil:
 		return StateNever
 	case a.LastStatus == job.StatusFailed:
@@ -1722,7 +1732,7 @@ func (a accountView) State() State {
 
 // Current reports whether this account has a backup worth relying on: the
 // last run succeeded, and a schedule has produced one since it was due.
-func (a accountView) Current() bool { return a.State() == StateProtected }
+func (a accountView) Current() bool { return a.settled() == StateProtected }
 
 // overdueAfter is how long without a good backup counts as out of date:
 // what the schedule covering this account asked for, or two of its own

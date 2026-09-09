@@ -267,3 +267,71 @@ func TestAWeekOfBackupsCountsWhatWasStored(t *testing.T) {
 		t.Fatalf("backed up = %d, want every account a copy was written for", got)
 	}
 }
+
+// Queueing a backup must not take the coverage away. Pressing "Back up
+// now" on every account queues them all at once; if in-flight work read
+// as a gap, the overview would answer "134 of 142 accounts are not
+// covered" one second after the operator asked for a backup of all of
+// them, on a server whose copies had not changed at all.
+func TestAnAccountBeingBackedUpNowIsStillCoveredByTheCopyItAlreadyHas(t *testing.T) {
+	fresh := accountView{
+		AccountInfo:   panel.AccountInfo{User: "current"},
+		LastBackup:    moment(time.Now().Add(-time.Hour)),
+		LastStatus:    job.StatusSuccess,
+		ExpectedEvery: 24 * time.Hour,
+		Running:       true,
+	}
+	if !fresh.Current() {
+		t.Fatalf("an account queued for another backup lost the copy it has")
+	}
+	view := dashboardView{Accounts: []accountView{fresh}, Destinations: []destinationView{{}}}
+	addCoverage(&view, view.Accounts)
+	if view.Protected != 1 || view.Stale != 0 || view.Unprotected != 0 {
+		t.Fatalf("protected = %d, stale = %d, unprotected = %d",
+			view.Protected, view.Stale, view.Unprotected)
+	}
+	if got := view.Verdict(); got != "All 1 accounts are covered." {
+		t.Fatalf("verdict = %q", got)
+	}
+	// The pill over the row still says what the server is doing.
+	if got := fresh.State(); got != StateWorking {
+		t.Fatalf("state = %q, want the row to still show the backup running", got)
+	}
+}
+
+// The other half of that: work in flight is not a backup either. An
+// account queued for its first backup has nothing stored yet, and the
+// page must not count the queueing as the copy.
+func TestAnAccountQueuedForItsFirstBackupIsStillUnprotected(t *testing.T) {
+	view := dashboardView{Destinations: []destinationView{{}}}
+	view.Accounts = []accountView{{
+		AccountInfo:   panel.AccountInfo{User: "new"},
+		ExpectedEvery: 24 * time.Hour,
+		Running:       true,
+	}}
+	addCoverage(&view, view.Accounts)
+	if view.Unprotected != 1 || view.Protected != 0 {
+		t.Fatalf("protected = %d, unprotected = %d", view.Protected, view.Unprotected)
+	}
+}
+
+// A retry does not undo the failure it is retrying. Until the new backup
+// finishes, the last thing this account did was fail, and the page keeps
+// saying so.
+func TestAnAccountBeingRetriedStillCountsAsFailing(t *testing.T) {
+	view := dashboardView{Destinations: []destinationView{{}}}
+	view.Accounts = []accountView{{
+		AccountInfo:   panel.AccountInfo{User: "retried"},
+		LastBackup:    moment(time.Now().Add(-time.Hour)),
+		LastStatus:    job.StatusFailed,
+		ExpectedEvery: 24 * time.Hour,
+		Running:       true,
+	}}
+	addCoverage(&view, view.Accounts)
+	if view.Failed != 1 {
+		t.Fatalf("failed = %d, want the failure to survive the retry", view.Failed)
+	}
+	if got := view.Band(); got != "bad" {
+		t.Fatalf("band = %q", got)
+	}
+}

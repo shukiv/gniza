@@ -139,6 +139,16 @@ type ArchivePacker interface {
 	// PackArchive puts it back together into outDir, under the name the
 	// panel's own restore expects, and reports where it put it.
 	PackArchive(ctx context.Context, dir, account, outDir string) (string, error)
+
+	// HomePartDir is the directory, under the one handed to PackArchive,
+	// where the account's home directory belongs.
+	//
+	// It is not HomedirDir: that one is inside the archive. This is the
+	// name a restore has to put the part back under, and it cannot be
+	// taken from the snapshot -- a backup that read the home directory
+	// where it lies names that path after the account rather than after
+	// the part. See ADR 0021.
+	HomePartDir() string
 }
 
 // InPlaceReader is a provider that packs an archive but has been found to

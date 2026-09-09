@@ -261,3 +261,44 @@ func packedMembers(t *testing.T, filename string) map[string]string {
 	read(body)
 	return members
 }
+
+// A DirectAdmin backup that read the account where it lies names its home
+// part /home/<account>, not a directory under Gniza's staging. The name in
+// the snapshot is the account's, and it is not what the repack looks for:
+// the parts have to go back beside each other under the layout's own
+// names, or the rebuild cannot find the home directory it was handed.
+//
+// This was found by the first restore drill on a live account, which
+// failed with "this account's files were read where they lie, and home is
+// not here". See ADR 0021.
+func TestTheHomePartGoesBackUnderTheNameTheRepackLooksFor(t *testing.T) {
+	const account = "gzv0908a"
+	restorer, root, _ := buildPackedSnapshot(t, account)
+	// What a lean snapshot carries: the home directory as the account is
+	// on it, rather than as a tree Gniza wrote.
+	staged := restorer.source["/var/lib/gniza/staging/"+account+"/home"]
+	inPlace := "/home/" + account
+	restorer.snapshot.Paths = []string{"/var/lib/gniza/staging/" + account + "/metadata", inPlace}
+	delete(restorer.source, "/var/lib/gniza/staging/"+account+"/home")
+	restorer.source[inPlace] = staged
+
+	work := filepath.Join(root, "work")
+	if _, err := Run(context.Background(), restorer, Request{
+		Layout: dabackup.Layout{}, Account: account,
+		SnapshotID: "40dc15203b1cf9aa", WorkDir: work,
+	}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	want := dabackup.HomedirPart(filepath.Join(work, "tree"))
+	for _, call := range restorer.calls {
+		if call.Subpath != inPlace {
+			continue
+		}
+		if call.Target != want {
+			t.Errorf("the home directory was restored to %q, and the repack reads %q",
+				call.Target, want)
+		}
+		return
+	}
+	t.Fatalf("the home directory was never restored: %v", restorer.calls)
+}

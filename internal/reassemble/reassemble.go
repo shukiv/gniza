@@ -398,16 +398,16 @@ func restorePacked(ctx context.Context, restorer Restorer, req Request,
 	}
 
 	var bytesRestored uint64
-	// The parts go back beside each other under the names they were
-	// staged with, because that is where the panel's own repack looks for
-	// them.
+	// The parts go back beside each other under the names the panel's own
+	// repack looks for, which are not always the names the snapshot
+	// carries.
 	tree := filepath.Join(req.WorkDir, "tree")
-	restore := func(stage, subpath string) error {
+	restore := func(stage, subpath, name string) error {
 		req.stage(stage)
 		restored, err := restorer.Restore(ctx, req.Repo, resticrun.RestoreSpec{
 			SnapshotID: snapshot.ID,
 			Subpath:    subpath,
-			Target:     filepath.Join(tree, filepath.Base(subpath)),
+			Target:     filepath.Join(tree, name),
 			OnProgress: req.OnProgress,
 		})
 		if err != nil {
@@ -416,10 +416,16 @@ func restorePacked(ctx context.Context, restorer Restorer, req Request,
 		bytesRestored += restored.BytesRestored
 		return nil
 	}
-	if err := restore("reading the account settings", found.Metadata); err != nil {
+	// The metadata part is named after its role, which is how Classify
+	// recognised it. The home part is not: a backup that read the home
+	// directory where it lies calls it /home/<account>, so the name it
+	// goes back under is the packer's to say.
+	if err := restore("reading the account settings", found.Metadata,
+		filepath.Base(found.Metadata)); err != nil {
 		return Result{}, fmt.Errorf("reassemble: restore metadata: %w", err)
 	}
-	if err := restore("reading the home directory", found.Homedir); err != nil {
+	if err := restore("reading the home directory", found.Homedir,
+		packer.HomePartDir()); err != nil {
 		return Result{}, fmt.Errorf("reassemble: restore home directory: %w", err)
 	}
 

@@ -661,6 +661,10 @@ func isNestedHomeArchive(clean string, typeflag byte) bool {
 
 // MetadataPart and HomedirPart are the two directories UnpackArchive
 // writes, and the two paths a split payload hands restic.
+// HomePartDir is where HomedirPart puts the home directory, named so a
+// restore can put it back there without reading it off the snapshot.
+func (Layout) HomePartDir() string { return HomeTreeDir }
+
 func MetadataPart(dir string) string { return filepath.Join(dir, MetadataTreeDir) }
 func HomedirPart(dir string) string  { return filepath.Join(dir, HomeTreeDir) }
 

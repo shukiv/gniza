@@ -95,7 +95,45 @@ type Repository struct {
 	// Retention records what the last plan said and what the last run
 	// did.
 	Retention RetentionState `json:"retention,omitempty"`
-	CreatedAt time.Time      `json:"created_at"`
+	// Census is what this repository was last found to hold. Asking
+	// restic costs a walk of the repository index over the network, so it
+	// is taken on a slow cadence and stored: a page that ran it while
+	// drawing would take minutes to render and would do it again on every
+	// refresh.
+	Census    RepositoryCensus `json:"census,omitempty"`
+	CreatedAt time.Time        `json:"created_at"`
+}
+
+// RepositoryCensus is how many copies a repository holds and what they
+// cost the storage under it.
+//
+// The last good reading is kept apart from the last attempt on purpose. A
+// destination that is unreachable tonight still has a size, and "94 GiB,
+// as of yesterday" with the reason underneath is worth more to an
+// operator than an empty column.
+type RepositoryCensus struct {
+	Snapshots  int        `json:"snapshots,omitempty"`
+	SizeBytes  uint64     `json:"size_bytes,omitempty"`
+	MeasuredAt *time.Time `json:"measured_at,omitempty"`
+	// AttemptedAt and LastError are the last measurement that did not
+	// finish, which leaves the numbers above standing.
+	AttemptedAt *time.Time `json:"attempted_at,omitempty"`
+	LastError   string     `json:"last_error,omitempty"`
+}
+
+// Known reports whether anything has ever been measured here.
+func (c RepositoryCensus) Known() bool { return c.MeasuredAt != nil }
+
+// StaleAfter is how old a reading has to be before the page says when it
+// was taken rather than presenting it as the truth. It is three of the
+// intervals the census runs on, so an ordinary missed measurement does
+// not mark every figure on the page as doubtful.
+const StaleAfter = 18 * time.Hour
+
+// Stale reports whether this reading is old enough to need its date shown
+// beside it.
+func (c RepositoryCensus) Stale(now time.Time) bool {
+	return c.Known() && now.Sub(*c.MeasuredAt) > StaleAfter
 }
 
 // RetentionState is what happened the last time retention looked at a

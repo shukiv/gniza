@@ -820,6 +820,11 @@ func (e *Engine) Schedule(ctx context.Context, now time.Time) (int, error) {
 		e.log.Error("sweep the work directory", "error", err)
 	}
 	e.watchForTrouble(ctx, now)
+	// Outside watchForTrouble, which returns early when nothing is
+	// listening: how full a destination is has to be on the page whether
+	// or not anybody has set up somewhere to be told about it.
+	e.probeDestinations(ctx, now)
+	e.censusRepositories(ctx, now)
 	e.sweepRetention(ctx, now)
 	e.sweepDeletedAccounts(ctx, now)
 	e.checkForUpdate(ctx, now)
@@ -941,8 +946,6 @@ func (e *Engine) watchForTrouble(ctx context.Context, now time.Time) {
 	if !listening {
 		return
 	}
-
-	e.probeDestinations(ctx, now)
 
 	jobs, err := e.store.Jobs(0)
 	if err != nil {

@@ -71,6 +71,11 @@ type Engine struct {
 	// upgrading is set while a newer release is being fetched and
 	// installed, so a second click does not start a second one.
 	upgrading atomic.Bool
+	// censusing is set while the repositories are being measured. That
+	// walks every repository's index over the network and can take
+	// minutes, so it runs beside the scheduler rather than in it, and a
+	// second tick does not start a second one.
+	censusing atomic.Bool
 	// lastKeySweep is when prepared SFTP keys nobody used were last
 	// looked for.
 	lastKeySweep time.Time

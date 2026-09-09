@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"time"
 
 	"github.com/shukiv/gniza/internal/nodestore"
@@ -28,4 +29,10 @@ func BackupMessage(stored nodestore.Job) (notify.Message, bool) {
 		message.Body = backupDetail(stored, nil)
 	}
 	return message, send
+}
+
+// TakeCensusForTest measures the repositories on the caller's goroutine,
+// so a test can read the result instead of waiting for one.
+func (e *Engine) TakeCensusForTest(ctx context.Context, now time.Time) {
+	e.takeCensus(ctx, now)
 }

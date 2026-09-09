@@ -3,6 +3,7 @@ package resticrun_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/shukiv/gniza/internal/resticrun"
 )
@@ -35,5 +36,19 @@ func TestTruncatedOutputSaysSo(t *testing.T) {
 	}
 	if whole.Truncated {
 		t.Fatal("output that fitted was reported as cut off")
+	}
+}
+
+// TestTheDefaultWaitDelayIsNotForever guards the value production uses.
+// Nothing outside the tests sets WaitDelay, so if the zero value reached
+// exec unchanged, every caller would keep the behaviour this package
+// changed to avoid.
+func TestTheDefaultWaitDelayIsNotForever(t *testing.T) {
+	if delay := resticrun.WaitDelayOf(&resticrun.OSExec{}); delay <= 0 {
+		t.Errorf("default wait delay = %v, want a positive bound", delay)
+	}
+	want := 250 * time.Millisecond
+	if delay := resticrun.WaitDelayOf(&resticrun.OSExec{WaitDelay: want}); delay != want {
+		t.Errorf("wait delay = %v, want the one that was set (%v)", delay, want)
 	}
 }

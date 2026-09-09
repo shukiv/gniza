@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"os/exec"
+	"time"
 )
 
 // Command is a single restic invocation.
@@ -67,6 +68,9 @@ func (f ExecFunc) Exec(ctx context.Context, cmd Command) (CommandResult, error) 
 type OSExec struct {
 	// MaxOutputBytes caps captured stdout and stderr. Zero means 8 MiB.
 	MaxOutputBytes int
+	// WaitDelay bounds how long a killed process's output is still read
+	// after the context is cancelled. Zero means ten seconds.
+	WaitDelay time.Duration
 }
 
 var _ Execer = (*OSExec)(nil)
@@ -80,6 +84,11 @@ func (o *OSExec) Exec(ctx context.Context, cmd Command) (CommandResult, error) {
 	c := exec.CommandContext(ctx, cmd.Path, cmd.Args...)
 	c.Env = cmd.Env
 	c.Dir = cmd.Dir
+	// restic's sftp backend runs ssh as a child of its own, and that
+	// grandchild inherits the pipe this reads restic's output through.
+	// Killing restic on cancellation leaves the pipe open, so a Wait
+	// without a deadline waits for a process nobody is going to stop.
+	c.WaitDelay = o.waitDelay()
 
 	var stdout, stderr bytes.Buffer
 	capped := &cappedWriter{buf: &stdout, limit: limit}
@@ -112,6 +121,16 @@ func (o *OSExec) Exec(ctx context.Context, cmd Command) (CommandResult, error) {
 	default:
 		return result, err
 	}
+}
+
+// waitDelay is how long output is still read after the child is killed.
+// It is never zero: zero is exec's "wait forever", which is the thing
+// this exists to prevent.
+func (o *OSExec) waitDelay() time.Duration {
+	if o.WaitDelay > 0 {
+		return o.WaitDelay
+	}
+	return 10 * time.Second
 }
 
 // cappedWriter discards output past a limit so a pathological restic run

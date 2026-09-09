@@ -5,7 +5,9 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/shukiv/gniza/internal/destination"
 )
@@ -531,5 +533,44 @@ func TestLineWriterEmitsWholeLinesOnly(t *testing.T) {
 		if lines[i] != want[i] {
 			t.Errorf("line %d = %q, want %q", i, lines[i], want[i])
 		}
+	}
+}
+
+// TestACancelledRunDoesNotWaitOnAGrandchild is about the sftp backend.
+// restic runs ssh as a child of its own, and that grandchild inherits the
+// pipe this package reads restic's output through. Killing restic when the
+// context is cancelled does not close the pipe -- the grandchild still
+// holds the write end -- so a Wait that has no deadline never returns and
+// the job that was cancelled hangs the agent instead of ending.
+func TestACancelledRunDoesNotWaitOnAGrandchild(t *testing.T) {
+	started := make(chan struct{})
+	once := sync.Once{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := (&OSExec{WaitDelay: 200 * time.Millisecond}).Exec(ctx, Command{
+			Path: "/bin/sh",
+			// The backgrounded sleep keeps the write end of the pipe open
+			// after the shell itself is killed.
+			Args:   []string{"-c", "sleep 60 & echo up; sleep 60"},
+			Env:    []string{"PATH=/bin:/usr/bin"},
+			OnLine: func([]byte) { once.Do(func() { close(started) }) },
+		})
+		done <- err
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the child never reported that it had started")
+	}
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Exec did not return after the context was cancelled")
 	}
 }

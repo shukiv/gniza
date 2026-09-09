@@ -62,6 +62,13 @@ func TestTheFilenameIsCheckedBeforeItIsOpened(t *testing.T) {
 		"user.admin.customer1.tar.gz",
 		"user.admin.customer1.2026-09-08-02-15.tar.gz",
 		"user.reseller.customer1.tar.zst",
+		// DirectAdmin names the archive after what the account is, not
+		// after what every account is: "type.creator.username", with
+		// the type being user, reseller or admin. A server whose
+		// resellers all failed to back up is what taught this.
+		"reseller.admin.customer1.tar.zst",
+		"admin.root.customer1.tar.zst",
+		"reseller.admin.customer1.2026-09-09-04-30.tar.gz",
 		"customer1.tar",
 	} {
 		if !nameMatchesArchive(name, "customer1") {
@@ -71,6 +78,13 @@ func TestTheFilenameIsCheckedBeforeItIsOpened(t *testing.T) {
 	for _, name := range []string{
 		"user.admin.victim.tar.gz",
 		"user.admin.customer12.tar.gz",
+		"reseller.admin.victim.tar.zst",
+		// Only the three types DirectAdmin has. Anything else in that
+		// field is a filename this does not understand, and a filename
+		// this does not understand is not evidence of whose account it
+		// holds.
+		"customer1.admin.customer1.tar.gz",
+		"backup.admin.customer1.tar.gz",
 		"victim.tar",
 		"customer1",
 	} {

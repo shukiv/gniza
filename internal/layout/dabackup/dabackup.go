@@ -245,7 +245,9 @@ func inspect(ctx context.Context, filename, account string, readDumps bool) (arc
 		return archiveContents{}, fmt.Errorf("dabackup: invalid expected account %q", account)
 	}
 	if !nameMatchesArchive(filepath.Base(filename), account) {
-		return archiveContents{}, fmt.Errorf("dabackup: archive filename does not belong to %s", account)
+		return archiveContents{}, fmt.Errorf(
+			"dabackup: archive filename %q does not belong to %s",
+			filepath.Base(filename), account)
 	}
 	f, err := os.OpenFile(filename, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
@@ -443,7 +445,7 @@ func ArchiveAccount(base string) (string, error) {
 		return stem, nil
 	}
 	fields := strings.Split(stem, ".")
-	if len(fields) >= 3 && fields[0] == "user" && validUser(fields[1]) && validUser(fields[2]) {
+	if len(fields) >= 3 && isAccountType(fields[0]) && validUser(fields[1]) && validUser(fields[2]) {
 		for _, field := range fields[3:] {
 			if !validUser(field) {
 				return "", fmt.Errorf("dabackup: invalid archive timestamp")
@@ -493,6 +495,17 @@ func dumpRestoresSomething(r io.Reader) (bool, error) {
 			return false, err
 		}
 	}
+}
+
+// isAccountType is the first field of a DirectAdmin backup filename,
+// which its own restore refuses in any other shape: "The file must be of
+// the form: type.creator.username.tar.gz". The type is what the account
+// is, so a server's resellers and its administrator are named
+// "reseller.*" and "admin.*" -- reading only "user.*" failed every one of
+// them, and on a server where one account in seven is a reseller that is
+// one account in seven never being backed up.
+func isAccountType(value string) bool {
+	return value == "user" || value == "reseller" || value == "admin"
 }
 
 func validUser(value string) bool {

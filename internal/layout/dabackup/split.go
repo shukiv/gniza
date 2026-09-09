@@ -155,7 +155,8 @@ type Member struct {
 // left alone -- the archive being taken apart is usually one of them.
 func (Layout) UnpackArchive(ctx context.Context, archivePath, account, dir string) error {
 	if !nameMatchesArchive(filepath.Base(archivePath), account) {
-		return fmt.Errorf("dabackup: archive filename does not belong to %s", account)
+		return fmt.Errorf("dabackup: archive filename %q does not belong to %s",
+			filepath.Base(archivePath), account)
 	}
 	f, err := os.OpenFile(archivePath, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {

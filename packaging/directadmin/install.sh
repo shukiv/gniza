@@ -151,8 +151,17 @@ if [ "$IN_PLACE" = 1 ]; then
 	# the modes to settle: an archive carries whatever modes it was made
 	# with, and a directory DirectAdmin cannot traverse is a plugin it
 	# installs without complaining and then answers 404 for.
-	find "$PLUGIN_DIR" -type d -exec chmod 0755 {} +
-	find "$PLUGIN_DIR" -type f -exec chmod 0644 {} +
+	#
+	# Five digits, because coreutils 8.30 -- which is what these servers
+	# have -- keeps a directory's set-group-ID bit through any octal mode
+	# of four digits or fewer, "chmod 0755" included; only a mode that
+	# names the bit clears it. The archive is made on somebody's
+	# checkout, and a checkout on a group-shared directory has that bit
+	# on every directory in it, so "chmod 0755" would carry it onto the
+	# server and every file written under those directories would take
+	# the directory's group rather than the writer's.
+	find "$PLUGIN_DIR" -type d -exec chmod 00755 {} +
+	find "$PLUGIN_DIR" -type f -exec chmod 00644 {} +
 	for script in "$PLUGIN_DIR"/hooks/*.sh "$PLUGIN_DIR"/scripts/*.sh \
 		"$PLUGIN_DIR/install.sh" "$PLUGIN_DIR/uninstall.sh" \
 		"$PLUGIN_DIR/admin/index.html" "$PLUGIN_DIR/user/index.html"; do

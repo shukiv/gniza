@@ -121,6 +121,10 @@ directadmin-package:
 		$(BIN)/gniza-directadmin/directadmin/images/fonts/
 	chmod +x $(BIN)/gniza-directadmin/install.sh $(BIN)/gniza-directadmin/uninstall.sh \
 		$(BIN)/gniza-directadmin/directadmin/scripts/*.sh
+	@# The archive must not carry the set-group-ID bit this checkout's
+	@# own directories have; five digits, because coreutils 8.30 -- what
+	@# these servers run -- keeps that bit through "chmod 0755".
+	find $(BIN)/gniza-directadmin -type d -exec chmod 00755 {} +
 	tar -C $(BIN) --owner=0 --group=0 --numeric-owner --mode='u+rwX,go+rX,go-w' \
 		-czf $(BIN)/gniza-directadmin-$(PLUGIN_ARCH).tar.gz gniza-directadmin
 	@echo "built $(BIN)/gniza-directadmin-$(PLUGIN_ARCH).tar.gz -- unfinished, see ADR 0019"
@@ -155,6 +159,10 @@ directadmin-plugin:
 		$(BIN)/gniza-plugin/scripts/*.sh
 	@# Named one by one rather than as ".", so that the archive holds the
 	@# same entries DirectAdmin's own example does and nothing else.
+	@# The archive must not carry the set-group-ID bit this checkout's
+	@# own directories have; five digits, because coreutils 8.30 -- what
+	@# these servers run -- keeps that bit through "chmod 0755".
+	find $(BIN)/gniza-plugin -type d -exec chmod 00755 {} +
 	tar -C $(BIN)/gniza-plugin --owner=0 --group=0 --numeric-owner \
 		--mode='u+rwX,go+rX,go-w' \
 		-czf $(BIN)/gniza-plugin-$(PLUGIN_ARCH).tar.gz \

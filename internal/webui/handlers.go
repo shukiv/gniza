@@ -2145,14 +2145,13 @@ func (s *Server) accountViews(r *http.Request) ([]accountView, []string, error) 
 					view.SizeBytes = target.BytesProcessed
 				}
 			}
-			if last.Status == job.StatusFailed {
-				warnings = append(warnings,
-					fmt.Sprintf("The last backup of %s failed.", account.User))
-			}
 		}
 		views = append(views, view)
 	}
 	sort.Slice(views, func(i, j int) bool { return views[i].User < views[j].User })
+	// After the sort, so that the accounts a warning names are in the
+	// order the page below it lists them.
+	warnings = append(warnings, failureWarnings(views)...)
 	return views, warnings, nil
 }
 

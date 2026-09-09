@@ -2,6 +2,7 @@ package directadmin_test
 
 import (
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -478,5 +479,57 @@ func TestThePluginManagerGetsThePluginAtTheArchiveRoot(t *testing.T) {
 	}
 	if !regexp.MustCompile(`(^|[ \t\\])plugin\.conf([ \t\\]|$)`).MatchString(tarLine) {
 		t.Errorf("the archive does not carry plugin.conf at its root:\n%s", tarLine)
+	}
+}
+
+// The archive carries whatever modes the build machine's directories
+// had, and a checkout on a group-shared directory has the set-group-ID
+// bit on every one of them. The installer settles the modes afterwards,
+// but GNU chmod keeps a directory's set-user-ID and set-group-ID bits
+// when it is given a short octal mode -- "chmod 0755" on a 2755
+// directory leaves it 2755 -- so the bit rode all the way onto the
+// server, where every file written under those directories takes the
+// directory's group instead of the writer's.
+//
+// This runs the installer's own chmod against a directory in that state
+// rather than reading the line and believing it.
+func TestTheInstallerSettlesTheModesItSaysItSettles(t *testing.T) {
+	found := regexp.MustCompile(`find "\$PLUGIN_DIR" -type d -exec chmod (\S+) \{\} \+`).
+		FindStringSubmatch(read(t, "install.sh"))
+	if found == nil {
+		t.Fatal("the installer does not settle the directory modes")
+	}
+	line, mode := found[0], found[1]
+	// The servers this installs on run coreutils 8.30, where an octal
+	// mode of four digits or fewer leaves a directory's set-group-ID bit
+	// alone: "chmod 0755" on a 2755 directory is still 2755 afterwards.
+	// Coreutils 9 clears it, so the run below cannot tell the two apart
+	// on a modern machine and the mode itself has to say what it means.
+	if regexp.MustCompile(`^[0-7]{1,4}$`).MatchString(mode) {
+		t.Errorf("chmod %s leaves the set-group-ID bit on coreutils 8.30; name the bit, as in 00755", mode)
+	}
+	dir := t.TempDir()
+	nested := filepath.Join(dir, "images", "fonts")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, each := range []string{dir, filepath.Dir(nested), nested} {
+		if err := os.Chmod(each, 0o2755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd := exec.Command("sh", "-c", line)
+	cmd.Env = append(os.Environ(), "PLUGIN_DIR="+dir)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%s: %v\n%s", line, err, out)
+	}
+	for _, each := range []string{dir, filepath.Dir(nested), nested} {
+		info, err := os.Stat(each)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o755 || info.Mode()&os.ModeSetgid != 0 {
+			t.Errorf("%s is %v after %s, wanted drwxr-xr-x", each, info.Mode(), line)
+		}
 	}
 }

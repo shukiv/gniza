@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/url"
 	"os"
 	"os/exec"
@@ -31,6 +32,81 @@ type nativeWorkspace struct {
 	path, destination  string
 	adminUID, adminGID int
 	lock               *os.File
+}
+
+// nativeRoot is where each account's job directory and lock live.
+func (r *Real) nativeRoot() string {
+	if r.NativeRoot != "" {
+		return r.NativeRoot
+	}
+	return defaultNativeRoot
+}
+
+// SweepNativeWorkspaces removes job directories that no run owns any more,
+// and reports how many it removed.
+//
+// A run removes its own directory when it finishes. A process that is
+// killed does not, and what it leaves is not a stray password file but the
+// account's archive: a live server was found holding 1.9 GiB from a run
+// the service was restarted out from under, on a disk whose next night's
+// backups were refused for want of room.
+//
+// Each directory is removed only while this holds that account's own lock,
+// which is the same lock a run takes. A workspace being worked in is
+// therefore never swept out from under it, and this is safe to call at any
+// time rather than only at startup.
+func (r *Real) SweepNativeWorkspaces() (int, error) {
+	root := r.nativeRoot()
+	entries, err := os.ReadDir(root)
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("directadmin: read native workspace root: %w", err)
+	}
+	swept := 0
+	var failures []error
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		cut := strings.LastIndex(entry.Name(), "-")
+		if cut <= 0 {
+			continue
+		}
+		account := entry.Name()[:cut]
+		if usableAccountName(account) != nil {
+			continue
+		}
+		removed, err := r.sweepOne(root, account, filepath.Join(root, entry.Name()))
+		if err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		if removed {
+			swept++
+		}
+	}
+	return swept, errors.Join(failures...)
+}
+
+// sweepOne removes one job directory while holding its account's lock, and
+// says whether it did. A lock it cannot take belongs to a run in progress.
+func (r *Real) sweepOne(root, account, dir string) (bool, error) {
+	lock, err := os.OpenFile(filepath.Join(root, account+".lock"),
+		os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0o600)
+	if err != nil {
+		return false, err
+	}
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		return false, nil
+	}
+	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	if err := os.RemoveAll(dir); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (r *Real) nativeWorkspace(account string) (_ *nativeWorkspace, err error) {
@@ -61,10 +137,7 @@ func (r *Real) nativeWorkspace(account string) (_ *nativeWorkspace, err error) {
 	if err != nil {
 		return nil, err
 	}
-	root := r.NativeRoot
-	if root == "" {
-		root = defaultNativeRoot
-	}
+	root := r.nativeRoot()
 	if !filepath.IsAbs(root) || filepath.Clean(root) == "/" {
 		return nil, fmt.Errorf("directadmin: native workspace root must be a dedicated absolute directory")
 	}

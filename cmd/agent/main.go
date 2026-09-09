@@ -415,7 +415,17 @@ func buildProvider(cfg config, log *slog.Logger) (panel.Provider, error) {
 		// it: the layout was read out of documentation, and the restore
 		// path has never been run against a DirectAdmin server.
 		log.Warn("the DirectAdmin provider is unfinished", "detail", dabackup.Provisional)
-		return &directadmin.Real{Log: log, ReadHomeInPlace: cfg.daReadHomeInPlace}, nil
+		provider := &directadmin.Real{Log: log, ReadHomeInPlace: cfg.daReadHomeInPlace}
+		// A run killed mid-stage leaves the account's archive behind, and
+		// what it leaves is measured in gigabytes on the disk the next
+		// night needs. The sweep takes each account's own lock, so a run
+		// in flight keeps its workspace.
+		if swept, err := provider.SweepNativeWorkspaces(); err != nil {
+			log.Warn("clear native workspaces left by an interrupted run", "error", err)
+		} else if swept > 0 {
+			log.Info("cleared native workspaces left by an interrupted run", "count", swept)
+		}
+		return provider, nil
 	}
 	if cfg.panelName != "" && cfg.panelName != "cpanel" {
 		return nil, fmt.Errorf("unknown panel %q: cpanel or directadmin", cfg.panelName)

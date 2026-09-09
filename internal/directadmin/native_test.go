@@ -493,3 +493,59 @@ func TestARestoreIsNotFailedForDatabasesTheArchiveDoesNotName(t *testing.T) {
 		t.Errorf("a restore was failed over databases the archive does not name: %v", err)
 	}
 }
+
+// TestASweepClearsAWorkspaceAKilledRunLeft covers gigabytes found on a
+// live server: the service was restarted while an account was being
+// staged, so the deferred close never ran and 1.9 GiB of that account's
+// archive stayed under the native root. The disk it filled is the one the
+// next night's backups are refused for want of.
+func TestASweepClearsAWorkspaceAKilledRunLeft(t *testing.T) {
+	r := nativeHost(t)
+	w, err := r.nativeWorkspace("studio")
+	if err != nil {
+		t.Fatal(err)
+	}
+	left := w.path
+	// What a killed process leaves: the directory, and no lock held by
+	// anyone, because the process that held it is gone.
+	if err := w.lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(left, "output", "big"), []byte("archive"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	swept, err := r.SweepNativeWorkspaces()
+	if err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if swept != 1 {
+		t.Errorf("swept = %d, want 1", swept)
+	}
+	if _, err := os.Stat(left); !os.IsNotExist(err) {
+		t.Errorf("the workspace is still there: %v", err)
+	}
+}
+
+// TestASweepLeavesAWorkspaceThatIsInUse is why the sweep takes each
+// account's own lock first. An operator running a restore by hand while
+// the service restarts must not have the archive removed underneath them.
+func TestASweepLeavesAWorkspaceThatIsInUse(t *testing.T) {
+	r := nativeHost(t)
+	w, err := r.nativeWorkspace("studio")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.close()
+
+	swept, err := r.SweepNativeWorkspaces()
+	if err != nil {
+		t.Fatalf("sweep: %v", err)
+	}
+	if swept != 0 {
+		t.Errorf("swept = %d, want 0: the lock is held", swept)
+	}
+	if _, err := os.Stat(w.path); err != nil {
+		t.Errorf("a workspace in use was removed: %v", err)
+	}
+}

@@ -11,7 +11,7 @@
 {{else if eq $data.Tab "system"}}
 <div class="cpr-card">
   <div class="cpr-pad">
-    <p class="cpr-hint" style="margin:0">The server's own settings — its cPanel configuration,
+    <p class="cpr-hint" style="margin:0">The server's own settings — its {{$.Panel}} configuration,
     not any one account. A restore of these is what turns a bare machine back into this one.</p>
   </div>
 </div>
@@ -106,7 +106,7 @@
 {{else}}
 <div class="cpr-card">
   <div class="cpr-pad" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">cPanel account lifecycle</h2>
+    <h2 style="margin:0">{{$.Panel}} account lifecycle</h2>
   </div>
   {{if $data.Lifecycle}}
   <div class="cpr-tablewrap"><table data-sortable>
@@ -124,9 +124,9 @@
     </tbody>
   </table></div>
   <div class="cpr-pad" style="border-top:1px solid var(--line)">
-    <p class="cpr-hint" style="margin:0">What cPanel told Gniza as accounts were created,
+    <p class="cpr-hint" style="margin:0">What {{$.Panel}} told Gniza as accounts were created,
     renamed, suspended or removed. A removal that says <b>Blocked</b> is this service refusing
-    to let cPanel delete an account it has no complete copy of.</p>
+    to let {{$.Panel}} delete an account it has no complete copy of.</p>
   </div>
   {{else}}
   <div class="cpr-empty"><p>No account lifecycle hook has reached the service yet.</p></div>

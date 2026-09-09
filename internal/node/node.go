@@ -328,6 +328,16 @@ func (e *Engine) SweepWorkdir() error {
 // Store exposes the state file to the UI.
 func (e *Engine) Store() *nodestore.Store { return e.store }
 
+// PanelName is what the panel behind this engine is called where an
+// operator reads it. The interface says what is about to run, and what
+// runs is the panel's own restore.
+func (e *Engine) PanelName() string {
+	if e.provider == nil {
+		return "your control panel"
+	}
+	return e.provider.Name()
+}
+
 // Vault exposes the credential vault to the UI, which seals what an
 // operator types before it is written.
 func (e *Engine) Vault() *vault.Vault { return e.vault }

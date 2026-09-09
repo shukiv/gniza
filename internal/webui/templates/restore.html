@@ -31,7 +31,7 @@
           {{end}}
         </select>
         {{if $data.Deleted}}
-        <p class="cpr-sublabel">Deleted accounts are gone from cPanel but still have backups here, and
+        <p class="cpr-sublabel">Deleted accounts are gone from {{$.Panel}} but still have backups here, and
         are shaded in the list below. A backup made by a server that is gone is under
         <a class="cpr-link" href="?p=restore&amp;tab=server">Disaster recovery</a>.</p>
         {{end}}
@@ -56,7 +56,7 @@
 <div class="cpr-banner cpr-warn">
   <div class="cpr-body">
     <strong>{{$data.Account}} is not on this server any more.</strong>
-    Its backups are still here. Restoring the whole account hands the archive to cPanel's own
+    Its backups are still here. Restoring the whole account hands the archive to {{$.Panel}}'s own
     restore, which creates the account again — with its files, databases, mail and settings as
     they were in the backup you pick. Single files can be taken out without recreating anything.
   </div>
@@ -139,7 +139,7 @@ destination knows.{{end}}</div>
   <div class="cpr-pad" style="border-top:1px solid var(--line)">
     <p class="cpr-hint" style="margin:0"><b>Rebuild chosen</b> puts each account back together and
     leaves the archive here to inspect. <b>Restore chosen onto this server</b> hands those archives
-    to cPanel's own restore. Either way they run one after another: staging rebuilds an account in
+    to {{$.Panel}}'s own restore. Either way they run one after another: staging rebuilds an account in
     full, and a volume with room for one is not a volume with room for nineteen at once.</p>
   </div>
 </div>

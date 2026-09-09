@@ -40,6 +40,10 @@ type page struct {
 	// typefaces are fetched from depends on the panel, so they are
 	// written per request rather than embedded in the stylesheet.
 	Fonts template.CSS
+	// Panel is what the control panel this runs on is called. Templates
+	// that name it say {{$.Panel}}: the same page is served on cPanel and
+	// on DirectAdmin, and it used to say cPanel on both.
+	Panel string
 }
 
 // updateNotice is a release newer than the one running here.
@@ -74,6 +78,7 @@ func (s *Server) renderWithCSRF(
 		Flash: flashFrom(r), Data: data, Assets: s.assets,
 		Fonts:          fontFaces(fontBaseFor(r)),
 		RunningVersion: agent.Version,
+		Panel:          s.panelName(),
 	}
 	// An account-facing request is confined to the account that opened
 	// the socket, here as everywhere: another customer's restore is not

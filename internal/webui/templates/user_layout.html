@@ -27,7 +27,7 @@
       <a href="browse.live.php" {{if eq .Nav "restore"}}aria-current="page"{{end}}>Restore &amp; download</a>
       <a href="logs.live.php" {{if eq .Nav "logs"}}aria-current="page"{{end}}>Logs</a>
     </nav>
-    <span class="cpr-user-account" title="Signed-in cPanel account">{{.Data.Account}}</span>
+    <span class="cpr-user-account" title="Signed-in {{$.Panel}} account">{{.Data.Account}}</span>
     <div class="cpr-theme" id="theme" hidden aria-label="Colour theme">
       <button type="button" data-theme-choice="system" aria-pressed="false" aria-label="Use system theme" title="Match system">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8"/></svg>

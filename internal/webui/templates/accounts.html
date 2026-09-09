@@ -45,7 +45,7 @@
           <td class="cpr-acct"><a class="cpr-link" href="?p=account&amp;user={{.User}}">{{.User}}</a>
             {{if .PrimaryDomain}}<div class="cpr-sublabel">{{.PrimaryDomain}}</div>{{end}}
             {{if .Missing}}<div class="cpr-sublabel cpr-warntext"
-              title="cPanel lists this account, but nothing is at its home directory. Its backup will fail until that is sorted out — which is better than it quietly not being backed up at all.">
+              title="{{$.Panel}} lists this account, but nothing is at its home directory. Its backup will fail until that is sorted out — which is better than it quietly not being backed up at all.">
               home directory missing</div>{{end}}</td>
           <td class="cpr-mono cpr-num" data-sort="{{.SizeBytes}}">{{if .SizeBytes}}{{bytes .SizeBytes}}{{else}}<span class="cpr-muted">—</span>{{end}}</td>
           <td data-sort="{{unixPtr .LastBackup}}">{{if .LastBackup}}{{ago .LastBackup}}{{else}}<span class="cpr-mono">never</span>{{end}}</td>
@@ -80,7 +80,7 @@
             {{if .NeedsRemovalPreparation}}<form method="post" action="?p=accounts/prepare-removal" class="cpr-inline">
               <input type="hidden" name="csrf" value="{{$.CSRF}}">
               <input type="hidden" name="account" value="{{.User}}">
-              <button class="cpr-btn cpr-primary" title="Queue the smallest set of full-account schedules needed before cPanel may terminate this account." {{if .Running}}disabled{{end}}>Prepare removal</button>
+              <button class="cpr-btn cpr-primary" title="Queue the smallest set of full-account schedules needed before {{$.Panel}} may terminate this account." {{if .Running}}disabled{{end}}>Prepare removal</button>
             </form>{{end}}
             {{if .RepairPolicyID}}<form method="post" action="?p=accounts/repair" class="cpr-inline">
               <input type="hidden" name="csrf" value="{{$.CSRF}}">
@@ -112,7 +112,7 @@
 </div>
 {{else}}
 <div class="cpr-card"><div class="cpr-empty">
-  <p><b>No cPanel accounts found on this server.</b><br>
+  <p><b>No {{$.Panel}} accounts found on this server.</b><br>
     Gniza reads them from <span class="cpr-mono">/var/cpanel/users</span>.</p>
 </div></div>
 {{end}}

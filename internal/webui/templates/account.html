@@ -26,8 +26,8 @@
 
 {{with $d.Account.RemovalSafety}}
 <div class="cpr-banner {{if .Allowed}}cpr-ok{{else}}cpr-bad{{end}}"><div class="cpr-body">
-  {{if .Allowed}}<b>cPanel may safely terminate this account.</b>
-  {{else}}<b>Gniza will block cPanel from terminating this account.</b>{{end}}
+  {{if .Allowed}}<b>{{$.Panel}} may safely terminate this account.</b>
+  {{else}}<b>Gniza will block {{$.Panel}} from terminating this account.</b>{{end}}
   {{.Detail}}.
   {{if not .Allowed}}Run the applicable full-account schedules and wait for every promised
   destination to finish before trying again.

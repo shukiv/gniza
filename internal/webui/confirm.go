@@ -127,15 +127,20 @@ func restorePoint(snapshot string) string {
 	return "Restore point: " + snapshot + "."
 }
 
-// confirmWholeAccount describes handing a backup to cPanel's own restore,
-// which is the largest thing this interface can be asked to do.
+// confirmWholeAccount describes handing a backup to the panel's own
+// restore, which is the largest thing this interface can be asked to do.
 //
-// An account cPanel no longer has is a different question with the same
+// An account the panel no longer has is a different question with the same
 // button: nothing on this server is replaced, because there is nothing
 // here to replace. Saying "there is no undo" about that would be a warning
 // the operator has to read past, and warnings that are read past stop
 // being read.
-func confirmWholeAccount(account, snapshot, cancel string, gone, unrestricted bool) confirmation {
+//
+// panelName is what the restore about to run is called. This warning sits
+// above the one irreversible button here, and on a DirectAdmin server it
+// named cPanel.
+func confirmWholeAccount(panelName, account, snapshot, cancel string,
+	gone, unrestricted bool) confirmation {
 	ask := confirmation{
 		Detail: []string{restorePoint(snapshot)},
 		Cancel: cancel,
@@ -147,17 +152,19 @@ func confirmWholeAccount(account, snapshot, cancel string, gone, unrestricted bo
 	}
 	if gone {
 		ask.Title = fmt.Sprintf("Create %s again?", account)
-		ask.Warning = fmt.Sprintf("This hands the backup to cPanel's own restore, which "+
+		ask.Warning = fmt.Sprintf("This hands the backup to %s's own restore, which "+
 			"creates the account again with the files, databases, mail and settings the "+
-			"backup holds. %s is not on this server now, so nothing here is replaced.", account)
+			"backup holds. %s is not on this server now, so nothing here is replaced.",
+			panelName, account)
 		ask.Tick = fmt.Sprintf("Yes, create %s again", account)
 		ask.Button = fmt.Sprintf("Create %s", account)
 		return ask
 	}
 	ask.Title = fmt.Sprintf("Overwrite %s?", account)
-	ask.Warning = fmt.Sprintf("This hands the backup to cPanel's own restore, which replaces "+
+	ask.Warning = fmt.Sprintf("This hands the backup to %s's own restore, which replaces "+
 		"the live account. %s goes back to the files, databases, mail and settings the backup "+
-		"holds, and anything added since the backup was taken is gone. There is no undo.", account)
+		"holds, and anything added since the backup was taken is gone. There is no undo.",
+		panelName, account)
 	ask.Tick = fmt.Sprintf("Yes, overwrite %s", account)
 	ask.Button = fmt.Sprintf("Overwrite %s", account)
 	return ask
@@ -177,16 +184,17 @@ func namedAccounts(accounts []string) []string {
 
 // confirmManyAccounts describes the bulk restore, which is the one where a
 // name nobody meant to tick is easiest to miss.
-func confirmManyAccounts(accounts []string, asOf, cancel string, unrestricted bool) confirmation {
+func confirmManyAccounts(panelName string, accounts []string, asOf, cancel string,
+	unrestricted bool) confirmation {
 	point := "Restore point: the most recent backup of each."
 	if asOf != "" {
 		point = "Restore point: the newest backup of each taken on or before " + asOf + "."
 	}
 	ask := confirmation{
 		Title: fmt.Sprintf("Restore %s onto this server?", counted(len(accounts), "account")),
-		Warning: "Each of these is handed to cPanel's own restore. An account of the same " +
-			"name on this server is replaced by the backup's copy, and anything added since " +
-			"the backup was taken is gone. There is no undo.",
+		Warning: fmt.Sprintf("Each of these is handed to %s's own restore. An account of "+
+			"the same name on this server is replaced by the backup's copy, and anything "+
+			"added since the backup was taken is gone. There is no undo.", panelName),
 		Detail: append([]string{point}, namedAccounts(accounts)...),
 		Tick:   fmt.Sprintf("Yes, restore %s onto this server", counted(len(accounts), "account")),
 		Button: fmt.Sprintf("Restore %s", counted(len(accounts), "account")),

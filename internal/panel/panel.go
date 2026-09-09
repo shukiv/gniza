@@ -102,6 +102,13 @@ type StageRequest struct {
 
 // Provider produces backup payloads for accounts.
 type Provider interface {
+	// Name is what this panel is called where an operator reads it:
+	// "cPanel", "DirectAdmin". The interface tells operators what is
+	// about to run, and the warning above the one irreversible button
+	// here named the wrong panel on every DirectAdmin server until this
+	// existed.
+	Name() string
+
 	// Layout says where this panel keeps the parts of an account, both
 	// inside the archive its restore reads and inside the metadata a
 	// single-item restore takes things out of.

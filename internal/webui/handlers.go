@@ -3339,7 +3339,7 @@ func (s *Server) handleStartRestore(w http.ResponseWriter, r *http.Request) {
 	// Asked after the file list, because picking files turns this into a
 	// restore that overwrites nothing and needs no confirmation.
 	if restore.Apply && !confirmed(r) {
-		s.askFirst(w, r, confirmWholeAccount(restore.Account, restore.SnapshotID,
+		s.askFirst(w, r, confirmWholeAccount(s.panelName(), restore.Account, restore.SnapshotID,
 			linkTo("/restore?account="+restore.Account),
 			s.accountIsGone(restore.Account), restore.Unrestricted))
 		return
@@ -4245,7 +4245,7 @@ func (s *Server) handleRecoverAccount(w http.ResponseWriter, r *http.Request) {
 		// so the operator runs the restore point they were shown rather
 		// than whatever is newest by the time they tick the box.
 		r.PostForm.Set("snapshot", snapshot)
-		s.askFirst(w, r, confirmWholeAccount(account, snapshot,
+		s.askFirst(w, r, confirmWholeAccount(s.panelName(), account, snapshot,
 			linkTo("/restore?tab=server"), s.accountIsGone(account),
 			r.PostFormValue("unrestricted") != ""))
 		return
@@ -4336,7 +4336,7 @@ func (s *Server) handleRecoverAccounts(w http.ResponseWriter, r *http.Request) {
 	// Asked after the list is known to be a list, so the page names the
 	// accounts rather than warning about a restore of nothing.
 	if apply && !confirmed(r) {
-		s.askFirst(w, r, confirmManyAccounts(accounts,
+		s.askFirst(w, r, confirmManyAccounts(s.panelName(), accounts,
 			strings.TrimSpace(r.PostFormValue("asof")), linkTo(back), unrestricted))
 		return
 	}

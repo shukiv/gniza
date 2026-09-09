@@ -1165,4 +1165,6 @@ const (
 )
 
 // Layout is cPanel's own: a cpmove tree.
+func (r *Real) Name() string { return "cPanel" }
+
 func (r *Real) Layout() panel.Layout { return cpmove.Layout{} }

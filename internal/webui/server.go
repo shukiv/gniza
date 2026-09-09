@@ -147,6 +147,15 @@ func New(engine *node.Engine, log *slog.Logger, options ...Option) (*Server, err
 	return server, nil
 }
 
+// panelName is what to call the control panel this server runs, for the
+// pages that tell an operator what is about to happen.
+func (s *Server) panelName() string {
+	if s.engine == nil {
+		return "your control panel"
+	}
+	return s.engine.PanelName()
+}
+
 // userCSRFToken binds an account-facing form to the Unix peer identity that
 // rendered it. Customers neither receive the root WHM token nor share a
 // token with another account on the same server.

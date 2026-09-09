@@ -167,6 +167,8 @@ func (r *Real) debug(msg string, args ...any) {
 }
 
 // Layout validates native archives; split/granular selectors remain provisional.
+func (r *Real) Name() string { return "DirectAdmin" }
+
 func (r *Real) Layout() panel.Layout { return dabackup.Layout{} }
 
 // NativeExcludes is what DirectAdmin's own backups leave out of an

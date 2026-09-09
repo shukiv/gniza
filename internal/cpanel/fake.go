@@ -541,4 +541,6 @@ func (f *Fake) StageSystem(_ context.Context, stagingDir string) (pkgacct.Payloa
 
 // Layout is the same cpmove tree the real provider produces: the fake
 // exists to exercise the machinery, not to invent a second format.
+func (f *Fake) Name() string { return "cPanel" }
+
 func (f *Fake) Layout() panel.Layout { return cpmove.Layout{} }

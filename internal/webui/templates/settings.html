@@ -63,7 +63,7 @@
         <input type="number" name="deleted_account_days_custom" min="1"
                aria-label="Days to keep a deleted account's backups"
                value="{{$data.DeletedDays}}">
-        <small class="cpr-help">When a cPanel account has been gone this long, its backups are
+        <small class="cpr-help">When a {{$.Panel}} account has been gone this long, its backups are
         removed from every destination and its history here goes with them. Nothing else ever
         removes them: retention thins a series but never empties it. The number beside the list
         is used when you choose “some other number of days”.</small>
@@ -72,7 +72,7 @@
         <label class="cpr-check">
           <input type="checkbox" name="protect_account_removal" value="1"
                  {{if $data.Settings.ProtectAccountRemoval}}checked{{end}}>
-          <span>Block unsafe cPanel account termination
+          <span>Block unsafe {{$.Panel}} account termination
           <small class="cpr-help">Refuse removal unless every destination promised by a full-account
           schedule has a recent, successful and complete copy. A partial backup does not count;
           after first enabling this, let the schedule complete a new backup.</small></span>
@@ -82,7 +82,7 @@
         <label class="cpr-check">
           <input type="checkbox" name="backup_on_suspension" value="1"
                  {{if $data.Settings.BackupOnSuspension}}checked{{end}}>
-          <span>Preserve accounts when cPanel suspends them
+          <span>Preserve accounts when {{$.Panel}} suspends them
           <small class="cpr-help">Immediately queue the smallest set of full-account schedules
           needed to reach every promised destination. The hook queues work and returns; it does
           not wait for the backup to finish.</small></span>
@@ -378,12 +378,12 @@
       <tr>
         <td class="cpr-acct">Databases</td>
         <td>One plain <span class="cpr-mono">.sql</span> dump per database.
-          <div class="cpr-sublabel">Dumped by Gniza, not packed inside cPanel's archive: plain
+          <div class="cpr-sublabel">Dumped by Gniza, not packed inside {{$.Panel}}'s archive: plain
           SQL deduplicates between nights, a compressed archive does not.</div></td>
       </tr>
       <tr>
         <td class="cpr-acct">Settings, DNS, SSL, mail configuration</td>
-        <td>cPanel's own account archive, with the home directory and databases left out of it.
+        <td>{{$.Panel}}'s own account archive, with the home directory and databases left out of it.
           <div class="cpr-sublabel">The same <span class="cpr-mono">cpmove</span> format
           restorepkg reads, so a whole-account restore is a rebuild of it.</div></td>
       </tr>
@@ -397,7 +397,7 @@
       costs a fraction of it.
     </div></div>
     {{else}}
-    <p class="cpr-hint" style="margin:0">The three rows above are the whole account as cPanel
+    <p class="cpr-hint" style="margin:0">The three rows above are the whole account as {{$.Panel}}
     packages it, and what differs between payload modes is how it is cut up rather than what is
     kept. One thing cPanel itself does not carry: two-factor authentication settings are not in
     a <span class="cpr-mono">cpmove</span> archive, so an account restored onto a rebuilt server

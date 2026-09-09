@@ -127,8 +127,25 @@ It extracts the home archive as the account. JetBackup keeps a directory
 inside every account's home that belongs to root, so a faithful archive
 of that home is one DirectAdmin refuses outright -- tar exits and takes
 the run with it. It is left out now, like `.cagefs`: empty on all 142
-accounts of that host, and JetBackup makes it again. Nothing else in any
-home there is owned by anyone but the account.
+accounts of that host, and JetBackup makes it again.
+
+That directory is not the only one of its kind. A full walk of all 142
+homes on the validation host, `find /home/<user> -xdev ! -uid <uid>`,
+found root-owned files in six of them besides `.jb-roundcube`: a lone
+`.htaccess`, an `info.php`, an uploaded `.zip`, and one account with
+12,352 of them under a WordPress tree someone unpacked as root. Those
+are the account's own site files, and leaving them out would be losing
+data rather than skipping a cache, so they stay in.
+
+The consequence is that those six accounts restore no further than the
+first root-owned member: DirectAdmin extracts `backup/home.tar.zst` as
+the account, and tar cannot chown to root. This change did not introduce
+it -- the whole-archive shape carries the real owner of every file too,
+from DirectAdmin's own tar or from the manifest a repack reads, so both
+shapes meet the same member the same way. It is a property of
+DirectAdmin's restore meeting a home root has written into, and it is
+worth a check of its own: a backup that cannot be restored should say so
+on the night it is taken, not on the day it is needed.
 
 After both, the restore succeeded: `Account gzv0908a has been restored
 from user.admin.gzv0908a.tar.zst under admin`, with its databases, its
@@ -136,10 +153,14 @@ messages, its domains and its dotfiles.
 
 What the restore does not put back is a group the account is not in.
 `.php/` came back `gzv0908a:gzv0908a` where the archive said
-`gzv0908a:apache`, and `Maildir/` the same. That is DirectAdmin
-extracting as the account, not something this changed: the archive
-carried the right names, and what the outer archive holds -- `imap/`,
+`gzv0908a:apache`, and `Maildir/` the same. The archive carried the
+right names, and what the outer archive holds -- `imap/`,
 `backup/.shadow` -- kept them, because that one is extracted as root.
+The reading that fits all three, and the one the `utime` failure above
+points to, is that DirectAdmin extracts the nested archive as the
+account and the account cannot name a group it is not in. If that is
+right the whole-archive shape loses them too, which has not been
+measured; either way a DirectAdmin restore wants a group pass after it.
 
 ## Consequences
 

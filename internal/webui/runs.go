@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"fmt"
 	"sort"
 	"time"
 
@@ -150,5 +151,45 @@ func addJob(run *runSummary, stored nodestore.Job) {
 	}
 	if stored.FinishedAt != nil && stored.FinishedAt.After(run.FinishedAt) {
 		run.FinishedAt = *stored.FinishedAt
+	}
+}
+
+// BackedUp is how many accounts these runs stored, which is what a week of
+// backups amounts to when it is counted as work done rather than as rows.
+func backedUp(runs []runSummary) int {
+	var total int
+	for _, run := range runs {
+		total += run.Succeeded + run.Partial
+	}
+	return total
+}
+
+// Outcome is the run in three or four words: what it did, or what it
+// failed to do. A failure is named first, because a run that stored three
+// hundred accounts and lost twelve is remembered by the twelve.
+func (r runSummary) Outcome() string {
+	switch {
+	case !r.Done():
+		return fmt.Sprintf("%d of %d done", r.Accounts-r.Unfinished, r.Accounts)
+	case r.Failed > 0:
+		return fmt.Sprintf("%d failed", r.Failed)
+	case r.Partial > 0:
+		return fmt.Sprintf("%d partly stored", r.Partial)
+	case r.Cancelled > 0:
+		return fmt.Sprintf("%d cancelled", r.Cancelled)
+	default:
+		return fmt.Sprintf("%d backed up", r.Succeeded)
+	}
+}
+
+// Tone is how gravely to draw that: a colour, and nothing else.
+func (r runSummary) Tone() string {
+	switch {
+	case r.Failed > 0:
+		return "bad"
+	case r.Partial > 0, r.Cancelled > 0:
+		return "warn"
+	default:
+		return ""
 	}
 }

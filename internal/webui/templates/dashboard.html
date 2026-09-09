@@ -2,76 +2,43 @@
 {{$d := .Data}}
 <div>
   <h1>Overview</h1>
-  <p class="cpr-sub">{{$d.Hostname}} · {{len $d.Accounts}} cPanel account{{if ne (len $d.Accounts) 1}}s{{end}}</p>
+  <p class="cpr-sub">{{$d.Hostname}} · {{len $d.Accounts}} account{{if ne (len $d.Accounts) 1}}s{{end}}</p>
 </div>
 
-{{if not $d.Destinations}}
-<div class="cpr-banner cpr-bad">
-  <div class="cpr-body"><b>No backup destination yet.</b> Nothing can be backed up until this server
-    has somewhere to send it.
-    <div style="margin-top:var(--s3)"><a class="cpr-btn cpr-primary" href="?p=destinations">Add a destination</a></div>
+{{/* The verdict, first and in one sentence: the page is opened to find out
+     whether this server is covered, and a row of counters answers that only
+     after it has been read and added up. */}}
+<div class="cpr-band cpr-b-{{$d.Band}}">
+  <div class="cpr-verdict">{{$d.Verdict}}</div>
+  {{if $d.Accounts}}
+  <div class="cpr-meter" role="img" aria-label="{{$d.Protected}} with a good recent backup, {{$d.Stale}} needing attention, {{$d.Unprotected}} never backed up">
+    {{if $d.Protected}}<i class="cpr-ok" style="width:{{$d.ProtectedPct}}%"></i>{{end}}
+    {{if $d.Stale}}<i class="cpr-stale" style="width:{{$d.StalePct}}%"></i>{{end}}
+    {{if $d.Unprotected}}<i class="cpr-none" style="width:{{$d.UnprotectedPct}}%"></i>{{end}}
   </div>
-</div>
-{{else if $d.Unscheduled}}
-<div class="cpr-banner cpr-bad">
-  <div class="cpr-body"><b>{{$d.Unscheduled}} account{{if ne $d.Unscheduled 1}}s are{{else}} is{{end}} outside every enabled schedule.</b>
-    An old backup is not continuing protection. Add the account to a schedule, or use an
-    all-account schedule so future cPanel accounts are enrolled automatically.
-    <div style="margin-top:var(--s3)"><a class="cpr-btn cpr-primary" href="?p=schedule">Review schedules</a></div>
+  <div class="cpr-legend">
+    <span><span class="cpr-key" style="background:var(--good)"></span><b>{{$d.Protected}}</b> backed up</span>
+    <span><span class="cpr-key" style="background:var(--warn)"></span><b>{{$d.Stale}}</b> need attention</span>
+    <span><span class="cpr-key" style="background:var(--bad)"></span><b>{{$d.Unprotected}}</b> never</span>
+    {{if $d.Failed}}<span><b>{{$d.Failed}}</b> failed</span>{{end}}
+    {{if $d.Partial}}<span><b>{{$d.Partial}}</b> partly stored</span>{{end}}
+    {{if $d.CopyGaps}}<span><b>{{$d.CopyGaps}}</b> missing a second copy</span>{{end}}
+    {{if $d.Unscheduled}}<span><b>{{$d.Unscheduled}}</b> outside every schedule</span>{{end}}
   </div>
-</div>
-{{else if $d.Unprotected}}
-<div class="cpr-banner cpr-bad">
-  <div class="cpr-body"><b>{{$d.Unprotected}} account{{if ne $d.Unprotected 1}}s have{{else}} has{{end}} never been backed up.</b>
-    Open Accounts to start the affected accounts now instead of waiting for their next schedule.
-    <div style="margin-top:var(--s3)"><a class="cpr-btn cpr-primary" href="?p=accounts">Review accounts</a></div>
-  </div>
-</div>
-
-{{end}}
-
-<div class="cpr-grid3">
-  <div class="cpr-card cpr-pad">
-    <div class="cpr-statlabel">Protection</div>
-    <div class="cpr-cov-figure">{{$d.Protected}} <small>of {{len $d.Accounts}} accounts have a usable backup</small></div>
-    <div class="cpr-meter" role="img" aria-label="{{$d.Protected}} with a good recent backup, {{$d.Stale}} needing attention, {{$d.Unprotected}} never backed up">
-      {{if $d.Protected}}<i class="cpr-ok" style="width:{{$d.ProtectedPct}}%"></i>{{end}}
-      {{if $d.Stale}}<i class="cpr-stale" style="width:{{$d.StalePct}}%"></i>{{end}}
-      {{if $d.Unprotected}}<i class="cpr-none" style="width:{{$d.UnprotectedPct}}%"></i>{{end}}
-    </div>
-    <div class="cpr-legend">
-      <span><span class="cpr-key" style="background:var(--good)"></span><b>{{$d.Protected}}</b> backed up</span>
-      <span><span class="cpr-key" style="background:var(--warn)"></span><b>{{$d.Stale}}</b> need attention</span>
-      <span><span class="cpr-key" style="background:var(--bad)"></span><b>{{$d.Unprotected}}</b> never</span>
-    </div>
-    <p class="cpr-hint">
-      {{$d.OutOfDate}} overdue · {{$d.CopyGaps}} copy gaps · {{$d.Partial}} partial · {{$d.Failed}} failed ·
-      {{$d.Unscheduled}} unscheduled · {{$d.Verified}} restore-tested
-    </p>
-  </div>
-
-  <div class="cpr-card cpr-pad">
-    <div class="cpr-statlabel">Next scheduled run</div>
-    {{if $d.NextRun}}
-    <div class="cpr-stat">{{$d.NextRun}}</div>
-    <p class="cpr-hint"><span class="cpr-mono">{{$d.NextRunPolicy}}</span> · {{$d.NextRunIn}}</p>
-    {{else}}
-    <div class="cpr-stat cpr-muted">None</div>
-    <p class="cpr-hint">No schedule is enabled, so nothing runs on its own.</p>
-    {{end}}
-  </div>
-
-  <div class="cpr-card cpr-pad">
-    <div class="cpr-statlabel">Staging space</div>
-    <div class="cpr-stat {{if $d.SpaceTight}}cpr-warnish{{end}}">{{bytes $d.StagingFree}} free</div>
-    <p class="cpr-hint">A backup needs room for one full account.{{if $d.SpaceTight}} This is tight.{{end}}</p>
-  </div>
+  {{end}}
+  {{if not $d.Destinations}}
+  <div><a class="cpr-btn cpr-primary" href="?p=destinations">Add a destination</a></div>
+  {{else if $d.Unscheduled}}
+  <div class="cpr-hint">An old backup is not continuing protection. Put those accounts on a
+    schedule, or use an all-account schedule so accounts added later are enrolled on their own.
+    <a class="cpr-link" href="?p=schedule">Review schedules</a></div>
+  {{end}}
 </div>
 
 {{if $d.Attention}}
 <div class="cpr-card">
   <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">Needs attention</h2>
+    <h2 style="margin:0">Worth acting on</h2>
     <a class="cpr-link" href="?p=accounts">All accounts</a>
   </div>
   <div class="cpr-tablewrap">
@@ -111,26 +78,53 @@
 </div>
 {{end}}
 
-<div class="cpr-card">
-  <div class="cpr-pad" style="border-bottom:1px solid var(--line)"><h2 style="margin:0">cPanel account lifecycle</h2></div>
-  {{if $d.Lifecycle}}
-  <div class="cpr-tablewrap"><table>
-    <thead><tr><th>Event</th><th>Account</th><th>Result</th><th>When</th></tr></thead>
-    <tbody>
-      {{range $d.Lifecycle}}
-      <tr class="cpr-state {{if .OK}}cpr-s-ok{{else}}cpr-s-bad{{end}}">
-        <td>{{.Title}}</td>
-        <td class="cpr-acct">{{if .Account}}{{.Account}}{{else}}<span class="cpr-muted">unknown</span>{{end}}</td>
-        <td><span class="cpr-pill {{if .OK}}cpr-ok{{else}}cpr-bad{{end}}"><span class="cpr-dot"></span>{{.Outcome}}</span>
-          {{if .Detail}}<div class="cpr-sublabel">{{.Detail}}</div>{{end}}</td>
-        <td>{{ago .When}}</td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table></div>
-  {{else}}
-  <div class="cpr-empty"><p>No account lifecycle hook has reached the service yet.</p></div>
+<div class="cpr-tiles">
+  <div class="cpr-tile"><span class="cpr-n">{{len $d.Accounts}}</span><span class="cpr-k">Accounts</span></div>
+  {{if $d.Managed}}
+  <div class="cpr-tile"><span class="cpr-n">{{bytes $d.Managed}}</span><span class="cpr-k">Under management</span></div>
   {{end}}
+  <div class="cpr-tile">
+    {{/* Red only once there is something to have tested: a server with no
+         backups yet has nothing to rehearse, and is not failing at it. */}}
+    <span class="cpr-n {{if and $d.Protected (not $d.Verified)}}cpr-badish{{end}}">{{$d.Verified}} <small>of {{len $d.Accounts}}</small></span>
+    <span class="cpr-k">Restore-tested</span>
+  </div>
+  <div class="cpr-tile"><span class="cpr-n">{{$d.BackedUp}}</span><span class="cpr-k">Backed up this week</span></div>
+  {{if $.Running.Queue}}
+  <div class="cpr-tile"><span class="cpr-n cpr-warnish">{{len $.Running.Queue}}</span><span class="cpr-k">Waiting now</span></div>
+  {{end}}
+</div>
+
+<div class="cpr-factrow">
+  <div class="cpr-fact">
+    <span class="cpr-k">Last run</span>
+    {{if $d.LastRun}}
+    <span class="cpr-value {{if eq $d.LastRun.Tone "bad"}}cpr-badish{{else if eq $d.LastRun.Tone "warn"}}cpr-warnish{{end}}">{{$d.LastRun.Outcome}}</span>
+    <span class="cpr-note"><em>{{$d.LastRun.Policy}}</em>
+      {{if $d.LastRun.Done}}· finished {{agoTime $d.LastRun.FinishedAt}}{{if $d.LastRun.Took}}, took {{took $d.LastRun.Took}}{{end}}
+      {{else}}· started {{agoTime $d.LastRun.StartedAt}}{{end}}
+      {{if $d.LastRun.BytesAdded}}· {{bytes $d.LastRun.BytesAdded}} of new data{{end}}</span>
+    {{else}}
+    <span class="cpr-value cpr-muted">None yet</span>
+    <span class="cpr-note">Nothing has run in the last week.</span>
+    {{end}}
+  </div>
+  <div class="cpr-fact">
+    <span class="cpr-k">Next run</span>
+    {{if $d.NextRun}}
+    <span class="cpr-value">{{$d.NextRun}}</span>
+    <span class="cpr-note"><em>{{$d.NextRunPolicy}}</em>, {{$d.NextRunIn}}</span>
+    {{else}}
+    <span class="cpr-value cpr-muted">None</span>
+    <span class="cpr-note">No schedule is enabled, so nothing runs on its own.</span>
+    {{end}}
+  </div>
+  <div class="cpr-fact">
+    <span class="cpr-k">Staging space</span>
+    <span class="cpr-value {{if $d.SpaceTight}}cpr-warnish{{end}}">{{bytes $d.StagingFree}} free</span>
+    <span class="cpr-note">A backup needs room for one account at a time.{{if $d.Largest}}
+      The largest here is <em>{{$d.LargestAccount}}</em> at {{bytes $d.Largest}}.{{end}}</span>
+  </div>
 </div>
 
 <div class="cpr-grid2">
@@ -170,7 +164,7 @@
       </div>
       {{if $d.LastDrill.Detail}}<p class="cpr-hint">{{$d.LastDrill.Detail}}</p>{{end}}
       {{if $d.LastDrill.Error}}<p class="cpr-hint">{{$d.LastDrill.Error}}</p>{{end}}
-      <p class="cpr-note">A rehearsal proves the backup rebuilds. It does not prove cPanel would
+      <p class="cpr-note">A rehearsal proves the backup rebuilds. It does not prove the panel would
         accept it — only a restore onto a spare account does that.</p>
     </div>
     {{else}}
@@ -182,5 +176,31 @@
     </div>
     {{end}}
   </div>
+</div>
+
+{{/* The lifecycle log is a record, not a verdict: it is folded to one line
+     so it cannot take half the page from what somebody came here to read. */}}
+<div class="cpr-card cpr-pad">
+  {{if $d.Lifecycle}}
+  <details class="cpr-queue" data-fold="cpr-lifecycle">
+    <summary>Account lifecycle — {{len $d.Lifecycle}} recent event{{if ne (len $d.Lifecycle) 1}}s{{end}}</summary>
+    <div class="cpr-tablewrap" style="margin-top:var(--s3)"><table>
+      <thead><tr><th>Event</th><th>Account</th><th>Result</th><th>When</th></tr></thead>
+      <tbody>
+        {{range $d.Lifecycle}}
+        <tr class="cpr-state {{if .OK}}cpr-s-ok{{else}}cpr-s-bad{{end}}">
+          <td>{{.Title}}</td>
+          <td class="cpr-acct">{{if .Account}}{{.Account}}{{else}}<span class="cpr-muted">unknown</span>{{end}}</td>
+          <td><span class="cpr-pill {{if .OK}}cpr-ok{{else}}cpr-bad{{end}}"><span class="cpr-dot"></span>{{.Outcome}}</span>
+            {{if .Detail}}<div class="cpr-sublabel">{{.Detail}}</div>{{end}}</td>
+          <td>{{ago .When}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table></div>
+  </details>
+  {{else}}
+  <span class="cpr-hint">No account lifecycle hook has reached the service yet.</span>
+  {{end}}
 </div>
 {{end}}

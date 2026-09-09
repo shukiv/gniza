@@ -1046,10 +1046,10 @@ func TestOverviewLeadsWithCoverage(t *testing.T) {
 	// The question an operator actually has is whether everything is
 	// protected, so that is what the page opens with.
 	for _, want := range []string{
-		"of 1 accounts have a usable backup",
-		"Staging space",
 		// With nothing configured, the first thing to say is what to do.
-		"No backup destination yet",
+		"Nothing is being backed up: this server has no destination.",
+		"Add a destination",
+		"Staging space",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the overview is missing %q", want)
@@ -1069,8 +1069,11 @@ func TestOverviewLeadsWithCoverage(t *testing.T) {
 	added.Body.Close()
 
 	_, body = get(t, client, "/")
-	if !strings.Contains(body, "never been backed up") {
+	if !strings.Contains(body, "1 of 1 accounts is not covered.") {
 		t.Error("the overview does not say that an account has no backup")
+	}
+	if !strings.Contains(body, "Worth acting on") {
+		t.Error("the overview does not offer the account to act on")
 	}
 	_ = engine
 }
@@ -1098,7 +1101,7 @@ func TestRoutesTravelInTheQueryParameter(t *testing.T) {
 	}
 
 	// No route is the overview.
-	if _, body := get(t, client, "/"); !strings.Contains(body, "Protection") {
+	if _, body := get(t, client, "/"); !strings.Contains(body, "Staging space") {
 		t.Error("the bare address did not reach the overview")
 	}
 }

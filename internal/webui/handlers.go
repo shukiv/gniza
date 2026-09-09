@@ -67,13 +67,73 @@ type dashboardView struct {
 	StagingFree uint64
 	SpaceTight  bool
 
+	// Managed is what these accounts amount to, as each account's last
+	// backup measured it. Largest is the biggest of them, which is what
+	// staging has to have room for.
+	Managed        uint64
+	Largest        uint64
+	LargestAccount string
+
+	// Runs is the recent past, newest first: one entry per firing of a
+	// schedule rather than one per account. LastRun is the newest of
+	// them, and nil on a server that has never run one.
+	Runs    []runSummary
+	LastRun *runSummary
+	// BackedUp is how many accounts those runs stored between them: a
+	// week of work as work rather than as rows.
+	BackedUp int
+
 	LastDrill *nodestore.Restore
 	Lifecycle []nodestore.LifecycleEvent
+}
+
+// Verdict is the first line of the page: whether this server's accounts
+// are covered, in one sentence.
+//
+// The question somebody opens this page with is "am I covered?", and a row
+// of counters answers it only after they have been read and added up.
+func (d dashboardView) Verdict() string {
+	switch {
+	case len(d.Destinations) == 0:
+		return "Nothing is being backed up: this server has no destination."
+	case len(d.Accounts) == 0:
+		return "There are no accounts on this server yet."
+	case d.Stale+d.Unprotected == 0:
+		return fmt.Sprintf("All %d accounts are covered.", len(d.Accounts))
+	}
+	exposed := d.Stale + d.Unprotected
+	is := "are"
+	if exposed == 1 {
+		is = "is"
+	}
+	return fmt.Sprintf("%d of %d accounts %s not covered.", exposed, len(d.Accounts), is)
+}
+
+// Band is how gravely to draw that sentence: the stripe down the side of
+// it, and nothing else.
+//
+// An account that has never been backed up is a different thing from one
+// whose copy is a day older than its schedule promised, and a page that
+// draws both in red is a page whose red means nothing.
+func (d dashboardView) Band() string {
+	switch {
+	case len(d.Destinations) == 0, d.Unprotected > 0, d.Failed > 0:
+		return "bad"
+	case d.Stale > 0, d.Unscheduled > 0, d.Partial > 0:
+		return "warn"
+	default:
+		return "ok"
+	}
 }
 
 // attentionLimit keeps the overview short: it is a prompt to act, not a
 // second copy of the accounts page.
 const attentionLimit = 3
+
+// recentRuns is how far back the overview reads. A week covers "what
+// happened last night" and every schedule that fires less often than
+// daily, without walking years of jobs on every page draw.
+const recentRuns = 7 * 24 * time.Hour
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	destinations, err := s.destinationViews()
@@ -124,6 +184,18 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	view.NextRun, view.NextRunPolicy, view.NextRunIn = nextRun(policies, time.Now())
 
+	// What last night actually did. The job bucket holds every backup
+	// this server has ever made, so only the recent past is read back
+	// into runs; anything still in flight is reported however old it is.
+	if jobs, err := s.engine.Store().Jobs(0); err == nil {
+		if runs := runsOf(jobs, policies, time.Now().Add(-recentRuns)); len(runs) > 0 {
+			view.Runs, view.LastRun = runs, &runs[0]
+			view.BackedUp = backedUp(runs)
+		}
+	} else {
+		s.log.Error("read the recent runs", "error", err)
+	}
+
 	settings := s.engine.Settings()
 	if free, err := stagingFree(settings.StagingRoot); err == nil {
 		view.StagingFree = free
@@ -148,6 +220,13 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 func addCoverage(view *dashboardView, accounts []accountView) {
 	for _, account := range accounts {
+		// What a completed backup read, which is the only measurement
+		// this server has: listing accounts does not walk home
+		// directories, and doing so on every page draw would.
+		view.Managed += account.SizeBytes
+		if account.SizeBytes > view.Largest {
+			view.Largest, view.LargestAccount = account.SizeBytes, account.User
+		}
 		if account.Verified != nil && account.VerifiedOK {
 			view.Verified++
 		}

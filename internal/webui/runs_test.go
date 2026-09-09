@@ -7,6 +7,7 @@ import (
 
 	"github.com/shukiv/gniza/internal/job"
 	"github.com/shukiv/gniza/internal/nodestore"
+	"github.com/shukiv/gniza/internal/panel"
 )
 
 func moment(t time.Time) *time.Time { return &t }
@@ -169,5 +170,100 @@ func TestWorkStillInFlightIsShownHoweverOldItIs(t *testing.T) {
 	}}, nil, now.Add(-7*24*time.Hour))
 	if len(runs) != 1 {
 		t.Fatalf("runs = %d, want a run that never ended still reported", len(runs))
+	}
+}
+
+func TestTheOverviewLeadsWithWhetherTheServerIsCovered(t *testing.T) {
+	view := dashboardView{
+		Accounts: make([]accountView, 19), Protected: 19,
+		Destinations: []destinationView{{}},
+	}
+	if got := view.Verdict(); got != "All 19 accounts are covered." {
+		t.Fatalf("verdict = %q", got)
+	}
+	if got := view.Band(); got != "ok" {
+		t.Fatalf("band = %q, want a covered server drawn as covered", got)
+	}
+}
+
+func TestTheOverviewSaysHowManyAccountsAreNotCovered(t *testing.T) {
+	view := dashboardView{
+		Accounts: make([]accountView, 312), Protected: 294, Stale: 6, Unprotected: 12,
+		Destinations: []destinationView{{}},
+	}
+	if got := view.Verdict(); got != "18 of 312 accounts are not covered." {
+		t.Fatalf("verdict = %q", got)
+	}
+	if got := view.Band(); got != "bad" {
+		t.Fatalf("band = %q, want an account that has never been backed up read as bad", got)
+	}
+}
+
+func TestAServerWithNowhereToSendABackupSaysThatFirst(t *testing.T) {
+	view := dashboardView{Accounts: make([]accountView, 4)}
+	if got := view.Verdict(); got != "Nothing is being backed up: this server has no destination." {
+		t.Fatalf("verdict = %q", got)
+	}
+	if got := view.Band(); got != "bad" {
+		t.Fatalf("band = %q", got)
+	}
+}
+
+func TestAnAccountBehindItsScheduleIsAWarningRatherThanAFailure(t *testing.T) {
+	view := dashboardView{
+		Accounts: make([]accountView, 10), Protected: 9, Stale: 1,
+		Destinations: []destinationView{{}},
+	}
+	if got := view.Band(); got != "warn" {
+		t.Fatalf("band = %q, want a stale copy short of bad", got)
+	}
+	if got := view.Verdict(); got != "1 of 10 accounts is not covered." {
+		t.Fatalf("verdict = %q, want it to read as one account", got)
+	}
+}
+
+func TestTheOverviewMeasuresTheAccountsItIsLookingAfter(t *testing.T) {
+	view := dashboardView{}
+	addCoverage(&view, []accountView{
+		{AccountInfo: panel.AccountInfo{User: "small", SizeBytes: 2 << 30}},
+		{AccountInfo: panel.AccountInfo{User: "large", SizeBytes: 5 << 30}},
+	})
+	if view.Managed != 7<<30 {
+		t.Fatalf("managed = %d bytes", view.Managed)
+	}
+	if view.Largest != 5<<30 || view.LargestAccount != "large" {
+		t.Fatalf("largest = %s at %d bytes", view.LargestAccount, view.Largest)
+	}
+}
+
+func TestARunIsRememberedByWhatItLost(t *testing.T) {
+	run := runSummary{Accounts: 312, Succeeded: 294, Failed: 12, Partial: 6}
+	if got := run.Outcome(); got != "12 failed" {
+		t.Fatalf("outcome = %q, want the failures named first", got)
+	}
+	if got := run.Tone(); got != "bad" {
+		t.Fatalf("tone = %q", got)
+	}
+	clean := runSummary{Accounts: 19, Succeeded: 19}
+	if got := clean.Outcome(); got != "19 backed up" {
+		t.Fatalf("outcome = %q", got)
+	}
+	if got := clean.Tone(); got != "" {
+		t.Fatalf("tone = %q, want a clean run drawn as nothing in particular", got)
+	}
+}
+
+func TestARunStillGoingSaysHowFarItHasGot(t *testing.T) {
+	run := runSummary{Accounts: 312, Succeeded: 6, Unfinished: 306}
+	if got := run.Outcome(); got != "6 of 312 done" {
+		t.Fatalf("outcome = %q", got)
+	}
+}
+
+func TestAWeekOfBackupsCountsWhatWasStored(t *testing.T) {
+	if got := backedUp([]runSummary{
+		{Succeeded: 19, Failed: 1}, {Succeeded: 18, Partial: 1},
+	}); got != 38 {
+		t.Fatalf("backed up = %d, want every account a copy was written for", got)
 	}
 }

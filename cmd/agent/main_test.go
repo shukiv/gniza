@@ -39,3 +39,33 @@ func TestLiveCertificationReportRecordsRefusedUnsafeRun(t *testing.T) {
 		t.Fatalf("unsafe certification was not recorded as failed: %+v, %v", report, err)
 	}
 }
+
+// TestAMissingResticDoesNotStopTheServiceFromStarting is a crash loop that
+// happened on a live server: the installer replaces /usr/local/bin/restic
+// in place, and for the length of that download the file is there but not
+// yet executable. The agent probed restic, exited, and was restarted every
+// five seconds for three and a half minutes. The interface an operator
+// would look at to find out why is the process that keeps exiting.
+func TestAMissingResticDoesNotStopTheServiceFromStarting(t *testing.T) {
+	log := quietLog()
+
+	version, err := startupRestic(context.Background(), "/nonexistent/restic", false, log)
+	if err != nil {
+		t.Errorf("a restic that will not run must not stop the service: %v", err)
+	}
+	if version != "" {
+		t.Errorf("version = %q, want empty", version)
+	}
+
+	if _, err := startupRestic(context.Background(), "/nonexistent/restic", true, log); err == nil {
+		t.Error("preflight exists to answer whether this server is ready, so it must still fail")
+	}
+
+	version, err = startupRestic(context.Background(), "/bin/echo", false, log)
+	if err != nil {
+		t.Fatalf("a restic that runs: %v", err)
+	}
+	if version != "version" {
+		t.Errorf("version = %q, want the probe's output", version)
+	}
+}

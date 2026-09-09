@@ -313,7 +313,7 @@ func runLiveCertification(ctx context.Context, cfg config, log *slog.Logger) (re
 }
 
 func run(ctx context.Context, cfg config, log *slog.Logger) error {
-	resticVersion, err := resticVersion(ctx, cfg.resticBinary)
+	resticVersion, err := startupRestic(ctx, cfg.resticBinary, cfg.preflightOnly, log)
 	if err != nil {
 		return err
 	}
@@ -432,6 +432,32 @@ func buildProvider(cfg config, log *slog.Logger) (panel.Provider, error) {
 		return nil, err
 	}
 	return &cpanel.Fake{Root: cfg.fakeRoot}, nil
+}
+
+// startupRestic probes restic, and decides whether one that will not run
+// should stop the process.
+//
+// It should not. A live server spent three and a half minutes restarting
+// every five seconds because its installer was replacing
+// /usr/local/bin/restic in place: for the length of that download the file
+// was there but not yet executable, and the agent that probed it exited.
+// Nothing said why on the panel, because the interface the panel serves is
+// this process. A server whose restic is missing can still show its
+// history, its destinations and the job that is about to fail; only
+// -preflight, whose whole job is to answer whether this server is ready,
+// still refuses.
+func startupRestic(ctx context.Context, binary string, preflight bool,
+	log *slog.Logger) (string, error) {
+	version, err := resticVersion(ctx, binary)
+	if err == nil {
+		return version, nil
+	}
+	if preflight {
+		return "", err
+	}
+	log.Error("restic did not run; backups and restores will fail until it does",
+		"binary", binary, "error", err)
+	return "", nil
 }
 
 func resticVersion(ctx context.Context, binary string) (string, error) {

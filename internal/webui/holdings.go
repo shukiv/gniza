@@ -51,7 +51,12 @@ func holdingsOf(destinations []destinationView, now time.Time) holdings {
 			held.Failing++
 		}
 		if !census.Known() {
-			held.Pending++
+			// A repository nothing has ever been written to holds
+			// nothing to measure, and the census leaves it alone. It is
+			// not a measurement anybody is waiting for.
+			if dest.Repository.InitialisedAt != nil {
+				held.Pending++
+			}
 			continue
 		}
 		held.Measured++

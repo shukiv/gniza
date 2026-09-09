@@ -39,7 +39,8 @@ func TestARepositoryNotYetMeasuredIsCountedAsMissing(t *testing.T) {
 	now := time.Now()
 	held := holdingsOf([]destinationView{
 		{Repository: nodestore.Repository{Census: measured(now, 294, 100<<30)}},
-		{Repository: nodestore.Repository{}},
+		// Written to, so it holds something; not yet measured.
+		{Repository: nodestore.Repository{InitialisedAt: &now}},
 	}, now)
 	if held.Pending != 1 || held.Measured != 1 {
 		t.Fatalf("holdings = %+v", held)
@@ -83,5 +84,27 @@ func TestARepositoryThatCannotBeMeasuredIsCounted(t *testing.T) {
 	}
 	if held.Copies != 294 {
 		t.Fatalf("the last good reading was dropped: %+v", held)
+	}
+}
+
+// A destination configured and never written to has no repository on the
+// far end, so nothing measures it and nothing ever will until a backup
+// runs. Counting it as unmeasured would leave the total marked
+// incomplete on that server forever.
+func TestADestinationNothingHasBeenWrittenToIsNotAMissingMeasurement(t *testing.T) {
+	now := time.Now()
+	held := holdingsOf([]destinationView{
+		{Repository: nodestore.Repository{
+			InitialisedAt: &now, Census: measured(now, 294, 100<<30)}},
+		{Repository: nodestore.Repository{}},
+	}, now)
+	if held.Pending != 0 {
+		t.Fatalf("holdings = %+v, want a repository that does not exist left out", held)
+	}
+	if held.Partial() {
+		t.Fatal("the total was called incomplete because of a repository with nothing in it")
+	}
+	if held.Copies != 294 {
+		t.Fatalf("holdings = %+v", held)
 	}
 }

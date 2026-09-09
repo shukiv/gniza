@@ -231,8 +231,19 @@ func TestCoverageAndLifecycleTemplatesParse(t *testing.T) {
 				AccountInfo: panel.AccountInfo{User: "customer1", SizeBytes: 1 << 30},
 				Runs:        9, Succeeded: 6,
 			}},
-			Destinations: []destinationView{{Endpoint: "sftp://backup", Status: "ok"}},
-			Protected:    1, Verified: 1, Managed: 1 << 30,
+			Destinations: []destinationView{{
+				Endpoint: "sftp://backup", Status: "ok",
+				Repository: nodestore.Repository{Census: nodestore.RepositoryCensus{
+					Snapshots: 294, SizeBytes: 100 << 30, MeasuredAt: &when,
+				}},
+			}},
+			Held: holdingsOf([]destinationView{{
+				Repository: nodestore.Repository{Census: nodestore.RepositoryCensus{
+					Snapshots: 294, SizeBytes: 100 << 30, MeasuredAt: &when,
+				}},
+			}}, when),
+			Now:       when,
+			Protected: 1, Verified: 1, Managed: 1 << 30,
 			Largest: 1 << 30, LargestAccount: "customer1",
 			Runs: []runSummary{run}, LastRun: &run, BackedUp: 18,
 			Feed: feedOf([]runSummary{run}, nil, []nodestore.LifecycleEvent{{
@@ -257,6 +268,7 @@ func TestCoverageAndLifecycleTemplatesParse(t *testing.T) {
 	for _, want := range []string{
 		"Scheduled backup finished", "1 failed", "nightly", "split, deduplicating",
 		"Accounts with the worst record", "Under management",
+		"Copies held", "294", "Stored at destinations", "294 copies",
 	} {
 		if !strings.Contains(output.String(), want) {
 			t.Errorf("the overview is missing %q", want)

@@ -226,6 +226,19 @@
      the number that decides whether tonight's backup fits; the total is
      context for it. A destination whose kind cannot say so says that,
      rather than showing a zero that reads as a full disk. */}}
+{{/* What a repository holds, from the last census rather than from
+     restic while the page draws. A reading that could not be refreshed
+     stays on the page with the reason under it: a destination that is
+     unreachable tonight has not become empty. */}}
+{{define "repocensus"}}
+{{if .Known}}
+  <div class="cpr-sublabel">{{.Snapshots}} cop{{if eq .Snapshots 1}}y{{else}}ies{{end}}, {{bytes .SizeBytes}}{{with .MeasuredAt}} · measured {{ago .}}{{end}}</div>
+  {{with .LastError}}<div class="cpr-sublabel cpr-warntext">could not be measured since: {{.}}</div>{{end}}
+{{else if .LastError}}
+  <div class="cpr-sublabel cpr-warntext">could not be measured: {{.LastError}}</div>
+{{end}}
+{{end}}
+
 {{define "destspace"}}
 {{if .Known}}
   <div class="cpr-mono cpr-num cpr-space">{{bytes .FreeBytes}} free</div>

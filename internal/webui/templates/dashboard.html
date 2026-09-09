@@ -90,6 +90,20 @@
     <span class="cpr-k">Restore-tested</span>
   </div>
   <div class="cpr-tile"><span class="cpr-n">{{$d.BackedUp}}</span><span class="cpr-k">Backed up this week</span></div>
+  {{if $d.Held.Known}}
+  {{/* Measured on a slow cadence and stored, never asked for while this
+       page draws: restic answers by walking the repository index across
+       the network. The date is shown once the reading is old enough that
+       reading it as today's would mislead. */}}
+  <div class="cpr-tile">
+    <span class="cpr-n">{{$d.Held.Copies}}</span>
+    <span class="cpr-k">Copies held{{if $d.Held.Partial}}, of what has been measured{{end}}{{if $d.Held.Stale $d.Now}} · as of {{agoTime $d.Held.MeasuredAt}}{{end}}</span>
+  </div>
+  <div class="cpr-tile">
+    <span class="cpr-n">{{bytes $d.Held.Stored}}</span>
+    <span class="cpr-k">Stored at destinations</span>
+  </div>
+  {{end}}
   {{if $.Running.Queue}}
   <div class="cpr-tile"><span class="cpr-n cpr-warnish">{{len $.Running.Queue}}</span><span class="cpr-k">Waiting now</span></div>
   {{end}}
@@ -184,11 +198,13 @@
     <div class="cpr-tablewrap"><table><tbody>
       {{range $d.Destinations}}
       <tr>
-        <td class="cpr-acct">{{.Name}}<div class="cpr-sublabel cpr-mono">{{.Endpoint}}</div></td>
+        <td class="cpr-acct">{{.Name}}<div class="cpr-sublabel cpr-mono">{{.Endpoint}}</div>
+          {{template "repocensus" .Repository.Census}}</td>
         <td class="cpr-right">
           {{if eq .Status "ok"}}<span class="cpr-pill cpr-ok"><span class="cpr-dot"></span>Reachable</span>
           {{else if eq .Status "error"}}<span class="cpr-pill cpr-bad"><span class="cpr-dot"></span>Unreachable</span>
           {{else}}<span class="cpr-pill cpr-idle"><span class="cpr-dot"></span>Not checked</span>{{end}}
+          {{template "destspace" .Space}}
         </td>
       </tr>
       {{end}}

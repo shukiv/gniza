@@ -94,6 +94,13 @@ type dashboardView struct {
 	// ever failed, which is a page that says so by leaving it out.
 	Schedules []scheduleRow
 	Weakest   []accountView
+
+	// Held is what the destinations hold, from the last census of each
+	// repository rather than from restic while this page draws.
+	Held holdings
+	// Now is when this page was drawn, so the template can say how old
+	// each stored reading is without asking the clock itself.
+	Now time.Time
 }
 
 // Verdict is the first line of the page: whether this server's accounts
@@ -199,6 +206,8 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	view.NextRun, view.NextRunPolicy, view.NextRunIn = nextRun(policies, time.Now())
+	view.Now = time.Now()
+	view.Held = holdingsOf(destinations, view.Now)
 
 	// What last night actually did. The job bucket holds every backup
 	// this server has ever made, so only the recent past is read back

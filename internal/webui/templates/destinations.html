@@ -89,7 +89,8 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
         {{else}}<div class="cpr-sublabel">not created yet — <b>Test</b> creates it,
         and so does the first backup</div>{{end}}
       </td>
-      <td>{{template "destspace" .Space}}</td>
+      <td>{{template "destspace" .Space}}
+        {{template "repocensus" .Repository.Census}}</td>
       {{/* Edit is the one an operator reaches for; the rest live behind the
            menu. It is a details element rather than a scripted popover, so
            it opens with the keyboard and still opens with no JavaScript. */}}

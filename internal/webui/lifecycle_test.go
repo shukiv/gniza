@@ -15,6 +15,7 @@ import (
 	"github.com/shukiv/gniza/internal/job"
 	"github.com/shukiv/gniza/internal/node"
 	"github.com/shukiv/gniza/internal/nodestore"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/vault"
 )
 
@@ -213,13 +214,53 @@ func TestCoverageAndLifecycleTemplatesParse(t *testing.T) {
 	}
 	var output bytes.Buffer
 	when := time.Now().UTC()
+	// Every optional part of the overview filled in, because a template
+	// that only ever renders the empty case is a template whose other
+	// half has never been executed: the page is assembled in a buffer and
+	// a failure halfway through is an internal error, not a half-drawn
+	// page.
+	run := runSummary{
+		PolicyID: "nightly", Policy: "nightly", QueuedAt: when, StartedAt: when,
+		FinishedAt: when.Add(42 * time.Minute), Accounts: 19, Succeeded: 18,
+		Failed: 1, BytesAdded: 3 << 30,
+	}
+	fired := when.Add(-time.Hour)
 	err = templates["dashboard.html"].ExecuteTemplate(&output, "layout", page{
-		Data: dashboardView{Lifecycle: []nodestore.LifecycleEvent{{
-			Event: "create", Account: "customer1", OK: true, At: when,
-		}}},
+		Data: dashboardView{
+			Accounts: []accountView{{
+				AccountInfo: panel.AccountInfo{User: "customer1", SizeBytes: 1 << 30},
+				Runs:        9, Succeeded: 6,
+			}},
+			Destinations: []destinationView{{Endpoint: "sftp://backup", Status: "ok"}},
+			Protected:    1, Verified: 1, Managed: 1 << 30,
+			Largest: 1 << 30, LargestAccount: "customer1",
+			Runs: []runSummary{run}, LastRun: &run, BackedUp: 18,
+			Feed: feedOf([]runSummary{run}, nil, []nodestore.LifecycleEvent{{
+				Event: "create", Account: "customer1", OK: true, At: when,
+			}}, feedShown),
+			Schedules: scheduleRows([]nodestore.Policy{{
+				ID: "nightly", Name: "nightly", Enabled: true, PayloadMode: "split",
+				ScheduleCron: "0 2 * * *", RepositoryIDs: []string{"a"}, LastRunAt: &fired,
+				Retention: nodestore.Retention{KeepDaily: 7},
+			}}, []runSummary{run}, 19, when),
+			Weakest: []accountView{{
+				AccountInfo: panel.AccountInfo{User: "customer1"}, Runs: 9, Succeeded: 6,
+			}},
+			Lifecycle: []nodestore.LifecycleEvent{{
+				Event: "create", Account: "customer1", OK: true, At: when,
+			}},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"Scheduled backup finished", "1 failed", "nightly", "split, deduplicating",
+		"Accounts with the worst record", "Under management",
+	} {
+		if !strings.Contains(output.String(), want) {
+			t.Errorf("the overview is missing %q", want)
+		}
 	}
 	output.Reset()
 	safety := node.RemovalSafety{

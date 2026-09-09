@@ -127,6 +127,53 @@
   </div>
 </div>
 
+{{if $d.Feed}}
+<div class="cpr-card">
+  <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
+    <h2 style="margin:0">What has happened</h2>
+    <a class="cpr-link" href="?p=jobs">All history</a>
+  </div>
+  <div class="cpr-feed">
+    {{range $d.Feed}}
+    <div class="cpr-ev">
+      <span class="cpr-when">{{agoTime .When}}</span>
+      <span class="cpr-what">
+        <span class="cpr-evhead">{{.Head}}
+          {{if .Tag}}<span class="cpr-pill {{if eq .Tone "bad"}}cpr-bad{{else if eq .Tone "warn"}}cpr-warn{{else}}cpr-ok{{end}}"><span class="cpr-dot"></span>{{.Tag}}</span>{{end}}</span>
+        {{if .Note}}<span class="cpr-evline">{{.Note}}</span>{{end}}
+      </span>
+    </div>
+    {{end}}
+  </div>
+</div>
+{{end}}
+
+{{if $d.Schedules}}
+<div class="cpr-card">
+  <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
+    <h2 style="margin:0">Schedules</h2>
+    <a class="cpr-link" href="?p=schedule">Manage</a>
+  </div>
+  <div class="cpr-tablewrap"><table>
+    <thead><tr><th>Name</th><th>Covers</th><th>What it keeps</th><th>Last run</th><th>Next run</th><th></th></tr></thead>
+    <tbody>
+      {{range $d.Schedules}}
+      <tr>
+        <td class="cpr-acct">{{.Name}}<div class="cpr-sublabel">{{.Payload}}</div></td>
+        <td>{{.Covers}}</td>
+        <td class="cpr-hint" style="margin:0">{{if keepsSet .Retention}}Keeps {{keepsSaid .Retention}}{{else}}Keeps everything{{end}}</td>
+        <td>{{if .LastAt.IsZero}}<span class="cpr-mono">never</span>{{else}}{{agoTime .LastAt}}{{end}}
+          {{if .Last}}<div class="cpr-sublabel {{if eq .Last.Tone "bad"}}cpr-badish{{else if eq .Last.Tone "warn"}}cpr-warnish{{end}}">{{.Last.Outcome}}</div>{{end}}</td>
+        <td>{{if .NextAt.IsZero}}<span class="cpr-muted">—</span>{{else}}{{stamp .NextAt}}<div class="cpr-sublabel">{{.NextIn}}</div>{{end}}</td>
+        <td class="cpr-right">{{if .Enabled}}<span class="cpr-pill cpr-ok"><span class="cpr-dot"></span>On</span>
+          {{else}}<span class="cpr-pill cpr-idle"><span class="cpr-dot"></span>Off</span>{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table></div>
+</div>
+{{end}}
+
 <div class="cpr-grid2">
   <div class="cpr-card">
     <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
@@ -177,6 +224,31 @@
     {{end}}
   </div>
 </div>
+
+{{/* Only when something has actually failed. One good backup says little;
+     a record of them says whether to trust it -- but a list of accounts
+     that have never failed says nothing at all. */}}
+{{if $d.Weakest}}
+<div class="cpr-card">
+  <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
+    <h2 style="margin:0">Accounts with the worst record</h2>
+    <a class="cpr-link" href="?p=accounts">All accounts</a>
+  </div>
+  <div class="cpr-tablewrap"><table>
+    <thead><tr><th>Account</th><th>Record</th><th class="cpr-right">Failed</th></tr></thead>
+    <tbody>
+      {{range $d.Weakest}}
+      <tr>
+        <td class="cpr-acct"><a class="cpr-link" href="?p=account&amp;user={{.User}}">{{.User}}</a></td>
+        <td class="cpr-hint" style="margin:0">{{.Record}}</td>
+        <td class="cpr-right">{{if .Failures}}<span class="cpr-pill cpr-warn"><span class="cpr-dot"></span>{{.Failures}} of {{.Runs}}</span>
+          {{else}}<span class="cpr-pill cpr-ok"><span class="cpr-dot"></span>never failed</span>{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table></div>
+</div>
+{{end}}
 
 {{/* The lifecycle log is a record, not a verdict: it is folded to one line
      so it cannot take half the page from what somebody came here to read. */}}

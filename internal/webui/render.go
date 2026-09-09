@@ -307,18 +307,7 @@ func templateFuncs() template.FuncMap {
 		},
 		// took renders how long a run lasted, in the unit someone would
 		// say it in.
-		"took": func(d time.Duration) string {
-			switch {
-			case d <= 0:
-				return ""
-			case d < time.Minute:
-				return fmt.Sprintf("%ds", int(d.Seconds()))
-			case d < time.Hour:
-				return fmt.Sprintf("%dm %02ds", int(d.Minutes()), int(d.Seconds())%60)
-			default:
-				return fmt.Sprintf("%dh %02dm", int(d.Hours()), int(d.Minutes())%60)
-			}
-		},
+		"took": humanTook,
 		"percent": func(value float64) string {
 			// Half rounds up: 42.5% reads as 43%, not 42%, which is what
 			// anyone watching a bar expects of the number beside it.
@@ -375,6 +364,21 @@ func templateFuncs() template.FuncMap {
 }
 
 func humanBytes(value uint64) string { return human.Bytes(value) }
+
+// humanTook renders how long a run lasted, in the unit somebody would say
+// it in.
+func humanTook(d time.Duration) string {
+	switch {
+	case d <= 0:
+		return ""
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm %02ds", int(d.Minutes()), int(d.Seconds())%60)
+	default:
+		return fmt.Sprintf("%dh %02dm", int(d.Hours()), int(d.Minutes())%60)
+	}
+}
 
 func humanAgo(t *time.Time) string {
 	if t == nil || t.IsZero() {

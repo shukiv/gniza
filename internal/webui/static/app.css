@@ -1102,3 +1102,24 @@
   .gniza .cpr-factrow { grid-template-columns:1fr; }
   .gniza .cpr-fact + .cpr-fact { border-left:0; border-top:1px solid var(--line); }
 }
+
+/* The activity feed. A time down the left and the event beside it,
+   because these are things in order and the order is the information. */
+.gniza .cpr-feed { display:flex; flex-direction:column; }
+.gniza .cpr-ev {
+  display:grid; grid-template-columns:92px 1fr; gap:var(--s3);
+  padding:var(--s3) var(--s4); border-bottom:1px solid var(--line);
+}
+.gniza .cpr-ev:last-child { border-bottom:0; }
+.gniza .cpr-when {
+  font-family:"Fira Code", ui-monospace, monospace; font-size:12px;
+  color:var(--faint); padding-top:2px; text-align:right;
+}
+.gniza .cpr-what { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.gniza .cpr-evhead { font-weight:600; display:flex; align-items:center; gap:var(--s2); flex-wrap:wrap; }
+.gniza .cpr-evline { font-size:13px; color:var(--muted); overflow-wrap:anywhere; }
+
+@media (max-width:820px) {
+  .gniza .cpr-ev { grid-template-columns:1fr; }
+  .gniza .cpr-when { text-align:left; }
+}

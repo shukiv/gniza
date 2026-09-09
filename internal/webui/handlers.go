@@ -85,6 +85,15 @@ type dashboardView struct {
 
 	LastDrill *nodestore.Restore
 	Lifecycle []nodestore.LifecycleEvent
+
+	// Feed is what has happened recently, in one order: runs, rehearsals
+	// and account lifecycle together.
+	Feed []feedEvent
+	// Schedules is what runs on its own, and Weakest the accounts with
+	// the worst record. Weakest is empty on a server where nothing has
+	// ever failed, which is a page that says so by leaving it out.
+	Schedules []scheduleRow
+	Weakest   []accountView
 }
 
 // Verdict is the first line of the page: whether this server's accounts
@@ -129,6 +138,13 @@ func (d dashboardView) Band() string {
 // attentionLimit keeps the overview short: it is a prompt to act, not a
 // second copy of the accounts page.
 const attentionLimit = 3
+
+// What the overview shows of each list before it stops being an overview.
+const (
+	feedShown      = 8
+	lifecycleShown = 5
+	weakestShown   = 3
+)
 
 // recentRuns is how far back the overview reads. A week covers "what
 // happened last night" and every schedule that fires less often than
@@ -203,17 +219,27 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		view.SpaceTight = free < 10<<30
 	}
 
-	if restores, err := s.engine.Store().Restores(0); err == nil {
-		for i := range restores {
-			if restores[i].Kind == node.KindVerify && restores[i].Status.Terminal() {
-				view.LastDrill = &restores[i]
-				break
-			}
+	// One read of each, used twice: the rehearsals are both the card at
+	// the foot of the page and part of the feed above it.
+	restores, err := s.engine.Store().Restores(0)
+	if err != nil {
+		s.log.Error("read the rehearsals", "error", err)
+	}
+	for i := range restores {
+		if restores[i].Kind == node.KindVerify && restores[i].Status.Terminal() {
+			view.LastDrill = &restores[i]
+			break
 		}
 	}
-	if events, err := s.engine.Store().LifecycleEvents(5); err == nil {
+	if events, err := s.engine.Store().LifecycleEvents(lifecycleShown); err == nil {
 		view.Lifecycle = events
+	} else {
+		s.log.Error("read the account lifecycle", "error", err)
 	}
+
+	view.Feed = feedOf(view.Runs, restores, view.Lifecycle, feedShown)
+	view.Schedules = scheduleRows(policies, view.Runs, len(accounts), time.Now())
+	view.Weakest = weakest(accounts, weakestShown)
 
 	s.render(w, r, "dashboard.html", "Overview", "dashboard", view)
 }
@@ -265,6 +291,20 @@ func attentionRank(a accountView) int {
 	}
 }
 
+// nextFireOf reports when one schedule fires next, and whether it fires at
+// all: a schedule that is switched off or has nowhere to write does not
+// run on its own, whatever its cron expression says.
+func nextFireOf(policy nodestore.Policy, now time.Time) (time.Time, bool) {
+	if !policy.Enabled || len(policy.RepositoryIDs) == 0 {
+		return time.Time{}, false
+	}
+	schedule, err := cron.ParseStandard(policy.ScheduleCron)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return schedule.Next(now), true
+}
+
 // nextRun reports when the soonest enabled schedule fires.
 func nextRun(policies []nodestore.Policy, now time.Time) (at, name, in string) {
 	var (
@@ -272,14 +312,10 @@ func nextRun(policies []nodestore.Policy, now time.Time) (at, name, in string) {
 		which   string
 	)
 	for _, policy := range policies {
-		if !policy.Enabled || len(policy.RepositoryIDs) == 0 {
+		next, ok := nextFireOf(policy, now)
+		if !ok {
 			continue
 		}
-		schedule, err := cron.ParseStandard(policy.ScheduleCron)
-		if err != nil {
-			continue
-		}
-		next := schedule.Next(now)
 		if soonest.IsZero() || next.Before(soonest) {
 			soonest, which = next, policy.Name
 		}

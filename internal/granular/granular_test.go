@@ -307,7 +307,11 @@ func TestAMailboxNameCannotReachOutsideTheAccount(t *testing.T) {
 		Databases: "/stage/databases",
 	}
 	for _, layout := range []panel.ItemLayout{cpmove.Layout{}, dabackup.Layout{}} {
-		for _, name := range []string{"../../etc/shadow", "/etc/shadow", "../"} {
+		// "." and "@" reach nothing outside the account, and that is
+		// the point: joined under mail/ or imap/ each one resolves to
+		// the whole mail tree, so a request to restore one mailbox puts
+		// back every mailbox on the account.
+		for _, name := range []string{"../../etc/shadow", "/etc/shadow", "../", ".", "@", "./", "/"} {
 			plan, err := Build(layout, parts, Request{
 				Kind: KindMailbox, Account: "customer1", Names: []string{name},
 			})

@@ -464,8 +464,21 @@ func usableMailboxName(name string) error {
 	if strings.Count(trimmed, "@") > 1 || strings.Count(trimmed, "/") > 1 {
 		return refuse
 	}
+	// An "@" with nothing on one side of it is not an address. On
+	// DirectAdmin it splits into an empty domain, and the path built from
+	// it is imap/ itself.
+	if before, after, found := strings.Cut(trimmed, "@"); found &&
+		(strings.TrimSpace(before) == "" || strings.TrimSpace(after) == "") {
+		return refuse
+	}
 	for _, element := range strings.Split(trimmed, "/") {
-		if strings.TrimSpace(element) == "" {
+		element = strings.TrimSpace(element)
+		// "." names the directory the mailboxes are in rather than a
+		// mailbox in it: mail/. is mail/, and imap/. is imap/. It is the
+		// same failure as "../", one level shallower -- a request to
+		// restore one mailbox that puts back every mailbox the account
+		// has, and with Apply set overwrites all of them.
+		if element == "" || element == "." {
 			return refuse
 		}
 	}

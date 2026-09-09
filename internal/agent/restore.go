@@ -123,7 +123,12 @@ func (a *Agent) RunRestore(ctx context.Context, assignment protocol.RestoreAssig
 
 	switch assignment.Kind {
 	case protocol.RestoreFiles:
-		return a.restoreFiles(restoreCtx, log, assignment, repo, dir, report, watch)
+		// Where the operator gave no target the files are written into
+		// this directory, and then it is the deliverable rather than
+		// working space.
+		result, keep := a.restoreFiles(restoreCtx, log, assignment, repo, dir, report, watch)
+		retain = keep
+		return result
 	case protocol.RestoreItems:
 		// A granular restore keeps what it produced, the same way a
 		// rebuilt account archive does: it is there to be collected.
@@ -333,23 +338,34 @@ func plural(n int, one, many string) string {
 
 // restoreFiles pulls named paths out of a snapshot, keeping the paths they
 // had, and leaves them where the operator asked.
+//
+// The second return says whether the staging directory is the result
+// rather than working space, which it is whenever the operator named no
+// target of their own: the box on the page is optional, and the files
+// then go into this directory. Released like working space, the run
+// reported success, named the path the files were in, and deleted that
+// path on its way out.
 func (a *Agent) restoreFiles(ctx context.Context, log *slog.Logger,
 	assignment protocol.RestoreAssignment, repo resticrun.Repository,
 	dir *staging.Dir, report protocol.RestoreReport,
-	watch *restoreWatch) protocol.RestoreReport {
+	watch *restoreWatch) (protocol.RestoreReport, bool) {
 
 	if len(assignment.IncludePaths) == 0 {
 		report.Error = "agent: a files restore needs at least one path"
-		return report
+		return report, false
 	}
 
+	// ours says the result is in the staging directory, which is then
+	// kept and moved out of the way of the concurrency limit rather than
+	// removed.
+	ours := assignment.TargetDir == ""
 	target := assignment.TargetDir
-	if target == "" {
+	if ours {
 		target = filepath.Join(dir.Path, "files")
 	}
 	if err := os.MkdirAll(target, 0o700); err != nil {
 		report.Error = fmt.Sprintf("agent: create restore target: %v", err)
-		return report
+		return report, false
 	}
 
 	watch.Stage("reading the files out of the backup")
@@ -364,11 +380,23 @@ func (a *Agent) restoreFiles(ctx context.Context, log *slog.Logger,
 	if err != nil {
 		log.Error("restore files", "error", err)
 		report.Error = err.Error()
-		return report
+		return report, false
 	}
 	if restored.FilesRestored == 0 {
 		report.Error = "agent: no files in the snapshot matched the requested paths"
-		return report
+		return report, false
+	}
+
+	if ours {
+		// The same move a rebuilt archive makes: it stops counting as
+		// work in progress, and it survives a restart.
+		retained, err := a.staging.Retain(dir)
+		if err != nil {
+			log.Error("retain the restored files", "error", err)
+			report.Error = err.Error()
+			return report, false
+		}
+		target = filepath.Join(retained.Path, "files")
 	}
 
 	log.Info("files restored", "target", target,
@@ -376,7 +404,7 @@ func (a *Agent) restoreFiles(ctx context.Context, log *slog.Logger,
 	report.Status = string(job.StatusSuccess)
 	report.BytesRestored = restored.BytesRestored
 	report.RestoredTo = target
-	return report
+	return report, ours
 }
 
 func (a *Agent) restoreSource(assignment protocol.RestoreAssignment) (resticrun.Repository, error) {

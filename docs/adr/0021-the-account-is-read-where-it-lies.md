@@ -100,7 +100,46 @@ decision about their panel, not Gniza's, and Gniza does not set it.
    `-directadmin-read-home-in-place`, and a server that was not asked
    keeps writing the whole account to disk as it did before. The flag
    goes away, and the shape becomes the only one, when the drill has
-   been run on a server that was restored from.
+   been run on more than the one server it has been run on.
+
+## The drill — 2026-09-09
+
+Run on the validation host against the disposable account `gzv0908a`:
+backup, rebuild, and DirectAdmin's own restore over the live account.
+It found two things, both of which only exist because the home
+directory is now read where it lies, and both of which would have made
+every backup on the server unrestorable.
+
+**The home part came back under the wrong name.** `restorePacked` put
+each part back under `filepath.Base` of its snapshot path. That held
+while both were directories Gniza staged -- `<staging>/metadata` and
+`<staging>/home` -- and stopped the moment one became `/home/<account>`,
+whose base is the account. The repack looked in `tree/home` and the part
+was at `tree/gzv0908a`. The name now comes from the packer, which is the
+only thing that knows where its own repack reads.
+
+**DirectAdmin could not extract its own restore.**
+
+    Error extracting /home/gzv0908a/backups/backup/home.tar.zst :
+    /bin/tar: .jb-roundcube: Cannot utime: Operation not permitted
+
+It extracts the home archive as the account. JetBackup keeps a directory
+inside every account's home that belongs to root, so a faithful archive
+of that home is one DirectAdmin refuses outright -- tar exits and takes
+the run with it. It is left out now, like `.cagefs`: empty on all 142
+accounts of that host, and JetBackup makes it again. Nothing else in any
+home there is owned by anyone but the account.
+
+After both, the restore succeeded: `Account gzv0908a has been restored
+from user.admin.gzv0908a.tar.zst under admin`, with its databases, its
+messages, its domains and its dotfiles.
+
+What the restore does not put back is a group the account is not in.
+`.php/` came back `gzv0908a:gzv0908a` where the archive said
+`gzv0908a:apache`, and `Maildir/` the same. That is DirectAdmin
+extracting as the account, not something this changed: the archive
+carried the right names, and what the outer archive holds -- `imap/`,
+`backup/.shadow` -- kept them, because that one is extracted as root.
 
 ## Consequences
 

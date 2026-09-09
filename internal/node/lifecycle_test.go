@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -522,5 +523,50 @@ func TestAReplayedCreateQueuesTheInitialBackup(t *testing.T) {
 	}
 	if jobs, _ := store.Jobs(0); len(jobs) != 1 {
 		t.Errorf("a second replay queued the baseline again: %+v", jobs)
+	}
+}
+
+// TestStartupClearsAPasswordFileAnInterruptedRunLeft is the wiring for
+// resticrun.SweepPasswordDirs. A server whose service was restarted
+// mid-backup was found holding two of these, each with nothing in it but
+// the repository password, and nothing removed them on the way back up.
+func TestStartupClearsAPasswordFileAnInterruptedRunLeft(t *testing.T) {
+	root := t.TempDir()
+	staging := filepath.Join(root, "staging")
+	stale := filepath.Join(staging, "gniza-run-4038542850")
+	if err := os.MkdirAll(stale, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stale, "repo.pass"), []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := nodestore.Open(filepath.Join(root, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	settings := nodestore.DefaultSettings()
+	settings.StagingRoot = staging
+	settings.ResticCache = filepath.Join(root, "cache")
+	settings.ConfigDir = filepath.Join(root, "config")
+	if err := store.SaveSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	v, err := vault.New(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := New(Config{
+		Store: store, Vault: v,
+		Provider:  &cpanel.Fake{Root: filepath.Join(root, "cpanel")},
+		Log:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+		HookSpool: filepath.Join(root, "hooks"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Errorf("the password file survived startup: %v", err)
 	}
 }

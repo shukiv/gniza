@@ -2,8 +2,10 @@ package resticrun
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -396,6 +398,44 @@ func (r *Runner) pathEnv() string {
 	return "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 }
 
+// passwordDirPrefix names the directory each invocation's password file
+// lives in. It is a prefix rather than a fixed name so two runs at once do
+// not share a file, and it is a constant so the sweep below and the
+// directories it looks for cannot drift apart.
+const passwordDirPrefix = "gniza-run-"
+
+// SweepPasswordDirs removes password directories that no process owns any
+// more, and reports how many it removed.
+//
+// Each invocation cleans up its own directory when it returns. A process
+// that is killed -- a service restarted mid-backup, an installer replacing
+// the binary -- never returns, and the file it wrote stays where it is: a
+// repository password on disk with nothing left to use it. This is called
+// once at startup, where the only writer of these directories on this
+// server is the process doing the calling and it has not written one yet.
+func SweepPasswordDirs(runtimeDir string) (int, error) {
+	entries, err := os.ReadDir(runtimeDir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("resticrun: read runtime dir: %w", err)
+	}
+	removed := 0
+	var failures []error
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), passwordDirPrefix) {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(runtimeDir, entry.Name())); err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		removed++
+	}
+	return removed, errors.Join(failures...)
+}
+
 // writePasswordFile stores the repository password in a private file.
 //
 // The password is passed to restic by file rather than by argument
@@ -403,7 +443,7 @@ func (r *Runner) pathEnv() string {
 // RESTIC_PASSWORD so it is not inherited by any grandchild process restic's
 // backends may spawn.
 func writePasswordFile(runtimeDir, password string) (path string, cleanup func(), err error) {
-	dir, err := os.MkdirTemp(runtimeDir, "gniza-run-")
+	dir, err := os.MkdirTemp(runtimeDir, passwordDirPrefix)
 	if err != nil {
 		return "", func() {}, fmt.Errorf("resticrun: create runtime dir: %w", err)
 	}

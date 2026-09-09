@@ -150,6 +150,16 @@ func New(cfg Config) (*Engine, error) {
 		}
 	}
 
+	// A process that was killed mid-run left its repository password
+	// where it wrote it. This is the one moment where nothing on this
+	// server owns one of those directories: the previous process is gone
+	// and this one has not written its first yet.
+	if swept, err := resticrun.SweepPasswordDirs(settings.StagingRoot); err != nil {
+		log.Warn("clear password files left by an interrupted run", "error", err)
+	} else if swept > 0 {
+		log.Info("cleared password files left by an interrupted run", "count", swept)
+	}
+
 	runner := resticrun.New(resticrun.Config{
 		Log:        log,
 		Binary:     settings.ResticBinary,

@@ -323,6 +323,13 @@ func run(ctx context.Context, cfg config, log *slog.Logger) error {
 	if err := ensureDir(cfg.runtimeDir); err != nil {
 		return err
 	}
+	// See node.New: startup is where a password file left by a killed
+	// process can be removed without racing a live one.
+	if swept, err := resticrun.SweepPasswordDirs(cfg.runtimeDir); err != nil {
+		log.Warn("clear password files left by an interrupted run", "error", err)
+	} else if swept > 0 {
+		log.Info("cleared password files left by an interrupted run", "count", swept)
+	}
 
 	stagingManager := &staging.Manager{
 		Root:              cfg.stagingRoot,

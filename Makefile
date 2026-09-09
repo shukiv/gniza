@@ -125,34 +125,41 @@ directadmin-package:
 		-czf $(BIN)/gniza-directadmin-$(PLUGIN_ARCH).tar.gz gniza-directadmin
 	@echo "built $(BIN)/gniza-directadmin-$(PLUGIN_ARCH).tar.gz -- unfinished, see ADR 0019"
 
-# The same plugin in the shape DirectAdmin's own plugin manager takes: one
-# tar.gz holding a single directory named after the plugin id. The manager
-# unpacks it into the plugins directory and runs scripts/install.sh as
-# root, which runs the installer beside it -- the same installer somebody
-# unpacking the release tarball runs by hand.
+# The same plugin in the shape DirectAdmin's own plugin manager takes: a
+# tar.gz of the plugin's files with nothing wrapped around them. The
+# manager makes the directory itself, from the id in plugin.conf, and
+# unpacks the archive into it -- which is why DirectAdmin's own example,
+# hello_world.tar.gz, begins "admin/" and carries plugin.conf at its root
+# rather than a directory named after the plugin. Then it runs
+# scripts/install.sh as root, which runs the installer beside it: the
+# same installer somebody unpacking the release tarball runs by hand.
 directadmin-plugin:
 	rm -rf $(BIN)/gniza-plugin
-	mkdir -p $(BIN)/gniza-plugin/gniza
+	mkdir -p $(BIN)/gniza-plugin
 	CGO_ENABLED=0 GOOS=linux GOARCH=$(PLUGIN_ARCH) go build -trimpath \
 		-ldflags="-s -w -X github.com/shukiv/gniza/internal/agent.Version=$(VERSION) \
 			-X github.com/shukiv/gniza/internal/agent.BuiltAt=$(BUILT_AT)" \
-		-o $(BIN)/gniza-plugin/gniza/gniza-agent ./cmd/agent
+		-o $(BIN)/gniza-plugin/gniza-agent ./cmd/agent
 	cp -R packaging/directadmin/hooks packaging/directadmin/admin \
 		packaging/directadmin/user packaging/directadmin/images \
-		packaging/directadmin/scripts $(BIN)/gniza-plugin/gniza/
+		packaging/directadmin/scripts $(BIN)/gniza-plugin/
 	cp packaging/directadmin/install.sh packaging/directadmin/uninstall.sh \
-		$(BIN)/gniza-plugin/gniza/
+		$(BIN)/gniza-plugin/
 	sed 's|^version=.*|version=$(VERSION)|' packaging/directadmin/plugin.conf \
-		> $(BIN)/gniza-plugin/gniza/plugin.conf
-	mkdir -p $(BIN)/gniza-plugin/gniza/images/fonts
+		> $(BIN)/gniza-plugin/plugin.conf
+	mkdir -p $(BIN)/gniza-plugin/images/fonts
 	cp internal/webui/fonts/*.woff2 internal/webui/fonts/OFL.txt \
-		$(BIN)/gniza-plugin/gniza/images/fonts/
-	chmod +x $(BIN)/gniza-plugin/gniza/install.sh \
-		$(BIN)/gniza-plugin/gniza/uninstall.sh \
-		$(BIN)/gniza-plugin/gniza/scripts/*.sh
+		$(BIN)/gniza-plugin/images/fonts/
+	chmod +x $(BIN)/gniza-plugin/install.sh \
+		$(BIN)/gniza-plugin/uninstall.sh \
+		$(BIN)/gniza-plugin/scripts/*.sh
+	@# Named one by one rather than as ".", so that the archive holds the
+	@# same entries DirectAdmin's own example does and nothing else.
 	tar -C $(BIN)/gniza-plugin --owner=0 --group=0 --numeric-owner \
 		--mode='u+rwX,go+rX,go-w' \
-		-czf $(BIN)/gniza-plugin-$(PLUGIN_ARCH).tar.gz gniza
+		-czf $(BIN)/gniza-plugin-$(PLUGIN_ARCH).tar.gz \
+		plugin.conf admin user hooks images scripts \
+		install.sh uninstall.sh gniza-agent
 	@echo "built $(BIN)/gniza-plugin-$(PLUGIN_ARCH).tar.gz -- install it from DirectAdmin's plugin manager"
 
 # What the artifact was really built from.

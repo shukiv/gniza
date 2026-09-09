@@ -456,3 +456,27 @@ func TestAHandInstallLeavesThePluginManagerSomethingToRun(t *testing.T) {
 		}
 	}
 }
+
+// DirectAdmin's plugin manager unpacks the archive into the directory it
+// makes for the plugin, so the archive holds the plugin's own files at
+// its root and no directory wrapping them. Its own example plugin is
+// packed that way -- hello_world.tar.gz begins "admin/ ... plugin.conf"
+// -- and so is the skeleton Installatron publishes for the update
+// button. An archive with a directory around it installs a plugin whose
+// plugin.conf is one level too deep, which the manager reads as no
+// plugin at all.
+func TestThePluginManagerGetsThePluginAtTheArchiveRoot(t *testing.T) {
+	makefile := read(t, filepath.Join("..", "..", "Makefile"))
+	recipe := regexp.MustCompile(`(?s)\ndirectadmin-plugin:.*?\n\n`).FindString(makefile)
+	if recipe == "" {
+		t.Fatal("no directadmin-plugin recipe to read")
+	}
+	tarLine := regexp.MustCompile(`(?s)\ttar -C .*?\n\t*-czf [^\n]*\n(\t[^\n]*\n)*`).
+		FindString(recipe)
+	if tarLine == "" {
+		t.Fatalf("the recipe does not pack an archive:\n%s", recipe)
+	}
+	if !regexp.MustCompile(`(^|[ \t\\])plugin\.conf([ \t\\]|$)`).MatchString(tarLine) {
+		t.Errorf("the archive does not carry plugin.conf at its root:\n%s", tarLine)
+	}
+}

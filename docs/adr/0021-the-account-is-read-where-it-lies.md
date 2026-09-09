@@ -69,7 +69,12 @@ the mail once. Across the validation host's 142 accounts that is 31.7
 GiB of the 248.5 GB under management — about an eighth. The global
 `skip_imap_in_backups=1` would remove it, at the price of the server's
 own backups losing their messages too. That is an administrator's
-decision about their panel, not Gniza's, and Gniza does not set it.
+decision about their panel, not Gniza's, and Gniza does not set it. The
+administrator of the validation host was asked on 2026-09-09 and left it
+off, because nothing has established whether DirectAdmin's restore reads
+the same setting: if it does, the `imap/` a rebuild hands it would be
+ignored and the messages would not come back. An eighth of one night is
+the cheaper side of that question until someone answers it.
 
 ## Decision
 

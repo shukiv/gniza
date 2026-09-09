@@ -89,15 +89,22 @@ func (e *Engine) PlanRetention(ctx context.Context, repositoryID string) (nodest
 	}
 	// Maintenance credentials: an append-only destination refuses a
 	// delete from the credentials a backup runs under, by design.
+	//
+	// A failure here is recorded like any other. The sweep looks at one
+	// repository per tick and skips the ones it has looked at recently,
+	// and "recently" is read off these timestamps: a repository that
+	// fails and leaves none is a repository the sweep picks again on the
+	// next tick, and every tick after that, so no other repository on the
+	// server is ever reached.
 	repo, err := e.OpenRepository(repositoryID, true)
 	if err != nil {
-		return nodestore.RetentionState{}, err
+		return nodestore.RetentionState{}, e.retentionFailed(repositoryID, err)
 	}
 
 	spec := forgetSpec(keeps, true, false)
 	spec.ProtectedSnapshotIDs, err = e.incompleteSnapshots(repositoryID)
 	if err != nil {
-		return nodestore.RetentionState{}, err
+		return nodestore.RetentionState{}, e.retentionFailed(repositoryID, err)
 	}
 	plan, err := e.runner.ForgetPlanned(ctx, repo, spec)
 	if err != nil {
@@ -149,9 +156,12 @@ func (e *Engine) ApplyRetention(ctx context.Context, repositoryID string) (int, 
 				"and approved was %s), so plan it again and approve what it now says",
 			describeKeeps(keeps), describeKeeps(stored.RetentionApprovedKeeps))
 	}
+	// Recorded on failure for the reason given in PlanRetention: a sweep
+	// that cannot tell it has already tried this repository tries it
+	// again on every tick and reaches no other.
 	repo, err := e.OpenRepository(repositoryID, true)
 	if err != nil {
-		return 0, err
+		return 0, e.retentionFailed(repositoryID, err)
 	}
 
 	// Forget first, without pruning: forget is quick and prune walks the
@@ -160,7 +170,7 @@ func (e *Engine) ApplyRetention(ctx context.Context, repositoryID string) (int, 
 	spec := forgetSpec(keeps, false, false)
 	spec.ProtectedSnapshotIDs, err = e.incompleteSnapshots(repositoryID)
 	if err != nil {
-		return 0, err
+		return 0, e.retentionFailed(repositoryID, err)
 	}
 	plan, err := e.runner.ForgetPlanned(ctx, repo, spec)
 	if err != nil {

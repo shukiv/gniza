@@ -262,3 +262,75 @@ func TestApprovalDoesNotSurviveAPolicyChange(t *testing.T) {
 		t.Fatalf("ApplyRetention after a fresh approval: %v", err)
 	}
 }
+
+// TestARepositoryThatCannotBeOpenedStopsBeingTriedEveryTick: the sweep
+// looks at one repository per pass and then returns, and it skips a
+// repository it has looked at recently. "Recently" is read off the
+// timestamps a plan or an apply leaves behind, so a failure that leaves
+// none is a failure the sweep repeats on every tick -- and because it
+// returns afterwards, every other repository on the server is never
+// reached. A destination that has gone is the ordinary way in.
+func TestARepositoryThatCannotBeOpenedStopsBeingTriedEveryTick(t *testing.T) {
+	root := t.TempDir()
+	store, err := nodestore.Open(filepath.Join(root, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	settings := nodestore.DefaultSettings()
+	settings.StagingRoot = filepath.Join(root, "staging")
+	settings.ResticCache = filepath.Join(root, "cache")
+	settings.ConfigDir = filepath.Join(root, "config")
+	if err := store.SaveSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	engine := newEngine(t, store, root)
+
+	repo, err := store.PutRepository(nodestore.Repository{Path: "repo", DestinationID: "gone"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keeps := nodestore.Retention{KeepDaily: 7}
+	if _, err := store.PutPolicy(nodestore.Policy{
+		Name: "Nightly", ScheduleCron: "0 2 * * *", Enabled: true,
+		RepositoryIDs: []string{repo.ID}, Retention: keeps,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := engine.PlanRetention(context.Background(), repo.ID); err == nil {
+		t.Fatal("a repository whose destination is gone was planned")
+	}
+	stored, err := store.Repository(repo.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Retention.AttemptedAt == nil {
+		t.Error("a plan that could not open the repository left no timestamp, " +
+			"so the sweep tries it on every tick and reaches nothing else")
+	}
+	if stored.Retention.LastError == "" {
+		t.Error("a plan that could not open the repository said nothing about why")
+	}
+
+	now := time.Now().UTC()
+	stored.RetentionApprovedAt = &now
+	stored.RetentionApprovedKeeps = keeps
+	stored.Retention.AttemptedAt = nil
+	stored.Retention.LastError = ""
+	if _, err := store.PutRepository(stored); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := engine.ApplyRetention(context.Background(), repo.ID); err == nil {
+		t.Fatal("a repository whose destination is gone was applied")
+	}
+	stored, err = store.Repository(repo.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Retention.AttemptedAt == nil {
+		t.Error("an apply that could not open the repository left no timestamp, " +
+			"so the sweep tries it on every tick and reaches nothing else")
+	}
+}

@@ -247,3 +247,46 @@ func TestTheDistChannelIsOrderedByCommit(t *testing.T) {
 		t.Error("a release was installed while following the branch")
 	}
 }
+
+// TestAVersionThatNamesTheDirectoryAboveIsNotInstalled: the version is
+// used as the name of the directory a release is unpacked into, and that
+// directory is removed before it is written to. On the dist channel the
+// version is whatever the signed manifest says, and ".." would name
+// /var/lib/gniza itself -- the state file, the schedules and the history.
+func TestAVersionThatNamesTheDirectoryAboveIsNotInstalled(t *testing.T) {
+	root := t.TempDir()
+	store, err := nodestore.Open(filepath.Join(root, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	settings := nodestore.DefaultSettings()
+	settings.StagingRoot = filepath.Join(root, "staging")
+	settings.ResticCache = filepath.Join(root, "cache")
+	settings.ConfigDir = filepath.Join(root, "config")
+	settings.UpdateChannel = "dist"
+	if err := store.SaveSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	engine := newEngine(t, store, root)
+
+	was := agent.Version
+	agent.Version = "v1.2.3-4-gabc1234"
+	t.Cleanup(func() { agent.Version = was })
+
+	for _, version := range []string{"..", "."} {
+		if err := store.SaveUpdateState(nodestore.UpdateState{
+			CheckedAt: time.Now().UTC(), Channel: "dist",
+			Version: version, BuiltAt: time.Now().UTC(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+		err := engine.StartUpgrade(version)
+		if err == nil {
+			t.Fatalf("%q was accepted as a build to install", version)
+		}
+		if !strings.Contains(err.Error(), "is not a build this server can install") {
+			t.Fatalf("%q was refused for the wrong reason: %v", version, err)
+		}
+	}
+}

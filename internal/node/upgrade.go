@@ -99,7 +99,7 @@ func (e *Engine) StartUpgrade(version string) error {
 	switch {
 	case channel != update.ChannelDist && !update.IsRelease(version):
 		return fmt.Errorf("%q is not a released version", version)
-	case version == "" || strings.ContainsAny(version, " \t/\\"):
+	case !installableName(version):
 		return fmt.Errorf("%q is not a build this server can install", version)
 	case version != state.Version:
 		return fmt.Errorf("%s is not the build this server has been told about; check again first", version)
@@ -160,6 +160,23 @@ func (e *Engine) StartUpgrade(version string) error {
 		}
 	}()
 	return nil
+}
+
+// installableName says whether a version can be used as the name of the
+// directory a release is unpacked into.
+//
+// What arrives here has been signed -- on the releases channel it is a
+// version number, and on the dist branch it is whatever the signed
+// manifest called the build. The directory built from it is removed and
+// then written to as root, so a name that is not a name of its own is
+// refused here rather than trusted to be one: "." or ".." would be the
+// directory above, which is /var/lib/gniza, and removing that is removing
+// the state file, the schedules and the history.
+func installableName(version string) bool {
+	if version == "" || version == "." || version == ".." {
+		return false
+	}
+	return !strings.ContainsAny(version, " \t\r\n\x00/\\")
 }
 
 // storedChannel is where a recorded check read from. A check made before

@@ -602,3 +602,31 @@ DirectAdmin:
 Still open: no account has been restored from an archive Gniza rebuilt.
 That is a restore on a production host, and it is the last question this
 record is waiting on.
+
+## Question 1 was answered on the wrong command — 2026-09-09
+
+Answer 1 above says no: `admin-backup` takes `--destination` and
+`--user` and nothing else, so a backup of less than the whole account
+cannot be asked for. That is still true of `admin-backup`, and it was the
+wrong place to look.
+
+DirectAdmin's administrator backup page has a fourth step, "What", which
+is either all of an account or a chosen set of `domain subdomain email
+email_data emailsettings forwarder autoresponder vacation list ftp
+ftpsettings database database_data trash`, posted as
+`what=select&option0=…`. That page posts a task line, and a task line is
+what `directadmin taskq --run=` takes — which is how a native restore
+already runs here. So the selection is per run and per account: nothing
+in `directadmin.conf` changes, and the server's own backups are not
+affected.
+
+Two runs against a disposable account on 1.709 settled what the values
+mean; both listings are in
+`internal/layout/dabackup/testdata/lean-account.tar.list`. Leaving out
+`domain` takes `domains/` and the nested `backup/home.tar.zst` with it —
+every one of the account's own files — which is what
+`docs/adr/0021-the-account-is-read-where-it-lies.md` is built on.
+
+What stays refused is a schedule that excludes the databases or the
+mail. That is now a gap in Gniza rather than a thing DirectAdmin cannot
+do.

@@ -33,6 +33,26 @@ recovery yet. Pushing the source does not publish a DirectAdmin release.
   worker. It uses a fresh per-account native workspace, verifies the task
   transcript and archive identity, and copies into root-private staging.
   `.tar`, `.tar.gz` and `.tar.zst` identity validation is supported.
+- **Backup in parts.** A split payload takes that archive apart into the
+  account's records and its home directory, at paths that are the same
+  tonight as last night, and points restic at those rather than at one
+  compressed blob. The same code puts them back into an archive
+  DirectAdmin's own restore reads.
+- **Reading the home directory where it lies**, with the agent's
+  `-directadmin-read-home-in-place`. Off by default. It asks DirectAdmin
+  for every part of the account except its own files -- through the task
+  line the backup page posts, per run, so nothing in `directadmin.conf`
+  changes and the server's own backups are untouched -- and hands restic
+  `/home/<user>` as a path. That is what cPanel's split mode has always
+  done, and it takes the nightly cost from about three and a half times
+  the account read down to the files that changed.
+
+  A restore in this shape is rebuilt out of the tree restic restored
+  rather than copied out of a manifest, so turn it on one server at a
+  time, and only after a restore drill on that server. A server that
+  reads the selection and backs up the whole account anyway is found out
+  on its first run, goes back to taking the archive apart, and says so on
+  every account. See `docs/adr/0021-the-account-is-read-where-it-lies.md`.
 - **Explicit native overwrite.** The provider can restore a whole archive
   over an existing ordinary user account, with both `Overwrite` and
   `Unrestricted` explicitly enabled. It executes one `taskq --run` task,
@@ -54,13 +74,13 @@ recovery yet. Pushing the source does not publish a DirectAdmin release.
 
 Gniza refuses these rather than guessing, and says so by name:
 
-- backing up an account **in parts** — the payload shape that lets restic
-  deduplicate, and the reason a nightly backup costs a fraction of the
-  account's size;
 - backing up **less than the whole account** — a schedule that excludes
   the databases or the mail. `directadmin admin-backup` takes a
-  destination and a user and nothing else, so this is not a gap in Gniza
-  to be filled in later: DirectAdmin has no such flag;
+  destination and a user and nothing else. DirectAdmin's backup page does
+  have a chosen set, posted per run and reachable through
+  `taskq --run`, and that is how the home directory is left out above;
+  wiring a schedule's own exclusions to it is a gap to be filled rather
+  than something DirectAdmin cannot do;
 - **granular restoring**: one database, mailbox, file, or selected
   component. The paths these would use are now taken from a real archive
   rather than from documentation, and are checked against its listing, but
@@ -72,10 +92,13 @@ Gniza refuses these rather than guessing, and says so by name:
   certificate-isolated certification, or applying archives as admin/reseller accounts;
 - backing up **the server's own configuration**.
 
-Native backups on the tested host were compressed archives. Split-mode
-deduplication has not been validated; every run may store close to a full
-copy. Normal account-level self-service remains unavailable until the
-session bridge and granular restore paths are implemented and validated.
+Native backups on the tested host were compressed archives. Split mode
+takes one apart, and a backup that reads the home directory in place
+never writes one at all; neither has been through a restore drill on a
+live account yet, so a server should be moved onto the second only
+knowingly. Normal account-level self-service remains unavailable until
+the session bridge and granular restore paths are implemented and
+validated.
 
 Native temporary work is separate from service state, under
 `/var/lib/gniza-directadmin-native`. This dedicated root is service-owned
@@ -88,10 +111,11 @@ run conflicting operations against the same account.
 
 ## Why
 
-These paths need answers from a running DirectAdmin server — whether its
-backup tool can be told to leave the home directory
-out, how a queued restore reports that it failed, what the archive's
-members are actually called. They are listed as six questions in
+These paths need answers from a running DirectAdmin server — how a queued
+restore reports that it failed, what the archive's members are actually
+called. Whether its backup tool can be told to leave the home directory
+out has since been answered on one: it can, per run, through the task
+line rather than through `admin-backup`. They are listed as six questions in
 `docs/adr/0019-the-panel-behind-an-interface.md`, with a seventh about
 who is allowed to read an account's backups through the panel. Some answers
 are now recorded in the live validation report; implementing and testing

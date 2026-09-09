@@ -453,7 +453,11 @@ func (r *Real) stageSplit(ctx context.Context, req panel.StageRequest) (pkgacct.
 		return pkgacct.Payload{}, err
 	}
 	archive := ""
-	ignored := false
+	// Set below on the run that found this out, and again on every run
+	// after it: a server that ignores the selection does so for all 142
+	// of its accounts, and one job saying why while the rest say nothing
+	// is how a reason gets lost.
+	ignored := r.ReadHomeInPlace && r.leanBackups.Load() == -1
 	if r.ReadHomeInPlace && r.leanBackups.Load() >= 0 {
 		payload, whole, err := r.stageInPlace(ctx, req)
 		if err == nil {
@@ -561,15 +565,19 @@ func (r *Real) stageInPlace(ctx context.Context, req panel.StageRequest) (pkgacc
 		return pkgacct.Payload{}, "", fmt.Errorf(
 			"directadmin: %s is not a home directory to read: %w", home, err)
 	}
-	// Until one archive on this server has come back without the
-	// account's files in it, the room reserved is the room a whole
-	// account would need. A DirectAdmin that ignores the selection then
-	// fails on its own terms rather than on a full disk.
-	reserve := req.Account.SizeBytes
-	if r.leanBackups.Load() == 1 {
-		reserve = r.mailBytes(account, req.Account.SizeBytes)
-	}
-	archive, err := r.stageNative(ctx, account, req.StagingDir, reserve, true)
+	// The room reserved is the room a whole account needs, which is more
+	// than this archive will take: what is left in it is the messages and
+	// the database dumps, and nothing here has measured either. Reserving
+	// too much refuses a backup on a full disk; reserving too little
+	// fills one. Until the restore drill has measured a real lean archive
+	// against the account it came from, this reserves too much on
+	// purpose. See ADR 0021.
+	//
+	// DirectAdmin's own accounting does not answer it either: user.usage
+	// records email_quota as what the mailboxes were allotted, not what
+	// they hold -- 157,260,176 against 14 MiB of messages on the
+	// validation host.
+	archive, err := r.stageNative(ctx, account, req.StagingDir, req.Account.SizeBytes, true)
 	if err != nil {
 		return pkgacct.Payload{}, "", err
 	}
@@ -605,29 +613,6 @@ func clearParts(staging string) error {
 		}
 	}
 	return nil
-}
-
-// mailBytes is what DirectAdmin says this account's messages come to,
-// which is the only bulk left in an archive asked for without the
-// account's own files. An account whose usage cannot be read is treated
-// as all mail, which reserves too much rather than too little.
-func (r *Real) mailBytes(account string, accountBytes uint64) uint64 {
-	body, err := os.ReadFile(filepath.Join(r.dataDir(), account, "user.usage"))
-	if err != nil {
-		return accountBytes
-	}
-	for _, line := range strings.Split(string(body), "\n") {
-		key, value, found := strings.Cut(strings.TrimSpace(line), "=")
-		if !found || key != "email_quota" {
-			continue
-		}
-		bytes, err := strconv.ParseUint(value, 10, 64)
-		if err != nil {
-			return accountBytes
-		}
-		return bytes
-	}
-	return accountBytes
 }
 
 // StageSystem materialises the server's own configuration.

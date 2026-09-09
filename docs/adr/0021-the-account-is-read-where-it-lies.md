@@ -116,6 +116,15 @@ decision about their panel, not Gniza's, and Gniza does not set it.
 - `stagingEstimate` can no longer key on the layout being an
   `ArchivePacker`, because the same layout now packs or does not
   depending on what the server was found to support.
+- The staging estimate is the whole account's size, which is more than
+  a backup in this shape writes. What is left in the archive is the
+  messages and the database dumps, and nothing has measured either;
+  DirectAdmin's own accounting does not answer it, because `user.usage`
+  records `email_quota` as what the mailboxes were allotted rather than
+  what they hold -- 157,260,176 against 14 MiB of messages on the
+  validation host. Reserving too much refuses a backup on a full disk;
+  reserving too little fills one. The drill measures a real archive
+  against the account it came from, and the estimate follows.
 - Gniza reads a home directory DirectAdmin's own archive would have
   filtered. It skips what DirectAdmin skips — `backups/`,
   `user_backups/`, `admin_backups/` — and, unlike DirectAdmin, it also

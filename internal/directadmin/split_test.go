@@ -209,6 +209,19 @@ func TestAServerThatIgnoresTheSelectionGoesBackToTheArchive(t *testing.T) {
 	if r.leanBackups.Load() != -1 {
 		t.Errorf("the server was not remembered as one that ignores the selection")
 	}
+	// It still says why, though. A server that does this does it to every
+	// account it has, and one job carrying the reason while the rest
+	// carry nothing is how an operator ends up with a page full of
+	// backups that look fine.
+	next, err := r.Stage(t.Context(), panel.StageRequest{
+		Account: panel.AccountInfo{User: "studio"}, StagingDir: privateStaging(t), Mode: pkgacct.ModeSplit,
+	})
+	if err != nil {
+		t.Fatalf("staging the next account: %v", err)
+	}
+	if !next.Degraded || next.Reason == "" {
+		t.Error("only the account that found this out is told why")
+	}
 }
 
 // Reading the account where it lies changes the shape of what a restore

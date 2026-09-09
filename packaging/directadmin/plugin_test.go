@@ -354,3 +354,105 @@ func TestTheTypefacesAreInstalledWhereDirectAdminServesFiles(t *testing.T) {
 		t.Error("the DirectAdmin package does not carry the typefaces")
 	}
 }
+
+// DirectAdmin's own plugin manager installs a plugin from a tar.gz: it
+// unpacks it into the plugins directory and runs scripts/install.sh as
+// root. Every plugin on a DirectAdmin server arrives that way, and one
+// that has no such script is a directory the manager unpacks and then
+// does nothing with.
+func TestThePluginManagerFindsSomethingToRun(t *testing.T) {
+	for _, name := range []string{"install", "uninstall", "update"} {
+		path := filepath.Join("scripts", name+".sh")
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Errorf("%s is missing, so the plugin manager cannot %s: %v", path, name, err)
+			continue
+		}
+		if info.Mode().Perm()&0o111 == 0 {
+			t.Errorf("%s is not executable", path)
+		}
+		if !strings.HasPrefix(read(t, path), "#!/bin/sh") {
+			t.Errorf("%s has no interpreter line", path)
+		}
+	}
+}
+
+// One installer, called from both ways in. A second copy of the work in
+// the plugin manager's script is a second copy to keep in step, and the
+// one that drifts is the one nobody runs by hand.
+func TestThePluginManagerScriptsRunTheOneInstaller(t *testing.T) {
+	for _, name := range []string{"install", "update"} {
+		body := read(t, filepath.Join("scripts", name+".sh"))
+		if !strings.Contains(body, "install.sh") {
+			t.Errorf("scripts/%s.sh does not run the installer", name)
+		}
+		for _, own := range []string{"useradd", "systemctl", "restic"} {
+			if strings.Contains(body, own) {
+				t.Errorf("scripts/%s.sh does %s itself; that belongs in the one installer", name, own)
+			}
+		}
+	}
+	if !strings.Contains(read(t, "scripts/uninstall.sh"), "uninstall.sh") {
+		t.Error("scripts/uninstall.sh does not run the uninstaller")
+	}
+}
+
+// Everything a plugin script prints is the page DirectAdmin shows after
+// the install, wrapped in its skin. Plain text arrives as one run-on
+// line, so the transcript is printed as preformatted HTML.
+func TestThePluginManagerIsToldTheOutcomeInHTML(t *testing.T) {
+	for _, name := range []string{"install", "uninstall", "update"} {
+		body := read(t, filepath.Join("scripts", name+".sh"))
+		if !strings.Contains(body, "<pre>") || !strings.Contains(body, "</pre>") {
+			t.Errorf("scripts/%s.sh prints a transcript DirectAdmin will run together", name)
+		}
+	}
+}
+
+// The plugin manager has already unpacked the plugin into the directory
+// the installer installs to, and runs the installer from inside it.
+// Copying those files over themselves fails -- "are the same file" -- so
+// the installer has to recognise where it is standing.
+func TestTheInstallerRecognisesFilesAlreadyInPlace(t *testing.T) {
+	body := read(t, "install.sh")
+	if !regexp.MustCompile(`SOURCE_DIR/plugin\.conf`).MatchString(body) {
+		t.Error("the installer cannot tell it was run from inside the plugin directory")
+	}
+	if !regexp.MustCompile(`(?m)^PLUGIN_DIR=`).MatchString(body) {
+		t.Error("the installer no longer names the plugin directory")
+	}
+}
+
+// The card in the plugin manager shows the version out of plugin.conf.
+// A version that never changes reads as a plugin that is never updated,
+// so the packaged copy carries the version that was built.
+func TestThePluginManagerIsToldWhichVersionThisIs(t *testing.T) {
+	makefile := read(t, filepath.Join("..", "..", "Makefile"))
+	rewrites := regexp.MustCompile(`sed 's\|\^version=\.\*\|version=\$\(VERSION\)\|'`).
+		FindAllString(makefile, -1)
+	// Both ways in: the release tarball an administrator unpacks, and the
+	// tar.gz the plugin manager takes.
+	if len(rewrites) < 2 {
+		t.Errorf("%d packaging steps write the built version into plugin.conf, wanted both", len(rewrites))
+	}
+	if !strings.Contains(makefile, "directadmin-plugin:") {
+		t.Error("nothing builds the tar.gz DirectAdmin's plugin manager installs")
+	}
+}
+
+// A server set up from the release tarball must still be updatable and
+// removable from the page an administrator goes to for that. So the
+// installer puts the plugin manager's scripts -- and what they run -- in
+// place too, and both ways in leave the same directory behind.
+func TestAHandInstallLeavesThePluginManagerSomethingToRun(t *testing.T) {
+	body := read(t, "install.sh")
+	for _, want := range []string{
+		`install -d -m 0755 "$PLUGIN_DIR/scripts"`,
+		`install -m 0755 "$SOURCE_DIR/install.sh" "$PLUGIN_DIR/install.sh"`,
+		`install -m 0755 "$SOURCE_DIR/gniza-agent" "$PLUGIN_DIR/gniza-agent"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the installer does not leave %s behind", want)
+		}
+	}
+}

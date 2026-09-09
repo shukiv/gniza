@@ -102,10 +102,14 @@ directadmin-package:
 		-o $(BIN)/gniza-directadmin/gniza-agent ./cmd/agent
 	cp packaging/directadmin/install.sh packaging/directadmin/uninstall.sh \
 		$(BIN)/gniza-directadmin/
-	cp -R packaging/directadmin/plugin.conf packaging/directadmin/hooks \
+	cp -R packaging/directadmin/hooks \
 		packaging/directadmin/admin packaging/directadmin/user \
-		packaging/directadmin/images \
+		packaging/directadmin/images packaging/directadmin/scripts \
 		$(BIN)/gniza-directadmin/directadmin/
+	@# The card in DirectAdmin's plugin manager shows this version. A
+	@# version that never moves reads as a plugin nobody maintains.
+	sed 's|^version=.*|version=$(VERSION)|' packaging/directadmin/plugin.conf \
+		> $(BIN)/gniza-directadmin/directadmin/plugin.conf
 	@# The typefaces. DirectAdmin wraps everything a plugin prints in its
 	@# own skin, so a font asked for through the plugin script arrives as
 	@# HTML with a woff2 inside it; DirectAdmin serves the images
@@ -115,10 +119,41 @@ directadmin-package:
 	mkdir -p $(BIN)/gniza-directadmin/directadmin/images/fonts
 	cp internal/webui/fonts/*.woff2 internal/webui/fonts/OFL.txt \
 		$(BIN)/gniza-directadmin/directadmin/images/fonts/
-	chmod +x $(BIN)/gniza-directadmin/install.sh $(BIN)/gniza-directadmin/uninstall.sh
+	chmod +x $(BIN)/gniza-directadmin/install.sh $(BIN)/gniza-directadmin/uninstall.sh \
+		$(BIN)/gniza-directadmin/directadmin/scripts/*.sh
 	tar -C $(BIN) --owner=0 --group=0 --numeric-owner --mode='u+rwX,go+rX,go-w' \
 		-czf $(BIN)/gniza-directadmin-$(PLUGIN_ARCH).tar.gz gniza-directadmin
 	@echo "built $(BIN)/gniza-directadmin-$(PLUGIN_ARCH).tar.gz -- unfinished, see ADR 0019"
+
+# The same plugin in the shape DirectAdmin's own plugin manager takes: one
+# tar.gz holding a single directory named after the plugin id. The manager
+# unpacks it into the plugins directory and runs scripts/install.sh as
+# root, which runs the installer beside it -- the same installer somebody
+# unpacking the release tarball runs by hand.
+directadmin-plugin:
+	rm -rf $(BIN)/gniza-plugin
+	mkdir -p $(BIN)/gniza-plugin/gniza
+	CGO_ENABLED=0 GOOS=linux GOARCH=$(PLUGIN_ARCH) go build -trimpath \
+		-ldflags="-s -w -X github.com/shukiv/gniza/internal/agent.Version=$(VERSION) \
+			-X github.com/shukiv/gniza/internal/agent.BuiltAt=$(BUILT_AT)" \
+		-o $(BIN)/gniza-plugin/gniza/gniza-agent ./cmd/agent
+	cp -R packaging/directadmin/hooks packaging/directadmin/admin \
+		packaging/directadmin/user packaging/directadmin/images \
+		packaging/directadmin/scripts $(BIN)/gniza-plugin/gniza/
+	cp packaging/directadmin/install.sh packaging/directadmin/uninstall.sh \
+		$(BIN)/gniza-plugin/gniza/
+	sed 's|^version=.*|version=$(VERSION)|' packaging/directadmin/plugin.conf \
+		> $(BIN)/gniza-plugin/gniza/plugin.conf
+	mkdir -p $(BIN)/gniza-plugin/gniza/images/fonts
+	cp internal/webui/fonts/*.woff2 internal/webui/fonts/OFL.txt \
+		$(BIN)/gniza-plugin/gniza/images/fonts/
+	chmod +x $(BIN)/gniza-plugin/gniza/install.sh \
+		$(BIN)/gniza-plugin/gniza/uninstall.sh \
+		$(BIN)/gniza-plugin/gniza/scripts/*.sh
+	tar -C $(BIN)/gniza-plugin --owner=0 --group=0 --numeric-owner \
+		--mode='u+rwX,go+rX,go-w' \
+		-czf $(BIN)/gniza-plugin-$(PLUGIN_ARCH).tar.gz gniza
+	@echo "built $(BIN)/gniza-plugin-$(PLUGIN_ARCH).tar.gz -- install it from DirectAdmin's plugin manager"
 
 # What the artifact was really built from.
 #

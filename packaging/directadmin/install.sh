@@ -39,7 +39,24 @@ umask 077
 
 SOURCE_DIR=$(cd "$(dirname "$0")" && pwd)
 [ -f "$SOURCE_DIR/gniza-agent" ] || die "gniza-agent is not next to this script"
-[ -d "$SOURCE_DIR/directadmin" ] || die "the DirectAdmin plugin files are missing from the package"
+
+# Two ways in, and they arrive in different shapes.
+#
+# The release tarball unpacks anywhere and holds the agent beside a
+# directadmin/ tree to install from. DirectAdmin's own plugin manager
+# unpacks the same files straight into the plugin directory and runs this
+# from inside them, so there is nothing to copy: the files to install are
+# the ones underfoot, and copying them over themselves is an error.
+if [ -f "$SOURCE_DIR/plugin.conf" ]; then
+	IN_PLACE=1
+	PLUGIN_FILES=$SOURCE_DIR
+	[ "$SOURCE_DIR" = "$PLUGIN_DIR" ] ||
+		die "this looks like a plugin directory but is not $PLUGIN_DIR; move it there or run the installer from the release tarball"
+else
+	IN_PLACE=0
+	PLUGIN_FILES=$SOURCE_DIR/directadmin
+	[ -d "$PLUGIN_FILES" ] || die "the DirectAdmin plugin files are missing from the package"
+fi
 
 for dir in "$CONFIG_DIR" "$STATE_DIR" "$STAGING_DIR" "$HOOK_SPOOL_DIR" "$CACHE_DIR" "$RUN_DIR"; do
 	mkdir -p "$dir"
@@ -128,38 +145,69 @@ fi
 # as can traverse to it.
 install -d -m 0755 "$PLUGIN_DIR" "$PLUGIN_DIR/hooks" "$PLUGIN_DIR/admin" \
 	"$PLUGIN_DIR/user" "$PLUGIN_DIR/images"
-install -m 0644 "$SOURCE_DIR/directadmin/plugin.conf" "$PLUGIN_DIR/plugin.conf"
-for hook in "$SOURCE_DIR"/directadmin/hooks/*.sh; do
-	install -m 0755 "$hook" "$PLUGIN_DIR/hooks/$(basename "$hook")"
-done
-# The menu entries. A plugin with no *_txt.html has no way in: the
-# directory is installed and the page is never linked to. The *_img.html
-# beside it is the tile Evolution actually draws, with the icon on it, so
-# both are installed -- a glob that took only the first left the plugin
-# listed as bare words and reachable only by typing its address.
-for entry in "$SOURCE_DIR"/directadmin/hooks/*.html; do
-	[ -f "$entry" ] || continue
-	install -m 0644 "$entry" "$PLUGIN_DIR/hooks/$(basename "$entry")"
-done
-# The icon the menu tile shows. DirectAdmin serves it from the plugin's
-# own images directory, which is the address admin_img.html points at.
-for image in "$SOURCE_DIR"/directadmin/images/*; do
-	[ -f "$image" ] || continue
-	install -m 0644 "$image" "$PLUGIN_DIR/images/$(basename "$image")"
-done
-# The typefaces, as files. Everything the plugin script prints is wrapped
-# in DirectAdmin's skin, so a font fetched through it is HTML with a woff2
-# inside; the images directory is served as files, which is where every
-# other plugin on a DirectAdmin server keeps its own web fonts.
-if [ -d "$SOURCE_DIR/directadmin/images/fonts" ]; then
-	install -d -m 0755 "$PLUGIN_DIR/images/fonts"
-	for font in "$SOURCE_DIR"/directadmin/images/fonts/*; do
-		[ -f "$font" ] || continue
-		install -m 0644 "$font" "$PLUGIN_DIR/images/fonts/$(basename "$font")"
+
+if [ "$IN_PLACE" = 1 ]; then
+	# Already unpacked here by the plugin manager. Nothing to copy, only
+	# the modes to settle: an archive carries whatever modes it was made
+	# with, and a directory DirectAdmin cannot traverse is a plugin it
+	# installs without complaining and then answers 404 for.
+	find "$PLUGIN_DIR" -type d -exec chmod 0755 {} +
+	find "$PLUGIN_DIR" -type f -exec chmod 0644 {} +
+	for script in "$PLUGIN_DIR"/hooks/*.sh "$PLUGIN_DIR"/scripts/*.sh \
+		"$PLUGIN_DIR/install.sh" "$PLUGIN_DIR/uninstall.sh" \
+		"$PLUGIN_DIR/admin/index.html" "$PLUGIN_DIR/user/index.html"; do
+		[ -f "$script" ] || continue
+		chmod 0755 "$script"
 	done
+	say "the plugin files were already in place"
+else
+	install -m 0644 "$PLUGIN_FILES/plugin.conf" "$PLUGIN_DIR/plugin.conf"
+	for hook in "$PLUGIN_FILES"/hooks/*.sh; do
+		install -m 0755 "$hook" "$PLUGIN_DIR/hooks/$(basename "$hook")"
+	done
+	# The menu entries. A plugin with no *_txt.html has no way in: the
+	# directory is installed and the page is never linked to. The *_img.html
+	# beside it is the tile Evolution actually draws, with the icon on it, so
+	# both are installed -- a glob that took only the first left the plugin
+	# listed as bare words and reachable only by typing its address.
+	for entry in "$PLUGIN_FILES"/hooks/*.html; do
+		[ -f "$entry" ] || continue
+		install -m 0644 "$entry" "$PLUGIN_DIR/hooks/$(basename "$entry")"
+	done
+	# The icon the menu tile shows. DirectAdmin serves it from the plugin's
+	# own images directory, which is the address admin_img.html points at.
+	for image in "$PLUGIN_FILES"/images/*; do
+		[ -f "$image" ] || continue
+		install -m 0644 "$image" "$PLUGIN_DIR/images/$(basename "$image")"
+	done
+	# The typefaces, as files. Everything the plugin script prints is wrapped
+	# in DirectAdmin's skin, so a font fetched through it is HTML with a woff2
+	# inside; the images directory is served as files, which is where every
+	# other plugin on a DirectAdmin server keeps its own web fonts.
+	if [ -d "$PLUGIN_FILES/images/fonts" ]; then
+		install -d -m 0755 "$PLUGIN_DIR/images/fonts"
+		for font in "$PLUGIN_FILES"/images/fonts/*; do
+			[ -f "$font" ] || continue
+			install -m 0644 "$font" "$PLUGIN_DIR/images/fonts/$(basename "$font")"
+		done
+	fi
+	install -m 0755 "$PLUGIN_FILES/admin/index.html" "$PLUGIN_DIR/admin/index.html"
+	install -m 0755 "$PLUGIN_FILES/user/index.html" "$PLUGIN_DIR/user/index.html"
+	# What DirectAdmin's plugin manager runs to update or remove the
+	# plugin. Installed by hand as well as by the manager, so that a
+	# server set up from the release tarball can still be updated and
+	# removed from the page an administrator expects to do it from.
+	if [ -d "$PLUGIN_FILES/scripts" ]; then
+		install -d -m 0755 "$PLUGIN_DIR/scripts"
+		for script in "$PLUGIN_FILES"/scripts/*.sh; do
+			[ -f "$script" ] || continue
+			install -m 0755 "$script" "$PLUGIN_DIR/scripts/$(basename "$script")"
+		done
+		install -m 0755 "$SOURCE_DIR/install.sh" "$PLUGIN_DIR/install.sh"
+		install -m 0755 "$SOURCE_DIR/uninstall.sh" "$PLUGIN_DIR/uninstall.sh"
+		install -m 0755 "$SOURCE_DIR/gniza-agent" "$PLUGIN_DIR/gniza-agent"
+	fi
 fi
-install -m 0755 "$SOURCE_DIR/directadmin/admin/index.html" "$PLUGIN_DIR/admin/index.html"
-install -m 0755 "$SOURCE_DIR/directadmin/user/index.html" "$PLUGIN_DIR/user/index.html"
 
 if [ ! -f "$SERVICE" ]; then
 	cat > "$SERVICE" <<'UNIT'

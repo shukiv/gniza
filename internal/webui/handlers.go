@@ -1957,7 +1957,7 @@ func (s *Server) accountViews(r *http.Request) ([]accountView, []string, error) 
 	if err != nil {
 		// A server whose accounts cannot be listed is still worth showing
 		// a page for, with the reason on it.
-		return nil, []string{"Could not list cPanel accounts: " + err.Error()}, nil
+		return nil, []string{"Could not list " + s.panelName() + " accounts: " + err.Error()}, nil
 	}
 	jobs, err := s.engine.Store().Jobs(0)
 	if err != nil {
@@ -4265,8 +4265,8 @@ func (s *Server) handleRecoverAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	if queued.Apply {
 		s.redirect(w, r, "/restore?tab=server", "ok", fmt.Sprintf(
-			"Restoring %s onto this server. It will be handed to cPanel's own restore when the "+
-				"archive is rebuilt.", account))
+			"Restoring %s onto this server. It will be handed to %s's own restore when the "+
+				"archive is rebuilt.", account, s.panelName()))
 		return
 	}
 	s.redirect(w, r, "/restore?tab=server", "ok", fmt.Sprintf(

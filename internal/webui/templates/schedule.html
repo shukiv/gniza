@@ -173,7 +173,11 @@
     <div class="cpr-row" style="margin-top:var(--s2)">
       <span class="cpr-hint" style="margin:0">Add the usual ones:</span>
       {{range $name, $paths := $data.ExcludePresets}}
-      <button type="button" class="cpr-btn" data-exclude-preset="{{join $paths "&#10;"}}">{{$name}}</button>
+      {{/* A real newline, because the script splits on one. Writing the
+           entity here joins the patterns with its six characters
+           instead: the escaper turns the ampersand into &amp;, and the
+           operator gets one line with "&#10;" in it. */}}
+      <button type="button" class="cpr-btn" data-exclude-preset="{{join $paths "\n"}}">{{$name}}</button>
       {{end}}
     </div>
 

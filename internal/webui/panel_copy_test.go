@@ -1,6 +1,8 @@
 package webui_test
 
 import (
+	"html"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -108,5 +110,37 @@ func TestTheVersionCardOffersTheInstallOnEitherPanel(t *testing.T) {
 	}
 	if !strings.Contains(page, "settings/update/install") {
 		t.Error("a DirectAdmin server is not offered the release it could install")
+	}
+}
+
+// TestAnExcludePresetCarriesRealNewlines: the preset buttons hand the
+// textarea a list of patterns, one per line, and the script that reads
+// them splits on a newline. Joining them with the six characters "&#10;"
+// put that text through the escaper -- "&amp;#10;" in the attribute --
+// and what the operator got was every pattern on one line with "&#10;"
+// between them, which restic would then be asked to match.
+func TestAnExcludePresetCarriesRealNewlines(t *testing.T) {
+	client, _, engine := newUI(t)
+	seedRepository(t, engine)
+
+	status, page := get(t, client, "/schedule")
+	if status != 200 {
+		t.Fatalf("GET /schedule = %d", status)
+	}
+	if strings.Contains(page, "&amp;#10;") || strings.Contains(page, "&#38;#10;") {
+		t.Error("a preset joins its patterns with the text of a newline, not a newline")
+	}
+	found := regexp.MustCompile(`data-exclude-preset="([^"]*)"`).FindStringSubmatch(page)
+	if found == nil {
+		t.Fatal("no preset button on the page")
+	}
+	patterns := strings.Split(html.UnescapeString(found[1]), "\n")
+	if len(patterns) < 2 {
+		t.Fatalf("a preset arrived as one line: %q", found[1])
+	}
+	for _, pattern := range patterns {
+		if !strings.HasPrefix(pattern, "/") && !strings.HasPrefix(pattern, "**") {
+			t.Errorf("a preset holds %q, which is not a pattern", pattern)
+		}
 	}
 }

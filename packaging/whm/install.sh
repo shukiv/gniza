@@ -208,9 +208,46 @@ case "$(uname -m)" in
     *)       RESTIC_ARCH="" ;;
 esac
 
+# install_hint names the package a missing tool comes in, and the command
+# this machine installs it with. An operator told "bunzip2 is needed" has
+# to work back from a command to a package; this says the package.
+install_hint() {
+    if command -v dnf >/dev/null 2>&1; then
+        echo "dnf install -y $1"
+    elif command -v yum >/dev/null 2>&1; then
+        echo "yum install -y $1"
+    elif command -v apt-get >/dev/null 2>&1; then
+        echo "apt-get install -y $1"
+    else
+        echo "install the $1 package"
+    fi
+}
+
+# unpack_bz2 reads restic's download, which is published as a .bz2 and
+# nothing else.
+#
+# bunzip2 is the usual way and is not always installed: a DirectAdmin
+# server stopped here on 2026-09-10 with everything else in place.
+# python3 is on every panel server -- DirectAdmin and cPanel both need one
+# -- and its standard library reads bz2, so it is asked before the
+# installer gives up.
+unpack_bz2() {
+    if command -v bunzip2 >/dev/null 2>&1; then
+        bunzip2 -c "$1" > "$2"
+    elif command -v bzip2 >/dev/null 2>&1; then
+        bzip2 -dc "$1" > "$2"
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 -c 'import bz2, shutil, sys
+with bz2.BZ2File(sys.argv[1]) as packed, open(sys.argv[2], "wb") as plain:
+    shutil.copyfileobj(packed, plain)' "$1" "$2"
+    else
+        die "nothing here can read a .bz2, which is the only way restic is published: $(install_hint bzip2), or install restic yourself, and run this again"
+    fi
+}
+
 install_restic() {
     [ -n "$RESTIC_ARCH" ] || die "there is no restic build for $(uname -m); install restic yourself and run this again"
-    for tool in curl bunzip2 sha256sum; do
+    for tool in curl sha256sum; do
         command -v "$tool" >/dev/null 2>&1 || die "$tool is needed to install restic; install it and run this again"
     done
 
@@ -232,7 +269,7 @@ install_restic() {
     ( cd "$RESTIC_TMP" && sha256sum -c expected ) >/dev/null \
         || die "the restic download does not match its published checksum; nothing was installed"
 
-    bunzip2 -c "$RESTIC_TMP/$restic_file" > "$RESTIC_TMP/restic" || die "could not unpack restic"
+    unpack_bz2 "$RESTIC_TMP/$restic_file" "$RESTIC_TMP/restic" || die "could not unpack restic"
     install_binary 0755 "$RESTIC_TMP/restic" "$PREFIX/restic"
     rm -rf -- "$RESTIC_TMP"
     RESTIC_TMP=""

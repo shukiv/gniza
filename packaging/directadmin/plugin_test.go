@@ -173,7 +173,7 @@ func TestTheInstallerPutsResticThereBecauseNothingWorksWithoutIt(t *testing.T) {
 		"restic",
 		"SHA256SUMS",
 		"sha256sum -c",
-		"install -m 0755",
+		"install_binary 0755",
 	} {
 		if !strings.Contains(script, want) {
 			t.Errorf("the installer does not mention %q", want)
@@ -449,8 +449,8 @@ func TestAHandInstallLeavesThePluginManagerSomethingToRun(t *testing.T) {
 	body := read(t, "install.sh")
 	for _, want := range []string{
 		`install -d -m 0755 "$PLUGIN_DIR/scripts"`,
-		`install -m 0755 "$SOURCE_DIR/install.sh" "$PLUGIN_DIR/install.sh"`,
-		`install -m 0755 "$SOURCE_DIR/gniza-agent" "$PLUGIN_DIR/gniza-agent"`,
+		`install_binary 0755 "$SOURCE_DIR/install.sh" "$PLUGIN_DIR/install.sh"`,
+		`install_binary 0755 "$SOURCE_DIR/gniza-agent" "$PLUGIN_DIR/gniza-agent"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the installer does not leave %s behind", want)

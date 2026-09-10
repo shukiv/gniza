@@ -25,6 +25,29 @@ SERVICE=/etc/systemd/system/gniza.service
 say() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
+# install_binary puts an executable in place atomically.
+#
+# install(1) writes over the destination where it stands, so for the
+# length of the copy whoever reads it sees a file that is there and not
+# yet complete. On 2026-09-09 a live server restarted into a
+# /usr/local/bin/restic that existed and was not yet executable, and
+# crash-looped every five seconds for three and a half minutes until the
+# download finished. A rename inside the same directory is atomic: a
+# reader sees the old file or the new one and never half of either, and
+# a binary that is running is replaced rather than refused with ETXTBSY.
+install_binary() {
+    _ib_mode=$1
+    _ib_source=$2
+    _ib_target=$3
+    _ib_temp="$(dirname "$_ib_target")/.gniza-incoming.$$.$(basename "$_ib_target")"
+    install -m "$_ib_mode" "$_ib_source" "$_ib_temp" \
+        || die "could not write $_ib_temp"
+    mv -f "$_ib_temp" "$_ib_target" || {
+        rm -f "$_ib_temp"
+        die "could not put $_ib_target in place"
+    }
+}
+
 [ "$(id -u)" = 0 ] || die "run this as root"
 [ -d /usr/local/cpanel ] || die "this does not look like a cPanel server (/usr/local/cpanel is missing)"
 umask 077
@@ -210,7 +233,7 @@ install_restic() {
         || die "the restic download does not match its published checksum; nothing was installed"
 
     bunzip2 -c "$RESTIC_TMP/$restic_file" > "$RESTIC_TMP/restic" || die "could not unpack restic"
-    install -m 0755 "$RESTIC_TMP/restic" "$PREFIX/restic"
+    install_binary 0755 "$RESTIC_TMP/restic" "$PREFIX/restic"
     rm -rf -- "$RESTIC_TMP"
     RESTIC_TMP=""
     trap - 0 1 2 15
@@ -226,10 +249,10 @@ say "restic: $(restic version 2>/dev/null | head -1)"
 install -d -m 0700 "$CONFIG_DIR" "$STATE_DIR" "$STAGING_DIR" "$CACHE_DIR" "$RUN_DIR" \
 	"$HOOK_SPOOL_DIR"
 install -d -m 0755 "$APPCONFIG_DIR"
-install -m 0755 "$SOURCE_DIR/gniza-agent" "$PREFIX/gniza-agent"
+install_binary 0755 "$SOURCE_DIR/gniza-agent" "$PREFIX/gniza-agent"
 HOOK_BIN=/usr/local/cpanel/3rdparty/bin/gniza-hook
-install -m 0755 "$SOURCE_DIR/gniza-agent" "$HOOK_BIN"
-install -m 0755 "$SOURCE_DIR/gniza.cgi" "$CGI_DIR/gniza.cgi"
+install_binary 0755 "$SOURCE_DIR/gniza-agent" "$HOOK_BIN"
+install_binary 0755 "$SOURCE_DIR/gniza.cgi" "$CGI_DIR/gniza.cgi"
 say "installed $PREFIX/gniza-agent and $CGI_DIR/gniza.cgi"
 
 # Keep the way out on the server. Installing from a release unpacks the
@@ -240,7 +263,7 @@ say "installed $PREFIX/gniza-agent and $CGI_DIR/gniza.cgi"
 # tile, and does so without complaining. Modes are explicit because this
 # script runs under umask 077 and these are not secret.
 install -d -m 0755 "$SHARE_DIR" "$SHARE_DIR/cpanel" "$SHARE_DIR/branding"
-install -m 0755 "$SOURCE_DIR/uninstall.sh" "$SHARE_DIR/uninstall.sh"
+install_binary 0755 "$SOURCE_DIR/uninstall.sh" "$SHARE_DIR/uninstall.sh"
 install -m 0644 "$SOURCE_DIR/cpanel/install.json" "$SHARE_DIR/cpanel/install.json"
 install -m 0644 "$SOURCE_DIR/branding/badge.svg" "$SHARE_DIR/branding/badge.svg"
 say "installed $SHARE_DIR/uninstall.sh"

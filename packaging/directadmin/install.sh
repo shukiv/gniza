@@ -33,6 +33,29 @@ PLUGIN_USER=gniza-plugin
 say() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
+# install_binary puts an executable in place atomically.
+#
+# install(1) writes over the destination where it stands, so for the
+# length of the copy whoever reads it sees a file that is there and not
+# yet complete. On 2026-09-09 a live server restarted into a
+# /usr/local/bin/restic that existed and was not yet executable, and
+# crash-looped every five seconds for three and a half minutes until the
+# download finished. A rename inside the same directory is atomic: a
+# reader sees the old file or the new one and never half of either, and
+# a binary that is running is replaced rather than refused with ETXTBSY.
+install_binary() {
+	_ib_mode=$1
+	_ib_source=$2
+	_ib_target=$3
+	_ib_temp="$(dirname "$_ib_target")/.gniza-incoming.$$.$(basename "$_ib_target")"
+	install -m "$_ib_mode" "$_ib_source" "$_ib_temp" \
+		|| die "could not write $_ib_temp"
+	mv -f "$_ib_temp" "$_ib_target" || {
+		rm -f "$_ib_temp"
+		die "could not put $_ib_target in place"
+	}
+}
+
 [ "$(id -u)" = 0 ] || die "run this as root"
 [ -d /usr/local/directadmin ] || die "this does not look like a DirectAdmin server (/usr/local/directadmin is missing)"
 umask 077
@@ -102,7 +125,7 @@ install_restic() {
 		|| die "the restic download does not match its published checksum; nothing was installed"
 
 	bunzip2 -c "$RESTIC_TMP/$restic_file" > "$RESTIC_TMP/restic" || die "could not unpack restic"
-	install -m 0755 "$RESTIC_TMP/restic" "$PREFIX/restic"
+	install_binary 0755 "$RESTIC_TMP/restic" "$PREFIX/restic"
 	rm -rf -- "$RESTIC_TMP"
 	RESTIC_TMP=""
 	trap - 0 1 2 15
@@ -114,12 +137,12 @@ if ! command -v restic >/dev/null 2>&1 && [ ! -x /usr/local/bin/restic ]; then
 fi
 say "restic: $(restic version 2>/dev/null | head -1)"
 
-install -m 0755 "$SOURCE_DIR/gniza-agent" "$PREFIX/gniza-agent"
+install_binary 0755 "$SOURCE_DIR/gniza-agent" "$PREFIX/gniza-agent"
 # The hook is the same program under the name the hook scripts call. It
 # is a copy rather than a symlink for the same reason it is on cPanel:
 # the two must never drift, and a copy that did is visible as a different
 # checksum.
-install -m 0755 "$SOURCE_DIR/gniza-agent" "$PREFIX/gniza-hook"
+install_binary 0755 "$SOURCE_DIR/gniza-agent" "$PREFIX/gniza-hook"
 
 # DirectAdmin will not run a plugin as root, so the administrator's page
 # runs as this account instead. It has no home, no shell and no password:
@@ -172,7 +195,7 @@ if [ "$IN_PLACE" = 1 ]; then
 else
 	install -m 0644 "$PLUGIN_FILES/plugin.conf" "$PLUGIN_DIR/plugin.conf"
 	for hook in "$PLUGIN_FILES"/hooks/*.sh; do
-		install -m 0755 "$hook" "$PLUGIN_DIR/hooks/$(basename "$hook")"
+		install_binary 0755 "$hook" "$PLUGIN_DIR/hooks/$(basename "$hook")"
 	done
 	# The menu entries. A plugin with no *_txt.html has no way in: the
 	# directory is installed and the page is never linked to. The *_img.html
@@ -200,8 +223,8 @@ else
 			install -m 0644 "$font" "$PLUGIN_DIR/images/fonts/$(basename "$font")"
 		done
 	fi
-	install -m 0755 "$PLUGIN_FILES/admin/index.html" "$PLUGIN_DIR/admin/index.html"
-	install -m 0755 "$PLUGIN_FILES/user/index.html" "$PLUGIN_DIR/user/index.html"
+	install_binary 0755 "$PLUGIN_FILES/admin/index.html" "$PLUGIN_DIR/admin/index.html"
+	install_binary 0755 "$PLUGIN_FILES/user/index.html" "$PLUGIN_DIR/user/index.html"
 	# What DirectAdmin's plugin manager runs to update or remove the
 	# plugin. Installed by hand as well as by the manager, so that a
 	# server set up from the release tarball can still be updated and
@@ -210,11 +233,11 @@ else
 		install -d -m 0755 "$PLUGIN_DIR/scripts"
 		for script in "$PLUGIN_FILES"/scripts/*.sh; do
 			[ -f "$script" ] || continue
-			install -m 0755 "$script" "$PLUGIN_DIR/scripts/$(basename "$script")"
+			install_binary 0755 "$script" "$PLUGIN_DIR/scripts/$(basename "$script")"
 		done
-		install -m 0755 "$SOURCE_DIR/install.sh" "$PLUGIN_DIR/install.sh"
-		install -m 0755 "$SOURCE_DIR/uninstall.sh" "$PLUGIN_DIR/uninstall.sh"
-		install -m 0755 "$SOURCE_DIR/gniza-agent" "$PLUGIN_DIR/gniza-agent"
+		install_binary 0755 "$SOURCE_DIR/install.sh" "$PLUGIN_DIR/install.sh"
+		install_binary 0755 "$SOURCE_DIR/uninstall.sh" "$PLUGIN_DIR/uninstall.sh"
+		install_binary 0755 "$SOURCE_DIR/gniza-agent" "$PLUGIN_DIR/gniza-agent"
 	fi
 fi
 

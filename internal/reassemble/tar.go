@@ -15,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // maxEntrySize bounds a single extracted file. An archive is only as
@@ -188,6 +189,17 @@ func createTar(dir, archivePath string) error {
 	writer := tar.NewWriter(out)
 	root := filepath.Clean(dir)
 
+	// A Maildir is a directory of hard links: Dovecot moves a message
+	// between folders by linking it under the new name and unlinking the
+	// old, and restic puts those links back as links. Packing each name
+	// as a copy of its own makes an archive as large as the copies, and
+	// an account restored from it larger than the account backed up --
+	// against a reservation that counted the content once, so a repack
+	// can run the disk out halfway through as well. The first name
+	// carries the body and the rest link to it, which is what tar does.
+	type inode struct{ device, number uint64 }
+	linked := map[inode]string{}
+
 	walkErr := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -214,10 +226,22 @@ func createTar(dir, archivePath string) error {
 		if info.IsDir() {
 			header.Name += "/"
 		}
+		if info.Mode().IsRegular() {
+			if stat, ok := info.Sys().(*syscall.Stat_t); ok && uint64(stat.Nlink) > 1 {
+				key := inode{uint64(stat.Dev), uint64(stat.Ino)}
+				if first, seen := linked[key]; seen {
+					header.Typeflag = tar.TypeLink
+					header.Linkname = first
+					header.Size = 0
+				} else {
+					linked[key] = header.Name
+				}
+			}
+		}
 		if err := writer.WriteHeader(header); err != nil {
 			return fmt.Errorf("reassemble: write header %s: %w", header.Name, err)
 		}
-		if !info.Mode().IsRegular() {
+		if !info.Mode().IsRegular() || header.Typeflag == tar.TypeLink {
 			return nil
 		}
 

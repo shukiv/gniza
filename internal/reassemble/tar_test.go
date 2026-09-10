@@ -2,6 +2,7 @@ package reassemble
 
 import (
 	"archive/tar"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -202,5 +203,66 @@ func TestExtractMembersReportsWhenNothingMatched(t *testing.T) {
 	}
 	if _, err := ExtractMembers(archive, filepath.Join(root, "out2"), nil); err == nil {
 		t.Error("extracting no members at all should be refused")
+	}
+}
+
+// A Maildir is a directory of hard links: Dovecot moves a message
+// between folders by linking it under the new name and unlinking the
+// old, and restic puts those links back as links when it restores the
+// home directory. Packing each name as a copy of its own makes an
+// archive as large as the copies, and an account restored from it is
+// larger than the account backed up -- against a reservation that
+// counted the content once, so the repack can also run the disk out
+// halfway through.
+func TestALinkedFileIsPackedAsALink(t *testing.T) {
+	dir := t.TempDir()
+	tree := filepath.Join(dir, "tree")
+	if err := os.MkdirAll(filepath.Join(tree, "cur"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	first := filepath.Join(tree, "cur", "1.eml")
+	if err := os.WriteFile(first, []byte(strings.Repeat("m", 4096)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(first, filepath.Join(tree, "cur", "2.eml")); err != nil {
+		t.Fatal(err)
+	}
+
+	archive := filepath.Join(dir, "rebuilt.tar")
+	if err := createTar(tree, archive); err != nil {
+		t.Fatal(err)
+	}
+
+	file, err := os.Open(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	reader := tar.NewReader(file)
+	found := false
+	for {
+		header, err := reader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if header.Name != "cur/2.eml" {
+			continue
+		}
+		found = true
+		if header.Typeflag != tar.TypeLink {
+			t.Errorf("the second name is typeflag %q, not a link", header.Typeflag)
+		}
+		if header.Linkname != "cur/1.eml" {
+			t.Errorf("the link points at %q", header.Linkname)
+		}
+		if header.Size != 0 {
+			t.Errorf("the link carries %d bytes of its own", header.Size)
+		}
+	}
+	if !found {
+		t.Fatal("the second name is not in the rebuilt archive")
 	}
 }

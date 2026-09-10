@@ -21,6 +21,7 @@ var (
 	excludedByPolicy = []string{
 		"application_backups/wp-2026-09-10.tar.gz",
 		"softaculous_backups/soft.tar.gz",
+		"wordpress-backups/site-2026-09-10.zip",
 		".trash/files/gone/info.php",
 		".cagefs/etc/passwd",
 		"domains/a.example/public_html/wp-content/cache/page.html",

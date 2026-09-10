@@ -591,16 +591,13 @@ func stagingEstimate(size, lean uint64, mode pkgacct.Mode, layout panel.ArchiveL
 	inPlace, asked := provider.(panel.InPlaceReader)
 	if _, packs := layout.(panel.ArchivePacker); packs {
 		if asked && inPlace.ReadsHomeInPlace() {
-			// The archive such a panel writes without the account's own
-			// files in it, and that archive taken apart beside it. Both
-			// are what the panel writes, not a share of the account:
-			// an account whose bulk is mail needs more than a fifth of
-			// itself, and one whose bulk is files on disk needs far
+			// What such a panel writes -- its records and the database
+			// dumps -- taken apart once, beside an archive that is a
+			// compressed fraction of them. Not a share of the account:
+			// an account whose bulk is databases needs more than a fifth
+			// of itself, and one whose bulk is files on disk needs far
 			// less. See ADR 0021.
-			if lean > ^uint64(0)/2 {
-				return ^uint64(0)
-			}
-			share = 2 * lean
+			share = lean
 		} else {
 			share = 2 * size
 		}

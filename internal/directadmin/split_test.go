@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/shukiv/gniza/internal/layout/dabackup"
@@ -311,5 +312,157 @@ func TestTheEstimateAgreesWithThePathAStageWillTake(t *testing.T) {
 	r.leanBackups.Store(-1)
 	if r.ReadsHomeInPlace() {
 		t.Error("a server that ignores the selection is estimated for a shape it will not produce")
+	}
+}
+
+// roundcubeScript stands in for DirectAdmin's own scripts/backup_roundcube.php,
+// which takes the domain, the account and the output file in its
+// environment and writes one XML file. This one writes those three back
+// out so the test can see what it was asked for.
+func roundcubeScript(t *testing.T, dir, name, body string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// domainConf records one domain against an account the way DirectAdmin
+// does, which is where the provider reads the list of domains from.
+func domainConf(t *testing.T, r *Real, account, domain string) {
+	t.Helper()
+	dir := filepath.Join(r.DataDir, account, "domains")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, domain+".conf"), []byte("domain="+domain+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+const echoingRoundcube = "#!/bin/sh\nprintf '<ROUNDCUBE domain=\"%s\" user=\"%s\"/>\\n' \"$domain\" \"$username\" > \"$xml_file\"\n"
+
+// Leaving email_data out of the selection is what keeps the mailbox out
+// of the archive, and it also leaves out roundcube.xml -- DirectAdmin
+// files that under the same option. Those are the webmail address books,
+// identities and preferences, and DirectAdmin ships the script that
+// exports them per domain. It is run for every domain of the account into
+// the place DirectAdmin's restore looks for it, so the restore puts them
+// back on its own.
+func TestALeanBackupExportsTheWebmailDataForEveryDomain(t *testing.T) {
+	r := nativeHost(t)
+	r.ReadHomeInPlace = true
+	r.ScriptsDir = filepath.Join(t.TempDir(), "scripts")
+	roundcubeScript(t, r.ScriptsDir, "backup_roundcube.php", echoingRoundcube)
+	for _, domain := range []string{"studio.example", "second.example"} {
+		domainConf(t, r, "studio", domain)
+	}
+	staging := privateStaging(t)
+	payload, err := r.Stage(t.Context(), panel.StageRequest{
+		Account: panel.AccountInfo{User: "studio"}, StagingDir: staging, Mode: pkgacct.ModeSplit,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, domain := range []string{"studio.example", "second.example"} {
+		xml := filepath.Join(dabackup.MetadataPart(staging), "backup", domain, "email", "data", "roundcube.xml")
+		body, err := os.ReadFile(xml)
+		if err != nil {
+			t.Errorf("no webmail data for %s where DirectAdmin's restore looks for it: %v", domain, err)
+			continue
+		}
+		want := "<ROUNDCUBE domain=\"" + domain + "\" user=\"studio\"/>\n"
+		if string(body) != want {
+			t.Errorf("%s: the script was asked for %q, want %q", domain, body, want)
+		}
+		// And the archive is rebuilt from the manifest, so a file that is
+		// only on disk is one the restore never sees.
+		manifest, err := os.ReadFile(filepath.Join(dabackup.MetadataPart(staging), dabackup.ManifestFile))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if member := "backup/" + domain + "/email/data/roundcube.xml"; !strings.Contains(string(manifest), member) {
+			t.Errorf("the manifest does not record %s, so the rebuilt archive will not carry it", member)
+		}
+	}
+	if len(payload.Warnings) != 0 {
+		t.Errorf("a backup whose webmail data was exported warns: %v", payload.Warnings)
+	}
+}
+
+// DirectAdmin runs scripts/custom/backup_roundcube.php ahead of its own
+// when an administrator put one there, and so does this.
+func TestAnAdministratorsOwnRoundcubeScriptIsTheOneRun(t *testing.T) {
+	r := nativeHost(t)
+	r.ReadHomeInPlace = true
+	r.ScriptsDir = filepath.Join(t.TempDir(), "scripts")
+	roundcubeScript(t, r.ScriptsDir, "backup_roundcube.php", echoingRoundcube)
+	roundcubeScript(t, filepath.Join(r.ScriptsDir, "custom"), "backup_roundcube.php",
+		"#!/bin/sh\nprintf 'custom' > \"$xml_file\"\n")
+	domainConf(t, r, "studio", "studio.example")
+	staging := privateStaging(t)
+	if _, err := r.Stage(t.Context(), panel.StageRequest{
+		Account: panel.AccountInfo{User: "studio"}, StagingDir: staging, Mode: pkgacct.ModeSplit,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(dabackup.MetadataPart(staging), "backup", "studio.example", "email", "data", "roundcube.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "custom" {
+		t.Errorf("the administrator's script was passed over: %q", body)
+	}
+}
+
+// An address book that could not be exported is a warning on the backup,
+// not a backup that did not happen: the account's files, records, mail
+// and databases are all there, and the page has to say what is not.
+func TestWebmailDataThatCannotBeExportedIsAWarningNotAFailure(t *testing.T) {
+	r := nativeHost(t)
+	r.ReadHomeInPlace = true
+	r.ScriptsDir = filepath.Join(t.TempDir(), "scripts")
+	roundcubeScript(t, r.ScriptsDir, "backup_roundcube.php", "#!/bin/sh\necho 'Cannot read mysql configuration file' >&2\nexit 1\n")
+	domainConf(t, r, "studio", "studio.example")
+	payload, err := r.Stage(t.Context(), panel.StageRequest{
+		Account: panel.AccountInfo{User: "studio"}, StagingDir: privateStaging(t), Mode: pkgacct.ModeSplit,
+	})
+	if err != nil {
+		t.Fatalf("a failed webmail export took the whole backup down: %v", err)
+	}
+	found := false
+	for _, w := range payload.Warnings {
+		found = found || (strings.Contains(w, "studio.example") && strings.Contains(w, "webmail"))
+	}
+	if !found {
+		t.Errorf("nothing says the webmail data for studio.example is not in the backup: %v", payload.Warnings)
+	}
+}
+
+// The native workspace holds the compressed archive and nothing else for
+// a lean run: DirectAdmin assembles in its own backup_tmpdir, not here.
+// Reserving two copies of the dumps for a workspace that holds a
+// compressed fraction of one refused a real account.
+func TestALeanRunReservesOneCopyInTheNativeWorkspace(t *testing.T) {
+	r := nativeHost(t)
+	r.ReadHomeInPlace = true
+	var fs syscall.Statfs_t
+	if err := syscall.Statfs(filepath.Dir(r.NativeRoot), &fs); err != nil {
+		t.Fatal(err)
+	}
+	avail := fs.Bavail * uint64(fs.Bsize)
+	const gib = 1 << 30
+	if avail < 8*gib {
+		t.Skipf("only %d bytes free here; the arithmetic needs 8 GiB", avail)
+	}
+	// One copy plus the reserve fits; two copies plus the reserve does not.
+	lean := avail/2 + gib
+	if _, err := r.Stage(t.Context(), panel.StageRequest{
+		Account:    panel.AccountInfo{User: "studio", LeanBytes: lean},
+		StagingDir: privateStaging(t), Mode: pkgacct.ModeSplit,
+	}); err != nil {
+		t.Fatalf("a lean backup was refused the room for two copies of its dumps: %v", err)
 	}
 }

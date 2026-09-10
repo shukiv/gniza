@@ -181,6 +181,18 @@ func TestTheRebuiltArchiveCarriesWhatWasReadInPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 	homeTree(t, dir)
+	// The webmail data is exported into the metadata part after the
+	// archive is unpacked, at the member DirectAdmin's restore reads.
+	webmail := filepath.Join(MetadataPart(dir), BackupDir, fixtureDomain, "email", "data")
+	if err := os.MkdirAll(webmail, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(webmail, "roundcube.xml"), []byte("<ROUNDCUBE/>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Layout{}).AddMetadataMember(dir, path.Join(BackupDir, fixtureDomain, "email", "data", "roundcube.xml")); err != nil {
+		t.Fatal(err)
+	}
 
 	out := t.TempDir()
 	rebuilt, err := (Layout{}).PackArchive(context.Background(), dir, "gzv0908a", out)
@@ -190,6 +202,7 @@ func TestTheRebuiltArchiveCarriesWhatWasReadInPlace(t *testing.T) {
 	outer, home := members(t, rebuilt)
 	for _, want := range []string{
 		path.Join(BackupDir, UserConf),
+		path.Join(BackupDir, fixtureDomain, "email", "data", "roundcube.xml"),
 		path.Join(DomainsDir, fixtureDomain, "public_html", "index.html"),
 		path.Join(DomainsDir, fixtureDomain, "www"),
 		path.Join(MailDir, fixtureDomain, "sales", "Maildir", "new", "1"),
@@ -234,6 +247,28 @@ func TestTheRebuiltArchiveCarriesWhatWasReadInPlace(t *testing.T) {
 	if seen["home"] > seen[DomainsDir] {
 		t.Errorf("the home archive is at %d, after %s at %d: %v",
 			seen["home"], DomainsDir, seen[DomainsDir], outer)
+	}
+}
+
+// A whole-account archive carries its own webmail data, and its members
+// are in DirectAdmin's order with the account's own directories already
+// after backup/. Adding to that would put a backup/ member where the
+// restore does not look for one, so it is refused.
+func TestOnlyALeanTreeTakesAnAddedMember(t *testing.T) {
+	dir := t.TempDir()
+	if err := (Layout{}).UnpackArchive(context.Background(), writeArchive(t, "gzv0908a", nil), "gzv0908a", dir); err != nil {
+		t.Fatal(err)
+	}
+	name := path.Join(BackupDir, fixtureDomain, "email", "data", "roundcube.xml")
+	target := filepath.Join(MetadataPart(dir), filepath.FromSlash(name))
+	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("<ROUNDCUBE/>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Layout{}).AddMetadataMember(dir, name); err == nil {
+		t.Fatal("a whole-account tree took an added member")
 	}
 }
 

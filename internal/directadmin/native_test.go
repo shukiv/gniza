@@ -101,7 +101,10 @@ func TestNativeCommandProcess(t *testing.T) {
 		// writes the whole account whatever it was asked for.
 		switch {
 		case task.Get("what") == "select" && scenario != "ignores-selection":
-			writeLeanNativeArchive(t, archive, identity)
+			// The real one includes the messages unless the client said
+			// it knows what email_data is -- measured on 1.709, and the
+			// difference between a 15 MB archive and a 296 MB one.
+			writeLeanNativeArchive(t, archive, identity, task.Get("email_data_aware") != "yes")
 		case scenario == "root-owned-home":
 			writeNativeArchiveWith(t, archive, identity, map[string]string{
 				"backup/home.tar": nestedHomeTar(t),
@@ -144,8 +147,9 @@ func TestNativeCommandProcess(t *testing.T) {
 
 // writeLeanNativeArchive is what DirectAdmin writes for a backup that
 // asked for everything except "domain": no domains/, no nested home
-// archive, and the messages that come with "email".
-func writeLeanNativeArchive(t *testing.T, filename, account string) {
+// archive. withMail is what it does for a client that did not say
+// email_data_aware=yes: the messages come along anyway.
+func writeLeanNativeArchive(t *testing.T, filename, account string, withMail bool) {
 	t.Helper()
 	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
@@ -156,11 +160,14 @@ func writeLeanNativeArchive(t *testing.T, filename, account string) {
 		t.Fatal(err)
 	}
 	tarball := tar.NewWriter(z)
-	for name, body := range map[string]string{
-		"backup/user.conf":                     "username=" + account + "\nusertype=user\n",
-		"backup/backup_options.list":           "email\nsubdomain\n",
-		"imap/studio.example/hi/Maildir/new/1": "a message",
-	} {
+	members := map[string]string{
+		"backup/user.conf":           "username=" + account + "\nusertype=user\n",
+		"backup/backup_options.list": "email\nsubdomain\n",
+	}
+	if withMail {
+		members["imap/studio.example/hi/Maildir/new/1"] = "a message"
+	}
+	for name, body := range members {
 		if err := tarball.WriteHeader(&tar.Header{
 			Name: name, Mode: 0o600, Size: int64(len(body)), Typeflag: tar.TypeReg,
 		}); err != nil {
@@ -618,9 +625,13 @@ func TestAccountAlsoMeasuresWhatALeanBackupWrites(t *testing.T) {
 	if info.SizeBytes != 6931 {
 		t.Errorf("the account measures %d bytes, want 6931", info.SizeBytes)
 	}
-	// The message and the databases, not the 5000 bytes under domains/.
-	if info.LeanBytes != 1031 {
-		t.Errorf("a lean backup is reserved %d bytes, want 1031", info.LeanBytes)
+	// The databases and nothing else: the messages are read where they
+	// lie now that the task line says the client knows what email_data
+	// is, and the account's files never were in this archive. Measured
+	// on server-182-54-236-143.da.direct, 2026-09-10: 15,124,712 bytes
+	// for an account whose mail is 733,507,893 on disk.
+	if info.LeanBytes != 1024 {
+		t.Errorf("a lean backup is reserved %d bytes, want 1024", info.LeanBytes)
 	}
 }
 
@@ -668,5 +679,34 @@ func TestAnAccountIsNotMeasuredByWhatItsBackupLeavesOut(t *testing.T) {
 	if info.SizeBytes != 8000 {
 		t.Errorf("the account measures %d bytes, want 8000: the four directories "+
 			"DirectAdmin's own backup skips are in no archive Gniza stages", info.SizeBytes)
+	}
+}
+
+// DirectAdmin's backup page sends database_data_aware=yes and
+// email_data_aware=yes with every request, and its meaning is exact: a
+// client that says so and leaves email_data out gets no messages, and a
+// client that does not say so is taken for one written before the option
+// existed and gets them anyway. Gniza never said so, and every "lean"
+// archive it asked for carried the account's whole mailbox -- 732,924,695
+// bytes of 1,281,932,189 on the validation host. Two flags took the
+// archive from 310,915,651 bytes to 15,124,712.
+func TestTheLeanTaskLineSaysItKnowsWhatEmailDataIs(t *testing.T) {
+	task := backupTask("studio", "/tmp/x", true)
+	for _, flag := range []string{"email_data_aware", "database_data_aware"} {
+		if task.Get(flag) != "yes" {
+			t.Errorf("%s is %q, want yes: without it DirectAdmin includes the data anyway", flag, task.Get(flag))
+		}
+	}
+	for _, values := range task {
+		for _, v := range values {
+			if v == "email_data" {
+				t.Error("email_data is selected, which is the whole mailbox compressed into the archive")
+			}
+		}
+	}
+	// A whole-account request is not a selection and says nothing about
+	// options it did not use.
+	if whole := backupTask("studio", "/tmp/x", false); whole.Has("what") || whole.Has("email_data_aware") {
+		t.Errorf("a whole-account task carries selection flags: %v", whole)
 	}
 }

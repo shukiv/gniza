@@ -83,14 +83,17 @@ func TestStagingEstimateFollowsWhatIsActuallyStaged(t *testing.T) {
 		// what it holds on cPanel and reserving the account twice
 		// refuses backups that would have fitted easily.
 		// It stages what such a panel writes, which is not a share of
-		// the account: the archive without the account's own files in
-		// it, and that archive taken apart beside it. An account whose
-		// bulk is mail needs more than a fifth of itself; one whose bulk
-		// is files on disk needs far less.
+		// the account: the records and the database dumps, and nothing
+		// else. The archive holding them is compressed -- 15,124,712
+		// bytes for 549,591,471 of dumps on the validation host -- so
+		// the peak in staging is the dumps unpacked once, plus an
+		// archive a fraction of their size. One copy covers it; two
+		// refused an account with 10 GiB of databases on a disk with
+		// 16.5 GiB free, for a backup that fits in a few gigabytes.
 		{"an archive panel that reads the home directory in place stages what it writes",
-			10 * gigabyte, 4 * gigabyte, pkgacct.ModeSplit, dabackup.Layout{}, inPlace{}, 8 * gigabyte},
-		{"a mostly-web account staging its mail and dumps",
-			10 * gigabyte, gigabyte, pkgacct.ModeSplit, dabackup.Layout{}, inPlace{}, 2 * gigabyte},
+			10 * gigabyte, 4 * gigabyte, pkgacct.ModeSplit, dabackup.Layout{}, inPlace{}, 4 * gigabyte},
+		{"a mostly-web account staging its dumps",
+			10 * gigabyte, gigabyte, pkgacct.ModeSplit, dabackup.Layout{}, inPlace{}, gigabyte},
 		{"an account with nothing but its records still gets room to work",
 			10 * gigabyte, 0, pkgacct.ModeSplit, dabackup.Layout{}, inPlace{}, 512 << 20},
 	} {

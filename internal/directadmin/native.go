@@ -407,6 +407,16 @@ func backupTask(account, destination string, lean bool) url.Values {
 		return task
 	}
 	task.Set("what", "select")
+	// What DirectAdmin's own backup page sends, and it is not decoration.
+	// A client that says it knows what email_data is and leaves it out
+	// gets no messages; one that does not say so is taken for a client
+	// written before the option existed and gets them anyway. Without
+	// these two lines every "lean" archive carried the whole mailbox --
+	// 732,924,695 of 1,281,932,189 bytes on the validation host -- and
+	// with them the same request came back at 15,124,712 bytes instead
+	// of 310,915,651. Measured on 1.709, 2026-09-10.
+	task.Set("database_data_aware", "yes")
+	task.Set("email_data_aware", "yes")
 	for i, option := range leanOptions {
 		task.Set("option"+strconv.Itoa(i), option)
 	}
@@ -450,13 +460,15 @@ func (r *Real) stageNative(ctx context.Context, account, staging string, reserve
 	// knows about the latter. This is an estimate, not a disk reservation.
 	// A whole-account run holds three: the account's own files copied
 	// into the working directory, the nested home archive compressed
-	// beside them, and the outer archive around both. A run that asked
-	// for neither of those holds two -- the messages, and the archive
-	// they are compressed into -- and reserving a third of an account's
-	// mail it will never write refuses backups that would have fitted.
+	// beside them, and the outer archive around both. A lean run holds
+	// one: DirectAdmin assembles the records and the dumps in its own
+	// backup_tmpdir, and what lands here is the compressed archive --
+	// 15,124,712 bytes for 549,591,471 of dumps on the validation host.
+	// Reserving two copies of the dumps for that refused a real account
+	// with 10 GiB of databases on a disk with 16.5 GiB free.
 	copies := uint64(3)
 	if lean {
-		copies = 2
+		copies = 1
 	}
 	if err := nativeSpace(w.destination, reserveBytes, copies); err != nil {
 		return "", err
@@ -497,8 +509,8 @@ func (r *Real) stageNative(ctx context.Context, account, staging string, reserve
 	return archive, nil
 }
 
-// leanStagingFloor is what a lean archive costs before its mail and its
-// dumps: the account's records. 153,600 bytes on the fixture ADR 0021
+// leanStagingFloor is what a lean archive costs before its dumps: the
+// account's records and the webmail data. 153,600 bytes on the fixture ADR 0021
 // measured, and a margin for a server whose records are larger.
 const leanStagingFloor = 64 << 20
 

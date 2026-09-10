@@ -303,6 +303,11 @@ func (Layout) UnpackArchive(ctx context.Context, archivePath, account, dir strin
 	if err := out.readTar(ctx, tar.NewReader(reader), &manifest, false); err != nil {
 		return err
 	}
+	return writeManifest(dir, manifest)
+}
+
+// writeManifest is the one place the manifest is written.
+func writeManifest(dir string, manifest Manifest) error {
 	body, err := json.MarshalIndent(manifest, "", "\t")
 	if err != nil {
 		return fmt.Errorf("dabackup: write the archive manifest: %w", err)

@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -77,6 +78,11 @@ type Real struct {
 	// Empty selects /var/lib/gniza-directadmin-native. Never put it under
 	// an account-writable directory or broaden the service state permissions.
 	NativeRoot string
+	// ScriptsDir is where DirectAdmin keeps the scripts it ships and runs
+	// itself -- backup_roundcube.php among them -- and, under custom/, the
+	// ones an administrator put in front of those. Empty means the
+	// installation's own.
+	ScriptsDir string
 	// ReadHomeInPlace asks this server for the shape ADR 0021 describes:
 	// a backup of everything except the account's own files, which restic
 	// reads from /home where they already are. It is asked for one server
@@ -109,6 +115,13 @@ func (r *Real) binary() string {
 		return r.BinaryPath
 	}
 	return defaultBinary
+}
+
+func (r *Real) scriptsDir() string {
+	if r.ScriptsDir != "" {
+		return r.ScriptsDir
+	}
+	return "/usr/local/directadmin/scripts"
 }
 
 func (r *Real) dataDir() string {
@@ -253,6 +266,9 @@ var gnizaSkips = []string{
 	// accounts of the 142 on the validation host, against 77 with
 	// application_backups.
 	"softaculous_backups",
+	// And WP Toolkit's, which sat beside the other two on the validation
+	// host.
+	"wordpress-backups",
 }
 
 // gnizaPatterns is the same policy for the shapes that sit at no fixed
@@ -360,10 +376,6 @@ func (r *Real) Account(ctx context.Context, user string) (panel.AccountInfo, err
 	}
 	info.Databases = databases
 	if !info.Missing {
-		// The mail is measured in the same walk rather than a second one:
-		// on a 19.7 GiB home that walk is the expensive part, and a
-		// backup that reads the home in place needs both numbers.
-		mail := filepath.Join(info.HomeDir, dabackup.MailDir) + string(os.PathSeparator)
 		// What DirectAdmin's own backup will not put in its archive is in
 		// no backup Gniza takes, so the walk does not go in. It is also
 		// where the bulk of an account often is: 6.7 GB of admin_backups
@@ -384,9 +396,6 @@ func (r *Real) Account(ctx context.Context, user string) (panel.AccountInfo, err
 			}
 			if entry.Mode().IsRegular() {
 				info.SizeBytes += uint64(entry.Size())
-				if strings.HasPrefix(path, mail) {
-					info.LeanBytes += uint64(entry.Size())
-				}
 			}
 			return nil
 		}); err != nil {
@@ -413,10 +422,13 @@ func (r *Real) Account(ctx context.Context, user string) (panel.AccountInfo, err
 		return info, fmt.Errorf("directadmin: account size overflow")
 	}
 	info.SizeBytes += dbBytes
-	// The dumps a lean archive carries are written from these tables. On
-	// the validation host the dumps came to 546,542,870 bytes against the
-	// 756,011,257 information_schema reports, so this is the safe side.
-	info.LeanBytes += dbBytes
+	// A lean archive is the account's records and its database dumps, and
+	// the dumps are all of its bulk: the messages are read where they lie
+	// and the account's files never were in it. The dumps are written
+	// from these tables, and came to 546,846,317 bytes against the
+	// 756,011,257 information_schema reports on the validation host, so
+	// this is the safe side of the only number that matters.
+	info.LeanBytes = dbBytes
 	return info, nil
 }
 
@@ -698,22 +710,17 @@ func (r *Real) stageInPlace(ctx context.Context, req panel.StageRequest) (pkgacc
 			"directadmin: %s is not a home directory to read: %w", home, err)
 	}
 	// The room reserved is the room this archive needs, not the room the
-	// account needs. What is left in it is the messages and the database
-	// dumps; the account's own files are not written anywhere, and
-	// reserving them refuses backups the disk had room for. On the
-	// validation host a 19.7 GiB account produced a 296.5 MiB archive of
-	// 1.19 GiB of members -- 732,924,695 bytes of mail and 546,542,870 of
-	// dumps -- and reserving the account demanded 39 GiB on a disk with
-	// 22 GiB free. See ADR 0021.
+	// account needs. What is in it is the records and the database dumps;
+	// the messages are read where they lie and the account's own files
+	// never were in it. On the validation host a 19.7 GiB account with
+	// 733 MB of mail produced a 15,124,712-byte archive of 549,591,471
+	// bytes of members, and reserving the account demanded 39 GiB on a
+	// disk with 22 GiB free. See ADR 0021.
 	//
-	// LeanBytes is those two measured uncompressed, so it is already
-	// about four times what the archive takes. leanStagingFloor covers
-	// the records, which are small and never zero: an account with no
-	// mail and no databases measures zero honestly.
-	//
-	// DirectAdmin's own accounting does not answer it: user.usage records
-	// email_quota as what the mailboxes were allotted, not what they hold
-	// -- 157,260,176 against 14 MiB of messages on the validation host.
+	// LeanBytes is the databases as information_schema reports them,
+	// which is over what the dumps come to and far over what the archive
+	// takes. leanStagingFloor covers the records, which are small and
+	// never zero: an account with no databases measures zero honestly.
 	reserve := req.Account.LeanBytes
 	if reserve > ^uint64(0)-leanStagingFloor {
 		return pkgacct.Payload{}, "", fmt.Errorf("directadmin: staging estimate overflow")
@@ -741,6 +748,11 @@ func (r *Real) stageInPlace(ctx context.Context, req panel.StageRequest) (pkgacc
 			{Kind: pkgacct.PartHomedir, Path: home},
 		},
 	}
+	// Leaving email_data out is what keeps the mailbox out of the archive,
+	// and DirectAdmin files the webmail data under the same option, so it
+	// is left out too. It is put back by hand: the script DirectAdmin
+	// runs for it, run for every domain, into the place its restore looks.
+	payload.Warnings = append(payload.Warnings, r.exportWebmail(ctx, account, req.StagingDir)...)
 	// After the backup, never before it: this walks the home a second
 	// time and must not stand between an account and its backup.
 	if warning := r.ownershipWarning(account, func(uid int) (foreignOwners, error) {
@@ -749,6 +761,69 @@ func (r *Real) stageInPlace(ctx context.Context, req panel.StageRequest) (pkgacc
 		payload.Warnings = append(payload.Warnings, warning)
 	}
 	return payload, "", payload.Verify()
+}
+
+// exportWebmail writes the Roundcube address books, identities and
+// preferences of every mailbox on the account into the metadata part,
+// one XML file per domain at backup/<domain>/email/data/roundcube.xml --
+// where DirectAdmin's own backup puts it and where its restore looks for
+// it, so the restore puts them back on its own.
+//
+// The script is DirectAdmin's, scripts/backup_roundcube.php, with an
+// administrator's scripts/custom/backup_roundcube.php ahead of it as
+// DirectAdmin itself does. It reads the roundcube database with the
+// credentials in conf/mysql.conf, so it runs as root, and it takes the
+// domain, the account and the output file in its environment.
+//
+// What comes back is warnings, one per domain that could not be
+// exported, not an error: the account's files, records and databases
+// are all in the backup, and the page has to say what is not.
+func (r *Real) exportWebmail(ctx context.Context, account, staging string) []string {
+	confs, err := filepath.Glob(filepath.Join(r.dataDir(), account, "domains", "*.conf"))
+	if err != nil || len(confs) == 0 {
+		return nil
+	}
+	script := filepath.Join(r.scriptsDir(), "custom", "backup_roundcube.php")
+	if _, err := os.Stat(script); err != nil {
+		script = filepath.Join(r.scriptsDir(), "backup_roundcube.php")
+	}
+	var warnings []string
+	for _, conf := range confs {
+		domain := strings.TrimSuffix(filepath.Base(conf), ".conf")
+		if err := panel.UsableDomainName(domain); err != nil {
+			continue
+		}
+		dir := filepath.Join(dabackup.MetadataPart(staging), dabackup.BackupDir, domain, "email", "data")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			warnings = append(warnings, "the webmail data for "+domain+" is not in this backup: "+err.Error())
+			continue
+		}
+		xml := filepath.Join(dir, "roundcube.xml")
+		cmd := exec.CommandContext(ctx, script)
+		cmd.Env = []string{
+			"PATH=/usr/local/bin:/usr/bin:/bin",
+			"domain=" + domain, "username=" + account, "xml_file=" + xml,
+		}
+		if out, err := cmd.CombinedOutput(); err != nil {
+			os.Remove(xml)
+			said := strings.TrimSpace(string(out))
+			if len(said) > 512 {
+				said = said[len(said)-512:]
+			}
+			warnings = append(warnings, "the webmail data for "+domain+" is not in this backup: "+
+				err.Error()+": "+said)
+			continue
+		}
+		// The archive is rebuilt from the manifest, not from the tree, so
+		// a file the unpack did not write has to be recorded to be put
+		// back.
+		member := path.Join(dabackup.BackupDir, domain, "email", "data", "roundcube.xml")
+		if err := (dabackup.Layout{}).AddMetadataMember(staging, member); err != nil {
+			os.Remove(xml)
+			warnings = append(warnings, "the webmail data for "+domain+" is not in this backup: "+err.Error())
+		}
+	}
+	return warnings
 }
 
 // clearParts takes away what an unpack that did not finish left behind,

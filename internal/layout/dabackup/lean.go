@@ -411,6 +411,60 @@ func (c *nameCache) group(id int) string {
 	return name
 }
 
+// AddMetadataMember records a file written into the metadata part after
+// the archive was taken apart, so the archive built from the tree
+// carries it. The name is the member as DirectAdmin's own archive would
+// name it, under backup/, and the file has to be at that path in the
+// metadata part already. A member already there by that name is
+// replaced.
+//
+// Only a lean tree takes one. Its manifest holds nothing but backup/,
+// and the account's own directories are built after it when the archive
+// is packed, so the member goes at the end and is still where
+// DirectAdmin's restore reads it: with the rest of backup/, before the
+// account's own directories.
+//
+// What this is for is the webmail data: DirectAdmin files roundcube.xml
+// under email_data, so an archive that leaves the messages out leaves
+// that out too, and the provider exports it by hand after the unpack.
+func (Layout) AddMetadataMember(dir, name string) error {
+	clean, err := safeMemberName(name)
+	if err != nil {
+		return err
+	}
+	if first, _, _ := strings.Cut(clean, "/"); first != BackupDir || clean == BackupDir {
+		return fmt.Errorf("dabackup: %s is not a member of %s/", name, BackupDir)
+	}
+	manifest, err := readManifest(dir)
+	if err != nil {
+		return err
+	}
+	if !manifest.Lean {
+		return fmt.Errorf("dabackup: this archive was not read in place, and carries its own %s", name)
+	}
+	body := treePath(clean, false)
+	stat, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(body)))
+	if err != nil {
+		return fmt.Errorf("dabackup: record %s: %w", name, err)
+	}
+	if !stat.Mode().IsRegular() {
+		return fmt.Errorf("dabackup: record %s: not a regular file", name)
+	}
+	member := Member{
+		Name: clean, Typeflag: tar.TypeReg, Mode: 0o600,
+		Uname: "root", Gname: "root",
+		ModTime: stat.ModTime(), Size: stat.Size(), Body: body,
+	}
+	for i, existing := range manifest.Outer.Members {
+		if existingClean, err := safeMemberName(existing.Name); err == nil && existingClean == clean {
+			manifest.Outer.Members[i] = member
+			return writeManifest(dir, manifest)
+		}
+	}
+	manifest.Outer.Members = append(manifest.Outer.Members, member)
+	return writeManifest(dir, manifest)
+}
+
 // sayItHoldsEverything rewrites backup_options.list in the tree, so the
 // archive built from it tells DirectAdmin's restore that it is holding a
 // whole account rather than the selection the backup asked for.

@@ -60,9 +60,10 @@ from the whole account to 153,600 bytes.
 also removes `backup/<domain>/email/passwd`, `email/quota`, the per-
 mailbox `data/limit` and `data/imap` records and the webmail settings —
 the mailboxes' own passwords among them, which are nowhere in `/home`.
-So `email` stays, `imap/` arrives with it, and Gniza drops `imap/` from
-the metadata part after unpacking: the messages are read from
-`/home/<user>/imap` in place like everything else.
+So `email` stays, and Gniza drops `imap/` from the metadata part after
+unpacking: the messages are read from `/home/<user>/imap` in place like
+everything else. Whether `imap/` arrives at all turned out to depend on
+two more fields the form sends; see the correction of 2026-09-10 below.
 
 What is left of the round trip is DirectAdmin reading and compressing
 the mail once. Across the validation host's 142 accounts that is 31.7
@@ -91,13 +92,16 @@ untouched. Gniza uses the selection and does not set the switches.
 
 ## Decision
 
-1. A DirectAdmin backup asks for every option except `domain`, through
-   `taskq --run`, and takes the account's own files from `/home/<user>`
-   as a path handed to restic — the same shape cPanel's `split` mode has
-   always had.
-2. `imap/` is dropped from the metadata part when the archive is
-   unpacked, because those messages are under the home path already and
-   storing them twice is what this exists to avoid.
+1. A DirectAdmin backup asks for every option except `domain`,
+   `email_data` and `database_data`, says so with
+   `email_data_aware=yes&database_data_aware=yes` as the form does,
+   through `taskq --run`, and takes the account's own files from
+   `/home/<user>` as a path handed to restic — the same shape cPanel's
+   `split` mode has always had.
+2. `imap/` is dropped from the metadata part if it arrives, because
+   those messages are under the home path already and storing them
+   twice is what this exists to avoid. With the `_aware` fields it does
+   not arrive.
 3. The capability is learned, not assumed. The first run on a server
    checks the produced archive: if `domains/` is in it, DirectAdmin
    ignored the selection, and Gniza says so and stays on the whole-
@@ -202,14 +206,11 @@ measured; either way a DirectAdmin restore wants a group pass after it.
   the smallest -- a large one would be refused before the run that would
   have settled the question.
 - The staging estimate is what the panel writes in this shape -- the
-  messages and the database dumps -- rather than the whole account's
-  size. It was the account's size until the measurement below, which is
-  what that paragraph was waiting for. DirectAdmin's own accounting does
-  not answer it, because `user.usage` records `email_quota` as what the
-  mailboxes were allotted rather than what they hold -- 157,260,176
-  against 14 MiB of messages on the validation host. So `Account`
-  measures the mail in the same walk that measures the home, and adds
-  the database sizes it already asks `information_schema` for.
+  database dumps -- rather than the whole account's size, and one copy
+  of it, because DirectAdmin assembles the archive in its own
+  `backup_tmpdir` and only the compressed result lands in the workspace.
+  `Account` takes the database sizes it already asks
+  `information_schema` for; nothing else in the archive is large.
 - Gniza reads a home directory DirectAdmin's own archive would have
   filtered. It skips what DirectAdmin skips — `backups/`,
   `user_backups/`, `admin_backups/` — and, unlike DirectAdmin, it also
@@ -272,3 +273,54 @@ sizes, which is 1,489,519,150 for this account: 16% over what the
 archive actually held uncompressed, and 4.8 times what it held
 compressed. Reserving the account instead demanded 39 GiB on a disk with
 22 GiB free, and refused the backup.
+
+## What the form actually sends — 2026-09-10
+
+The measurement above was made with a task line that named the options
+and nothing else, and it was wrong about what DirectAdmin does with a
+missing one. The administrator's own backup form sends two more fields:
+
+    email_data_aware=yes&database_data_aware=yes
+
+They say the client knows those two options exist, so that leaving one
+out means "without it". A task line that does not say so is taken for a
+client written before the options existed, and DirectAdmin includes the
+messages and the dumps as it always had. That is why `imap/` arrived
+with `email` above: not because `email` brings it, but because nothing
+said `email_data` was left out on purpose. Both fields are named in
+DirectAdmin's own documentation of the backup form, and the
+`skip_*_in_backups` values that the earlier section set aside are the
+global form of the same choice.
+
+The same account, the same day, `what=select` with every option but
+`domain` and `email_data`, plus the two fields:
+
+| | bytes |
+| --- | --- |
+| the lean archive | 15,124,712 (14.4 MiB) |
+| its members, uncompressed | 549,591,471 |
+| of those, `backup/*.sql` | 546,846,317 |
+| of those, `imap/` | 0 |
+
+Three shapes came out the same size within a few kilobytes: the global
+switches, a `.backup_exclude_paths` file, and this. This one is per run,
+writes nothing into the home, sets nothing in `directadmin.conf`, and
+keeps `domain` in `backup/backup_options.list`, which the restore reads.
+
+Two things follow:
+
+- `LeanBytes` is the database sizes alone, and the workspace reserves
+  one copy of them. The earlier estimate reserved two copies of the mail
+  and the dumps, and refused a 28.6 GiB account with 10 GiB of databases
+  on a disk with 16.5 GiB free, which this archive would have used a
+  few hundred megabytes of.
+- `roundcube.xml` is filed under `email_data` (DirectAdmin 1.46), so it
+  leaves with it. Those are the webmail address books, identities and
+  preferences, and they are in the roundcube database, not in `/home`.
+  Gniza runs DirectAdmin's own `scripts/backup_roundcube.php` -- with
+  `scripts/custom/backup_roundcube.php` ahead of it, as DirectAdmin does
+  -- for every domain of the account, into
+  `backup/<domain>/email/data/roundcube.xml` in the metadata part, which
+  is where the restore looks. A domain whose export fails is a warning
+  on the backup, not a refusal: the files, the records, the messages and
+  the databases are all there, and the page says what is not.

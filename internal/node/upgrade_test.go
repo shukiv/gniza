@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/shukiv/gniza/internal/agent"
+	"github.com/shukiv/gniza/internal/cpanel"
 	"github.com/shukiv/gniza/internal/job"
 	"github.com/shukiv/gniza/internal/nodestore"
 )
@@ -288,5 +289,60 @@ func TestAVersionThatNamesTheDirectoryAboveIsNotInstalled(t *testing.T) {
 		if !strings.Contains(err.Error(), "is not a build this server can install") {
 			t.Fatalf("%q was refused for the wrong reason: %v", version, err)
 		}
+	}
+}
+
+// directAdminFake is the fake provider under the name of the other panel.
+// What the upgrade path needs to know about a panel is only what it is
+// called: the release names the plugin tree it carries, and there is one.
+type directAdminFake struct{ *cpanel.Fake }
+
+func (directAdminFake) Name() string { return "DirectAdmin" }
+
+// TestAnUpgradeIsRefusedWhereTheReleaseCarriesNoPluginForThisPanel: a
+// published release holds the WHM plugin and nothing else. Installing it
+// on a DirectAdmin server unpacks a cPanel plugin onto a machine with no
+// cPanel and leaves the plugin that is actually running untouched. Say so
+// instead of running it.
+func TestAnUpgradeIsRefusedWhereTheReleaseCarriesNoPluginForThisPanel(t *testing.T) {
+	root := t.TempDir()
+	store, err := nodestore.Open(filepath.Join(root, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	settings := nodestore.DefaultSettings()
+	settings.StagingRoot = filepath.Join(root, "staging")
+	settings.ResticCache = filepath.Join(root, "cache")
+	settings.ConfigDir = filepath.Join(root, "config")
+	if err := store.SaveSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	engine := newEngineOnPanel(t, store, root,
+		directAdminFake{&cpanel.Fake{Root: filepath.Join(root, "cpanel")}})
+
+	was := agent.Version
+	agent.Version = "v1.2.3"
+	t.Cleanup(func() { agent.Version = was })
+
+	if err := store.SaveUpdateState(nodestore.UpdateState{
+		CheckedAt: time.Now().UTC(), Version: "v1.3.0",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	err = engine.StartUpgrade("v1.3.0")
+	if err == nil {
+		t.Fatal("a release with no plugin for this panel was installed")
+	}
+	if !strings.Contains(err.Error(), "DirectAdmin") {
+		t.Errorf("the refusal does not say which panel this server is on: %v", err)
+	}
+	state, err := store.UpgradeState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.StartedAt.IsZero() {
+		t.Errorf("a refused upgrade was recorded as started: %+v", state)
 	}
 }

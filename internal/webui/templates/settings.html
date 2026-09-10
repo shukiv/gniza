@@ -170,12 +170,18 @@
         <a href="{{.}}" target="_blank" rel="noopener noreferrer">What changed</a>.{{end}}</p>
         {{end}}
       </div>
+      {{if $.Cpanel}}
       <form method="post" action="?p=settings/update/install">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="version" value="{{$update.Latest}}">
         <button class="cpr-btn cpr-primary" type="submit"
                 {{if $update.Installing}}disabled{{end}}>Install {{$update.Latest}}</button>
       </form>
+      {{else}}
+      <p class="cpr-hint" style="margin:0; max-width:24rem">What is published is the WHM
+      plugin, so this server cannot install it from here. Install the {{$.Panel}} package
+      by hand.</p>
+      {{end}}
     </div>
     {{else if not $update.Installing}}
     {{if and $update.Unreleased (not $update.Dist)}}

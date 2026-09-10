@@ -36,6 +36,26 @@ sh cprest-plugin/install.sh
 echo $? > status
 `
 
+// releaseCarriesThisPanel says whether what a release holds is the plugin
+// this server runs.
+//
+// A release carries one plugin tree, cprest-plugin, and that is WHM's.
+// The DirectAdmin package is deliberately not published (ADR 0019), so on
+// that panel there is nothing here to install: running the installer
+// anyway unpacks a cPanel plugin onto a machine that has no cPanel, and
+// leaves the plugin that is actually running exactly as it was. An
+// operator told why can go and install the package by hand; one who
+// pressed a button that ran the wrong installer has to work out what it
+// did first.
+func releaseCarriesThisPanel(panelName string) error {
+	if panelName == "cPanel" {
+		return nil
+	}
+	return fmt.Errorf("a published release carries the WHM plugin only, so a %s server "+
+		"cannot install one from here; install the %s package by hand",
+		panelName, panelName)
+}
+
 // upgradeDir is where releases are unpacked, beside the staging root
 // rather than in it: staging is swept.
 func (e *Engine) upgradeDir() string {
@@ -94,6 +114,9 @@ func (e *Engine) StartUpgrade(version string) error {
 	channel := Channel(settings)
 	state, err := e.store.UpdateState()
 	if err != nil {
+		return err
+	}
+	if err := releaseCarriesThisPanel(e.PanelName()); err != nil {
 		return err
 	}
 	switch {

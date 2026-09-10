@@ -15,6 +15,7 @@ import (
 	"github.com/shukiv/gniza/internal/job"
 	"github.com/shukiv/gniza/internal/node"
 	"github.com/shukiv/gniza/internal/nodestore"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/protocol"
 	"github.com/shukiv/gniza/internal/resticrun"
 	"github.com/shukiv/gniza/internal/staging"
@@ -109,6 +110,14 @@ func TestRestoreStagingUsesTheHistoricalSnapshotSize(t *testing.T) {
 
 func newEngine(t *testing.T, store *nodestore.Store, root string) *node.Engine {
 	t.Helper()
+	return newEngineOnPanel(t, store, root, &cpanel.Fake{Root: filepath.Join(root, "cpanel")})
+}
+
+// newEngineOnPanel builds an engine on the panel it is handed, for the
+// paths whose answer depends on which panel this server runs.
+func newEngineOnPanel(t *testing.T, store *nodestore.Store, root string,
+	provider panel.Provider) *node.Engine {
+	t.Helper()
 
 	keyHex, err := vault.GenerateMasterKey()
 	if err != nil {
@@ -129,7 +138,7 @@ func newEngine(t *testing.T, store *nodestore.Store, root string) *node.Engine {
 
 	engine, err := node.New(node.Config{
 		Store: store, Vault: v,
-		Provider:  &cpanel.Fake{Root: filepath.Join(root, "cpanel")},
+		Provider:  provider,
 		Log:       slog.New(slog.NewTextHandler(io.Discard, nil)),
 		HookSpool: filepath.Join(root, "hooks"),
 	})

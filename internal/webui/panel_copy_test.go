@@ -3,7 +3,9 @@ package webui_test
 import (
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/shukiv/gniza/internal/agent"
 	"github.com/shukiv/gniza/internal/node"
 	"github.com/shukiv/gniza/internal/nodestore"
 )
@@ -73,5 +75,41 @@ func TestTheCPanelPagesStillNameCPanelsOwnMechanisms(t *testing.T) {
 		if !strings.Contains(strings.ToLower(page), strings.ToLower(want)) {
 			t.Errorf("%s on cPanel no longer says %q", path, want)
 		}
+	}
+}
+
+// TestTheVersionCardOffersNoInstallOnAnotherPanel:
+// a published release carries the WHM plugin, so the button that installs
+// one would install the wrong plugin on a DirectAdmin server. The card
+// still says what has been released -- an operator who reads it can
+// install the package by hand -- and does not offer to do it from here.
+func TestTheVersionCardOffersNoInstallOnAnotherPanel(t *testing.T) {
+	client, _, engine := newUIOnDirectAdmin(t)
+	// The card offers an install only over a released build, so this is
+	// one: with a development version running, nothing is ever offered
+	// and the page would be silent whatever the panel.
+	was := agent.Version
+	agent.Version = "v1.2.3"
+	t.Cleanup(func() { agent.Version = was })
+
+	if err := engine.Store().SaveUpdateState(nodestore.UpdateState{
+		CheckedAt: time.Now().UTC(), Version: "v99.0.0",
+		URL: "https://github.com/shukiv/gniza/releases/tag/v99.0.0",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	status, page := get(t, client, "/settings?tab=version")
+	if status != 200 {
+		t.Fatalf("GET /settings?tab=version = %d", status)
+	}
+	if !strings.Contains(page, "v99.0.0") {
+		t.Fatal("the card does not say what has been released, so this proves nothing")
+	}
+	if strings.Contains(page, "settings/update/install") {
+		t.Error("a DirectAdmin server is offered the WHM plugin to install")
+	}
+	if !strings.Contains(page, "by hand") {
+		t.Error("the card does not say how to install it instead")
 	}
 }

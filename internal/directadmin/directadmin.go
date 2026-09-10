@@ -216,10 +216,55 @@ func (r *Real) NativeExcludes(home string) []string {
 		// at that point, so a file the customer threw away would stand
 		// between them and the files they kept.
 		".trash",
+		// Softaculous writes the same thing under its own name -- three
+		// accounts of the 142 on the validation host, against 77 with
+		// application_backups.
+		"softaculous_backups",
 	}
-	excludes := make([]string, 0, len(skipped))
+	// And the shapes that sit at no fixed depth. A DirectAdmin site is at
+	// domains/<domain>/public_html, a subdomain one level under that, and
+	// private_html is beside it, so the same cache directory turns up
+	// three levels apart in one account. "**" is restic's own wildcard
+	// for that and matches no directories as readily as many, which is
+	// why one pattern covers a site and a subdomain of it.
+	//
+	// Every one of these is either regenerated on demand or is itself a
+	// backup. Nothing here is a directory a customer would put their own
+	// files in, which is the line the whole list is drawn on: leaving out
+	// a cache costs a slow first page load, and leaving out the
+	// customer's files is losing them.
+	patterns := []string{
+		// WordPress, and the plugins that cache under it.
+		"domains/**/wp-content/cache",
+		"domains/**/wp-content/widget-cache",
+		"domains/**/wp-content/uploads/wpcf7_captcha",
+		"domains/**/wptsc-cachedir",
+		// Smarty, which every old PHP application compiles into.
+		"domains/**/cache/smarty",
+		// Magento's var/, whose ephemeral halves are named. var/ itself
+		// is not excluded: a site can keep its own files there.
+		"domains/**/var/cache",
+		"domains/**/var/session",
+		"domains/**/var/tmp",
+		"domains/**/var/report",
+		"domains/**/var/backups",
+		// And the backups the application plugins write into the site.
+		"domains/**/com_akeeba/backup",
+		"domains/**/backupbuddy_backups",
+		// Apache writes one of these beside any script that failed, and
+		// they grow without a bound until somebody notices.
+		"**/error_log",
+	}
+	excludes := make([]string, 0, len(skipped)+len(patterns))
 	for _, name := range skipped {
 		excludes = append(excludes, filepath.Join(home, name))
+	}
+	for _, pattern := range patterns {
+		// Joined rather than concatenated so the pattern is anchored
+		// under this account's home and cannot match the staged metadata
+		// or the database dumps, which are Gniza's files and not the
+		// account's.
+		excludes = append(excludes, filepath.Join(home, pattern))
 	}
 	return excludes
 }

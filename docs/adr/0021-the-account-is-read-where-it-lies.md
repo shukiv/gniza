@@ -215,12 +215,27 @@ measured; either way a DirectAdmin restore wants a group pass after it.
   `user_backups/`, `admin_backups/` — and, unlike DirectAdmin, it also
   skips the caches that are regenerated on their own: CloudLinux's
   `.cagefs` was 3.2 GiB of one 10.8 GiB account on the validation host.
-  It also skips `application_backups`, where Installatron and Softaculous
-  write a compressed copy of the site and a dump of its database on every
-  automatic update -- 12 GiB of a 20 GiB account on
-  `server-182-54-236-143.da.direct`. Each of those archives is a fresh
-  compression, so it deduplicates against nothing, and what it holds is
-  what the snapshot already holds directly from `domains/`.
+  It also skips the directories an application writes its own backups and
+  caches into. `application_backups` is on 77 of the validation host's 142
+  accounts and was 12 GiB of a 20 GiB account on
+  `server-182-54-236-143.da.direct`; `softaculous_backups` is the same
+  thing under another name; `.trash` is the file manager's, 4.2 GiB across
+  the validation host. Each application archive is a fresh compression, so
+  it deduplicates against nothing, and what it holds is what the snapshot
+  already holds directly from `domains/`.
+
+  The cache and application-backup shapes sit at no fixed depth -- a site
+  is at `domains/<domain>/public_html`, a subdomain one level under that,
+  and `private_html` beside it -- so those are restic patterns with `**`
+  in them rather than names, anchored under the account's home so they
+  cannot reach the staged metadata. The list is the recommended one from
+  JetBackup 4's documentation with three changes: the cPanel-only entries
+  are dropped, the entries that name a file type rather than a place
+  (`*.gz`, `*.sql`, `*.zip`, `*.tar`, `*.log`) are not adopted at all
+  because a customer's own upload is one of those, and `var/` is excluded
+  only at the four names Magento uses for ephemeral data rather than
+  whole. What each pattern does is settled by running restic over a tree
+  with both the caches and the customer's own lookalike files in it.
 
 ## The measurement — 2026-09-10
 

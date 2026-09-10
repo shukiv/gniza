@@ -384,8 +384,9 @@
       <tr>
         <td class="cpr-acct">Settings, DNS, SSL, mail configuration</td>
         <td>{{$.Panel}}'s own account archive, with the home directory and databases left out of it.
-          <div class="cpr-sublabel">The same <span class="cpr-mono">cpmove</span> format
-          restorepkg reads, so a whole-account restore is a rebuild of it.</div></td>
+          <div class="cpr-sublabel">{{if $.Cpanel}}The same <span class="cpr-mono">cpmove</span> format
+          restorepkg reads, so a whole-account restore is a rebuild of it.{{else}}The same archive
+          {{$.Panel}}'s own restore reads, so a whole-account restore is a rebuild of it.{{end}}</div></td>
       </tr>
     </tbody>
   </table></div>
@@ -399,12 +400,13 @@
     {{else}}
     <p class="cpr-hint" style="margin:0">The three rows above are the whole account as {{$.Panel}}
     packages it, and what differs between payload modes is how it is cut up rather than what is
-    kept. One thing cPanel itself does not carry: two-factor authentication settings are not in
-    a <span class="cpr-mono">cpmove</span> archive, so an account restored onto a rebuilt server
-    comes back with 2FA off and has to have it set up again.</p>
+    kept.{{if $.Cpanel}} One thing cPanel itself does not carry: two-factor authentication settings
+    are not in a <span class="cpr-mono">cpmove</span> archive, so an account restored onto a
+    rebuilt server comes back with 2FA off and has to have it set up again.{{end}}</p>
     {{end}}
   </div>
 
+  {{if $.Cpanel}}
   {{if $data.Settings.PkgacctFlags}}
   <div class="cpr-pad" style="border-top:1px solid var(--line)">
     <details>
@@ -440,6 +442,7 @@
     service starts.</p>
   </div>
   {{end}}
+  {{end}}
 </div>
 {{end}}
 
@@ -450,7 +453,8 @@
 {{if eq $tab "version"}}
 <div class="cpr-danger-zone">
   <h3>Remove Gniza from this server</h3>
-  <p>Stops the service and unregisters the WHM plugin, the cPanel hooks and the account tile.
+  <p>Stops the service and unregisters {{if $.Cpanel}}the WHM plugin, the cPanel hooks{{else}}the
+  {{$.Panel}} plugin{{end}} and the account tile.
   This page goes with it. Backups already on their destinations are not touched, and neither is
   anything on this server outside Gniza — but nothing here will take backups afterwards.</p>
   <p><code class="cpr-mono">/etc/gniza/master.key</code> and

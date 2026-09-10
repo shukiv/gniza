@@ -40,3 +40,20 @@ func TestTheUnrestrictedNoteIsCPanelsAlone(t *testing.T) {
 		t.Errorf("the unrestricted run is not described: %q", joined)
 	}
 }
+
+// And on a panel that has no such checks, the note says what is actually
+// true there rather than naming a safeguard the operator will go looking
+// for and not find.
+func TestTheUnrestrictedNoteOnAnotherPanelNamesNoCPanelMechanism(t *testing.T) {
+	one := confirmWholeAccount("DirectAdmin", "customer1", "abc123", "?p=restore", false, true)
+	many := confirmManyAccounts("DirectAdmin", []string{"customer1"}, "", "?p=restore", true)
+	for what, ask := range map[string]confirmation{"one account": one, "several": many} {
+		joined := strings.Join(ask.Detail, " ")
+		if strings.Contains(joined, "cPanel") || strings.Contains(joined, "restricted-restore") {
+			t.Errorf("the %s confirmation names a cPanel mechanism on DirectAdmin: %q", what, joined)
+		}
+		if !strings.Contains(joined, "DirectAdmin") {
+			t.Errorf("the %s confirmation does not say what runs instead: %q", what, joined)
+		}
+	}
+}

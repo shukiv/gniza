@@ -121,6 +121,7 @@
 
     <h2 style="margin-top:var(--s5)">What the backup contains</h2>
     {{$edit := $data.Editing}}
+    {{if $.Cpanel}}
     <label class="cpr-check">
       <input type="checkbox" name="skip_homedir" value="1" {{with $edit}}{{if .SkipHomedir}}checked{{end}}{{end}}>
       <span>Leave out the home directory
@@ -141,6 +142,15 @@
     <p class="cpr-note">The account's settings, DNS, SSL certificates and cron jobs always
     travel. They are one archive that cPanel's own restore reads, and pkgacct has no switch
     that takes pieces out of it.</p>
+    {{else}}
+    {{/* DirectAdmin has no way to leave a part of an account out of its
+         own backup, and a schedule that asked for one would fail every
+         night. The controls are not offered rather than offered and
+         refused. */}}
+    <p class="cpr-note">{{$.Panel}} backs up a whole account or none of it: the home directory,
+    the databases, the mail and the account's own settings all travel, and there is no switch
+    that takes a part out. What Gniza chooses is how the backup is stored, not what is in it.</p>
+    {{end}}
 
     <label class="cpr-check">
       <input type="checkbox" name="include_system" value="1" {{with $edit}}{{if .IncludeSystem}}checked{{end}}{{end}}>
@@ -172,7 +182,8 @@
       <input type="checkbox" name="retry_failed" value="1" {{with $edit}}{{if .RetryFailed}}checked{{end}}{{end}}>
       <span>Retry a destination that failed
       <small class="cpr-help">One more attempt while the account is still staged, so a retry
-      costs an upload rather than another pkgacct run.</small></span></label>
+      costs an upload rather than {{if $.Cpanel}}another pkgacct run{{else}}reading the whole
+      account again{{end}}.</small></span></label>
 
     <div class="cpr-grid2">
       <div>

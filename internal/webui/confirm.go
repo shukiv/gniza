@@ -146,9 +146,7 @@ func confirmWholeAccount(panelName, account, snapshot, cancel string,
 		Cancel: cancel,
 	}
 	if unrestricted {
-		ask.Detail = append(ask.Detail,
-			"cPanel's restricted-restore checks are switched off for this run, so the "+
-				"archive is restored as root without them.")
+		ask.Detail = append(ask.Detail, unrestrictedNote(panelName, true))
 	}
 	if gone {
 		ask.Title = fmt.Sprintf("Create %s again?", account)
@@ -201,10 +199,28 @@ func confirmManyAccounts(panelName string, accounts []string, asOf, cancel strin
 		Cancel: cancel,
 	}
 	if unrestricted {
-		ask.Detail = append(ask.Detail,
-			"cPanel's restricted-restore checks are switched off for this run.")
+		ask.Detail = append(ask.Detail, unrestrictedNote(panelName, false))
 	}
 	return ask
+}
+
+// unrestrictedNote says what running unrestricted means on this panel.
+//
+// Restricted Restore is cPanel's own safeguard and exists nowhere else.
+// DirectAdmin has no such mode: its restore runs as the server's
+// administrator, and there is nothing being switched off. Telling an
+// operator there that a check was turned off sends them looking for a
+// setting their machine does not have.
+func unrestrictedNote(panelName string, full bool) string {
+	if panelName == "cPanel" {
+		if full {
+			return "cPanel's restricted-restore checks are switched off for this run, so the " +
+				"archive is restored as root without them."
+		}
+		return "cPanel's restricted-restore checks are switched off for this run."
+	}
+	return fmt.Sprintf("%s has no restricted mode: its own restore runs as the server's "+
+		"administrator, which is how this backup goes back.", panelName)
 }
 
 // confirmOnePart describes putting one part of an account back.

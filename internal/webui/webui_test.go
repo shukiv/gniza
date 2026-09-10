@@ -20,6 +20,7 @@ import (
 	"github.com/shukiv/gniza/internal/job"
 	"github.com/shukiv/gniza/internal/node"
 	"github.com/shukiv/gniza/internal/nodestore"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/protocol"
 	"github.com/shukiv/gniza/internal/resticrun"
 	"github.com/shukiv/gniza/internal/vault"
@@ -47,7 +48,27 @@ func newUIWithJournal(t *testing.T, journal string) (*http.Client, string, *node
 	return newUIWithJournalAndExec(t, journal, nil)
 }
 
+// newUIOnDirectAdmin serves the same interface as a DirectAdmin server
+// does. Only the panel differs: what a page says about the panel's own
+// mechanisms is decided by which panel it is on, and nothing else here
+// needs a second host to prove that.
+func newUIOnDirectAdmin(t *testing.T) (*http.Client, string, *node.Engine) {
+	t.Helper()
+	return newUIOn(t, "", nil, func(fake *cpanel.Fake) panel.Provider { return directAdminFake{fake} })
+}
+
+// directAdminFake is the synthetic host under another name.
+type directAdminFake struct{ *cpanel.Fake }
+
+func (directAdminFake) Name() string { return "DirectAdmin" }
+
 func newUIWithJournalAndExec(t *testing.T, journal string, exec resticrun.Execer) (*http.Client, string, *node.Engine) {
+	t.Helper()
+	return newUIOn(t, journal, exec, nil)
+}
+
+func newUIOn(t *testing.T, journal string, exec resticrun.Execer,
+	as func(*cpanel.Fake) panel.Provider) (*http.Client, string, *node.Engine) {
 	t.Helper()
 	root := t.TempDir()
 
@@ -83,13 +104,18 @@ func newUIWithJournalAndExec(t *testing.T, journal string, exec resticrun.Execer
 		t.Fatal(err)
 	}
 
+	fake := &cpanel.Fake{
+		Root:      filepath.Join(root, "cpanel"),
+		Databases: map[string][]string{"customer1": {"customer1_wp"}},
+		FileCount: 2, FileSize: 512,
+	}
+	var provider panel.Provider = fake
+	if as != nil {
+		provider = as(fake)
+	}
 	engine, err := node.New(node.Config{
 		Store: store, Vault: v, Exec: exec,
-		Provider: &cpanel.Fake{
-			Root:      filepath.Join(root, "cpanel"),
-			Databases: map[string][]string{"customer1": {"customer1_wp"}},
-			FileCount: 2, FileSize: 512,
-		},
+		Provider:  provider,
 		Log:       slog.New(slog.NewTextHandler(io.Discard, nil)),
 		HookSpool: filepath.Join(root, "hooks"),
 	})

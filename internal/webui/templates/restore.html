@@ -129,7 +129,7 @@ destination knows.{{end}}</div>
                title="The newest backup taken on or before this date. Leave it empty for the most recent backup there is.">
       </label>
       <span style="flex:1"></span>
-      <label class="cpr-check" style="margin:0" title="gniza asks cPanel for a restricted restore, because the archive holds each account's own home directory and cPanel's restore runs as root.">
+      <label class="cpr-check" style="margin:0" title="{{if $.Cpanel}}gniza asks cPanel for a restricted restore, because the archive holds each account's own home directory and cPanel's restore runs as root.{{else}}{{$.Panel}}'s own restore has no restricted mode: it runs as the server's administrator and this is how it has to be asked for.{{end}}">
         <input type="checkbox" name="unrestricted" value="1"><span>unrestricted</span></label>
       <button class="cpr-btn" type="submit" data-bulk-submit disabled>Rebuild chosen</button>
       <button class="cpr-btn cpr-danger" type="submit" name="apply" value="1"
@@ -245,20 +245,28 @@ destination knows.{{end}}</div>
     {{if $data.AccountDeleted}}
     <label class="cpr-check"><input type="checkbox" name="apply" value="1">
       <span><strong>Create {{$data.Account}} again from this backup</strong>
-      <small class="cpr-help">Hands the rebuilt archive to cPanel's restorepkg, which creates the
+      <small class="cpr-help">Hands the rebuilt archive to {{if $.Cpanel}}cPanel's restorepkg{{else}}{{$.Panel}}'s own restore{{end}}, which creates the
       account with the files, databases, mail and settings the backup holds. Nothing on this
       server is overwritten: the account is not here to overwrite.</small></span></label>
     {{else}}
     <label class="cpr-check"><input type="checkbox" name="apply" value="1">
       <span><strong>Overwrite the live account</strong>
-      <small class="cpr-help">Hands the rebuilt archive to cPanel's restorepkg. The account's
+      <small class="cpr-help">Hands the rebuilt archive to {{if $.Cpanel}}cPanel's restorepkg{{else}}{{$.Panel}}'s own restore{{end}}. The account's
       current files, databases and settings are replaced. There is no undo.</small></span></label>
     {{end}}
+    {{if $.Cpanel}}
     <label class="cpr-check"><input type="checkbox" name="unrestricted" value="1">
       <span><strong>Restore without cPanel's restricted-restore checks</strong>
       <small class="cpr-help">Gniza asks cPanel for a restricted restore, because the archive
       holds the account's own home directory and cPanel's restore runs as root. Turn this on only
       if a restricted restore refused something this account legitimately had.</small></span></label>
+    {{else}}
+    <label class="cpr-check"><input type="checkbox" name="unrestricted" value="1">
+      <span><strong>Restore the only way {{$.Panel}} can</strong>
+      <small class="cpr-help">{{$.Panel}} has no restricted mode: its restore runs as the server's
+      administrator and puts the archive back as it is. Gniza will not start a whole-account
+      restore here without this, because there is nothing else to ask for.</small></span></label>
+    {{end}}
 
     <div class="cpr-row" style="margin-top:var(--s4)">
       <button class="cpr-btn cpr-primary" type="submit">Start restore</button>

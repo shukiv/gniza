@@ -44,6 +44,12 @@ type page struct {
 	// that name it say {{$.Panel}}: the same page is served on cPanel and
 	// on DirectAdmin, and it used to say cPanel on both.
 	Panel string
+	// Cpanel says the panel is cPanel, for the pages that name one of
+	// its mechanisms -- pkgacct, restorepkg, Restricted Restore, the WHM
+	// plugin, the cPanel hooks. Those are not products with another
+	// name on DirectAdmin: they do not exist there, so the copy that
+	// names them is written twice rather than substituted.
+	Cpanel bool
 }
 
 // updateNotice is a release newer than the one running here.
@@ -79,6 +85,7 @@ func (s *Server) renderWithCSRF(
 		Fonts:          fontFaces(fontBaseFor(r)),
 		RunningVersion: agent.Version,
 		Panel:          s.panelName(),
+		Cpanel:         s.panelName() == "cPanel",
 	}
 	// An account-facing request is confined to the account that opened
 	// the socket, here as everywhere: another customer's restore is not

@@ -179,87 +179,11 @@ func (r *Real) Layout() panel.Layout { return dabackup.Layout{} }
 // customer's data or are copies of backups, and a backup of a backup is
 // how a home directory doubles every night.
 func (r *Real) NativeExcludes(home string) []string {
-	skipped := []string{
-		"backups", "user_backups", "admin_backups",
-		"usr", "bin", "etc", "lib", "lib64", "tmp", "var", "sbin", "dev",
-		// Not DirectAdmin's list, and not the customer's data either:
-		// CloudLinux rebuilds .cagefs from the system's own files and
-		// LiteSpeed rebuilds lscache from the site. On the validation
-		// host .cagefs was 3.2 GiB of one 10.8 GiB account -- read,
-		// compressed, written and read again every night, to restore
-		// something a single command regenerates.
-		".cagefs", "lscache",
-		// And JetBackup's own per-account directory, which belongs to
-		// root rather than to the account. DirectAdmin extracts the home
-		// archive as the account, so carrying a root-owned member takes
-		// the whole restore down on the first utime -- found by the first
-		// restore drill, see ADR 0021. It was empty on all 142 accounts
-		// of the validation host, and JetBackup makes it again.
-		".jb-roundcube",
-		// And the archives Installatron and Softaculous write under the
-		// home on every automatic update: a copy of the site and a dump
-		// of its database, freshly compressed each time. Restic
-		// deduplicates identical chunks, and a new compression of a site
-		// that has changed shares almost none of them, so this is
-		// gigabytes of near-full ingest every night for a backup of what
-		// the snapshot already holds directly. On
-		// server-182-54-236-143.da.direct it was 12 GiB of a 20 GiB
-		// account.
-		"application_backups",
-		// And the file manager's own trash, which is files the customer
-		// deleted. It is not the account's data in the sense the rest of
-		// this list is not: nobody asked for it to be kept, and it is
-		// where a root-owned file is most likely to sit unnoticed --
-		// three of the four on pager on
-		// server-182-54-236-143.da.direct were in it, 1.3 GiB of a 20
-		// GiB account. A root-owned member stops DirectAdmin's restore
-		// at that point, so a file the customer threw away would stand
-		// between them and the files they kept.
-		".trash",
-		// Softaculous writes the same thing under its own name -- three
-		// accounts of the 142 on the validation host, against 77 with
-		// application_backups.
-		"softaculous_backups",
-	}
-	// And the shapes that sit at no fixed depth. A DirectAdmin site is at
-	// domains/<domain>/public_html, a subdomain one level under that, and
-	// private_html is beside it, so the same cache directory turns up
-	// three levels apart in one account. "**" is restic's own wildcard
-	// for that and matches no directories as readily as many, which is
-	// why one pattern covers a site and a subdomain of it.
-	//
-	// Every one of these is either regenerated on demand or is itself a
-	// backup. Nothing here is a directory a customer would put their own
-	// files in, which is the line the whole list is drawn on: leaving out
-	// a cache costs a slow first page load, and leaving out the
-	// customer's files is losing them.
-	patterns := []string{
-		// WordPress, and the plugins that cache under it.
-		"domains/**/wp-content/cache",
-		"domains/**/wp-content/widget-cache",
-		"domains/**/wp-content/uploads/wpcf7_captcha",
-		"domains/**/wptsc-cachedir",
-		// Smarty, which every old PHP application compiles into.
-		"domains/**/cache/smarty",
-		// Magento's var/, whose ephemeral halves are named. var/ itself
-		// is not excluded: a site can keep its own files there.
-		"domains/**/var/cache",
-		"domains/**/var/session",
-		"domains/**/var/tmp",
-		"domains/**/var/report",
-		"domains/**/var/backups",
-		// And the backups the application plugins write into the site.
-		"domains/**/com_akeeba/backup",
-		"domains/**/backupbuddy_backups",
-		// Apache writes one of these beside any script that failed, and
-		// they grow without a bound until somebody notices.
-		"**/error_log",
-	}
-	excludes := make([]string, 0, len(skipped)+len(patterns))
-	for _, name := range skipped {
+	excludes := make([]string, 0, len(directadminSkips)+len(gnizaSkips)+len(gnizaPatterns))
+	for _, name := range append(append([]string{}, directadminSkips...), gnizaSkips...) {
 		excludes = append(excludes, filepath.Join(home, name))
 	}
-	for _, pattern := range patterns {
+	for _, pattern := range gnizaPatterns {
 		// Joined rather than concatenated so the pattern is anchored
 		// under this account's home and cannot match the staged metadata
 		// or the database dumps, which are Gniza's files and not the
@@ -267,6 +191,103 @@ func (r *Real) NativeExcludes(home string) []string {
 		excludes = append(excludes, filepath.Join(home, pattern))
 	}
 	return excludes
+}
+
+// directadminSkips are the directories DirectAdmin's own backup leaves out
+// of an account's home, which its documentation states.
+//
+// Nothing in here reaches an archive DirectAdmin writes, so nothing in
+// here is in a Gniza backup either, whichever shape it takes -- and an
+// account measured for the room its backup needs must not count them.
+// admin's home on server-182-54-236-143.da.direct was 6,737,318,299
+// bytes, of which 6,732,830,003 was admin_backups: counting it asked for
+// 57.2 GiB of staging on a server with 16.5 GiB free, for a backup that
+// would have written megabytes.
+var directadminSkips = []string{
+	"backups", "user_backups", "admin_backups",
+	"usr", "bin", "etc", "lib", "lib64", "tmp", "var", "sbin", "dev",
+}
+
+// gnizaSkips are what Gniza leaves out on top of DirectAdmin's own list.
+//
+// These are a different thing and are still counted when an account is
+// measured: DirectAdmin does put them in the archive it writes, so the
+// whole-archive path has to hold them on disk. Leaving them out of the
+// tree restic is pointed at is a later step.
+var gnizaSkips = []string{
+	// Not DirectAdmin's list, and not the customer's data either:
+	// CloudLinux rebuilds .cagefs from the system's own files and
+	// LiteSpeed rebuilds lscache from the site. On the validation
+	// host .cagefs was 3.2 GiB of one 10.8 GiB account -- read,
+	// compressed, written and read again every night, to restore
+	// something a single command regenerates.
+	".cagefs", "lscache",
+	// And JetBackup's own per-account directory, which belongs to
+	// root rather than to the account. DirectAdmin extracts the home
+	// archive as the account, so carrying a root-owned member takes
+	// the whole restore down on the first utime -- found by the first
+	// restore drill, see ADR 0021. It was empty on all 142 accounts
+	// of the validation host, and JetBackup makes it again.
+	".jb-roundcube",
+	// And the archives Installatron and Softaculous write under the
+	// home on every automatic update: a copy of the site and a dump
+	// of its database, freshly compressed each time. Restic
+	// deduplicates identical chunks, and a new compression of a site
+	// that has changed shares almost none of them, so this is
+	// gigabytes of near-full ingest every night for a backup of what
+	// the snapshot already holds directly. On
+	// server-182-54-236-143.da.direct it was 12 GiB of a 20 GiB
+	// account.
+	"application_backups",
+	// And the file manager's own trash, which is files the customer
+	// deleted. It is not the account's data in the sense the rest of
+	// this list is not: nobody asked for it to be kept, and it is
+	// where a root-owned file is most likely to sit unnoticed --
+	// three of the four on pager on
+	// server-182-54-236-143.da.direct were in it, 1.3 GiB of a 20
+	// GiB account. A root-owned member stops DirectAdmin's restore
+	// at that point, so a file the customer threw away would stand
+	// between them and the files they kept.
+	".trash",
+	// Softaculous writes the same thing under its own name -- three
+	// accounts of the 142 on the validation host, against 77 with
+	// application_backups.
+	"softaculous_backups",
+}
+
+// gnizaPatterns is the same policy for the shapes that sit at no fixed
+// depth. A DirectAdmin site is at domains/<domain>/public_html, a
+// subdomain one level under that, and private_html is beside it, so the
+// same cache directory turns up three levels apart in one account. "**"
+// is restic's own wildcard for that and matches no directories as readily
+// as many, which is why one pattern covers a site and a subdomain of it.
+//
+// Every one of these is either regenerated on demand or is itself a
+// backup. Nothing here is a directory a customer would put their own
+// files in, which is the line the whole list is drawn on: leaving out a
+// cache costs a slow first page load, and leaving out the customer's
+// files is losing them.
+var gnizaPatterns = []string{
+	// WordPress, and the plugins that cache under it.
+	"domains/**/wp-content/cache",
+	"domains/**/wp-content/widget-cache",
+	"domains/**/wp-content/uploads/wpcf7_captcha",
+	"domains/**/wptsc-cachedir",
+	// Smarty, which every old PHP application compiles into.
+	"domains/**/cache/smarty",
+	// Magento's var/, whose ephemeral halves are named. var/ itself
+	// is not excluded: a site can keep its own files there.
+	"domains/**/var/cache",
+	"domains/**/var/session",
+	"domains/**/var/tmp",
+	"domains/**/var/report",
+	"domains/**/var/backups",
+	// And the backups the application plugins write into the site.
+	"domains/**/com_akeeba/backup",
+	"domains/**/backupbuddy_backups",
+	// Apache writes one of these beside any script that failed, and
+	// they grow without a bound until somebody notices.
+	"**/error_log",
 }
 
 // Capabilities reports what this host's packaging tool can be told to
@@ -343,12 +364,23 @@ func (r *Real) Account(ctx context.Context, user string) (panel.AccountInfo, err
 		// on a 19.7 GiB home that walk is the expensive part, and a
 		// backup that reads the home in place needs both numbers.
 		mail := filepath.Join(info.HomeDir, dabackup.MailDir) + string(os.PathSeparator)
+		// What DirectAdmin's own backup will not put in its archive is in
+		// no backup Gniza takes, so the walk does not go in. It is also
+		// where the bulk of an account often is: 6.7 GB of admin_backups
+		// against 4.5 MB of everything else, on a live server.
+		unbacked := map[string]bool{}
+		for _, name := range directadminSkips {
+			unbacked[filepath.Join(info.HomeDir, name)] = true
+		}
 		if err := filepath.Walk(info.HomeDir, func(path string, entry os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
 			if err := ctx.Err(); err != nil {
 				return err
+			}
+			if entry.IsDir() && unbacked[path] {
+				return filepath.SkipDir
 			}
 			if entry.Mode().IsRegular() {
 				info.SizeBytes += uint64(entry.Size())

@@ -623,3 +623,50 @@ func TestAccountAlsoMeasuresWhatALeanBackupWrites(t *testing.T) {
 		t.Errorf("a lean backup is reserved %d bytes, want 1031", info.LeanBytes)
 	}
 }
+
+// An account is measured for the room its backup needs, so what the
+// backup will not take must not be counted. DirectAdmin's own backup
+// leaves the account's backup directories out, which means they are in no
+// archive Gniza ever stages -- and on a live server they are almost all
+// of the account: admin's home on server-182-54-236-143.da.direct was
+// 6,737,318,299 bytes, of which 6,732,830,003 was admin_backups. Counting
+// them asked for 57.2 GiB of staging on a server with 16.5 GiB free, for
+// a backup that would have written megabytes.
+func TestAnAccountIsNotMeasuredByWhatItsBackupLeavesOut(t *testing.T) {
+	r := fakeHost(t, "studio")
+	r.MysqlPath = filepath.Join(t.TempDir(), "mysql")
+	script := "#!/bin/sh\ncase \"$*\" in\n*information_schema.tables*) printf '0\\n';;\n*) printf 'studio_wp\\n';;\nesac\n"
+	if err := os.WriteFile(r.MysqlPath, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(r.HomeRoot, "studio")
+	for _, dir := range []string{"admin_backups", "user_backups", "backups", "tmp"} {
+		if err := os.MkdirAll(filepath.Join(home, dir), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(home, dir, "archive"), make([]byte, 100000), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// What DirectAdmin does put in its archive, and Gniza leaves out of
+	// the tree restic reads. Staging still has to hold it on the whole-
+	// archive path, so it is counted.
+	if err := os.MkdirAll(filepath.Join(home, "application_backups"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "application_backups", "wp.tar.gz"), make([]byte, 3000), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "domains", "site"), make([]byte, 5000), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := r.Account(t.Context(), "studio")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.SizeBytes != 8000 {
+		t.Errorf("the account measures %d bytes, want 8000: the four directories "+
+			"DirectAdmin's own backup skips are in no archive Gniza stages", info.SizeBytes)
+	}
+}

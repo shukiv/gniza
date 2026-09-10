@@ -349,7 +349,7 @@ say "serves an administrator's session only."
 # after split mode landed. A test compares the two.
 set_colours
 warn_block "The DirectAdmin provider is unfinished" \
-	"DirectAdmin archives were validated on 1.709 and split mode" \
-	"rebuilds one header for header, but no account has yet been" \
-	"restored from an archive Gniza rebuilt, and granular restore and" \
-	"the session bridge remain experimental: see ADR 0019"
+	"DirectAdmin archives were validated on 1.709, split mode" \
+	"rebuilds one header for header, and an account has been restored" \
+	"from an archive Gniza rebuilt on one server (ADR 0021); granular" \
+	"restore and the session bridge remain experimental: see ADR 0019"

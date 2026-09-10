@@ -61,6 +61,7 @@ type config struct {
 	daPluginUser        string
 	daConfPath          string
 	daReadHomeInPlace   bool
+	daWholeArchive      bool
 	cpanelHookEvent     string
 	panelHookEvent      string
 	hookSpoolDir        string
@@ -239,10 +240,16 @@ func parseFlags() config {
 	// See ADR 0021: a backup in this shape is put back together out of
 	// the tree restic restored rather than copied out of a manifest, and
 	// a server should be moved onto it one at a time and knowingly.
-	flag.BoolVar(&cfg.daReadHomeInPlace, "directadmin-read-home-in-place", false,
+	flag.BoolVar(&cfg.daReadHomeInPlace, "directadmin-read-home-in-place", true,
 		"directadmin: back up everything except the account's own files and read "+
 			"/home where it lies, instead of writing the whole account to disk and "+
-			"taking it apart again every night (see ADR 0021)")
+			"taking it apart again every night (see ADR 0021). On since v0.3.6, "+
+			"after the restore drill of 2026-09-11; kept so a unit file that names "+
+			"it still starts")
+	flag.BoolVar(&cfg.daWholeArchive, "directadmin-stage-whole-archive", false,
+		"directadmin: write the whole account to disk as DirectAdmin's own backup "+
+			"does and take it apart from there, the shape before ADR 0021. It "+
+			"reserves twice the account in staging every night")
 	flag.StringVar(&cfg.hookSpoolDir, "hook-spool", hookspool.DefaultDir,
 		"where a cPanel lifecycle hook leaves an account event this service was not running to hear")
 	flag.StringVar(&cfg.cpanelHookEvent, "cpanel-hook", "",
@@ -415,7 +422,7 @@ func buildProvider(cfg config, log *slog.Logger) (panel.Provider, error) {
 		// it: the layout was read out of documentation, and the restore
 		// path has never been run against a DirectAdmin server.
 		log.Warn("the DirectAdmin provider is unfinished", "detail", dabackup.Provisional)
-		provider := &directadmin.Real{Log: log, ReadHomeInPlace: cfg.daReadHomeInPlace}
+		provider := &directadmin.Real{Log: log, ReadHomeInPlace: cfg.daReadHomeInPlace && !cfg.daWholeArchive}
 		// A run killed mid-stage leaves the account's archive behind, and
 		// what it leaves is measured in gigabytes on the disk the next
 		// night needs. The sweep takes each account's own lock, so a run

@@ -85,10 +85,10 @@ const (
 // It is a value rather than a comment because the agent prints it: an
 // operator who selects DirectAdmin is told, in the log and on the page,
 // that the restore path is unproven here.
-const Provisional = "DirectAdmin archives were validated on 1.709 and split mode " +
-	"rebuilds one header for header, but no account has yet been restored from an " +
-	"archive Gniza rebuilt, and granular restore and the session bridge remain " +
-	"experimental: see ADR 0019"
+const Provisional = "DirectAdmin archives were validated on 1.709, split mode " +
+	"rebuilds one header for header, and an account has been restored from an " +
+	"archive Gniza rebuilt on one server (ADR 0021); granular restore and the " +
+	"session bridge remain experimental: see ADR 0019"
 
 // Layout answers where DirectAdmin keeps the parts of an account.
 type Layout struct{}

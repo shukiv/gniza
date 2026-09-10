@@ -375,5 +375,10 @@ contact beside the restored one: a property of DirectAdmin's restore,
 not of the archive. And the restore was of a 300 KB account; what a
 20 GB one needs in scratch is the subject of `cprest-rzd`.
 
-The flag has now been run on two servers. It stays until the release
-that carries this is on both of them.
+The flag has now been run on two servers, and with v0.3.6 the shape is
+the default: `-directadmin-read-home-in-place` is on unless
+`-directadmin-stage-whole-archive` says otherwise, and a unit file that
+names the old flag still starts. What settled it was a third server, on
+v0.3.5 without the flag, refusing its administrator's account for 57.2
+GiB of staging -- twice a 28.6 GiB account -- on a disk with 16.7 GiB
+free, for a backup this shape writes in a few hundred megabytes.

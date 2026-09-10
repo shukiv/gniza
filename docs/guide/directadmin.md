@@ -38,8 +38,10 @@ recovery yet. Pushing the source does not publish a DirectAdmin release.
   tonight as last night, and points restic at those rather than at one
   compressed blob. The same code puts them back into an archive
   DirectAdmin's own restore reads.
-- **Reading the home directory where it lies**, with the agent's
-  `-directadmin-read-home-in-place`. Off by default. It asks DirectAdmin
+- **Reading the home directory where it lies.** On by default since
+  v0.3.6; `-directadmin-stage-whole-archive` keeps the shape before it,
+  which writes the whole account to disk every night and reserves twice
+  the account in staging to do it. It asks DirectAdmin
   for every part of the account except its own files -- through the task
   line the backup page posts, per run, so nothing in `directadmin.conf`
   changes and the server's own backups are untouched -- and hands restic
@@ -48,8 +50,10 @@ recovery yet. Pushing the source does not publish a DirectAdmin release.
   the account read down to the files that changed.
 
   A restore in this shape is rebuilt out of the tree restic restored
-  rather than copied out of a manifest, so turn it on one server at a
-  time, and only after a restore drill on that server. A server that
+  rather than copied out of a manifest. It was turned on one server at a
+  time until a restore drill had proved the rebuild on two of them
+  (2026-09-09 and 2026-09-11), which is why it is the default now. A
+  server that
   reads the selection and backs up the whole account anyway is found out
   on its first run, goes back to taking the archive apart, and says so on
   every account. See `docs/adr/0021-the-account-is-read-where-it-lies.md`.

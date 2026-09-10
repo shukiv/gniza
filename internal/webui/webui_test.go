@@ -2298,8 +2298,10 @@ func TestTablesCarrySortKeysOnCellsThatNeedThem(t *testing.T) {
 // repository, the machine it sits on, and whether that machine answered —
 // so it is one column.
 // Five buttons per row read as five equally likely things to do, one of
-// which deletes the destination. Edit stays out; the rest are behind a
-// menu that still works with no JavaScript, because every page here does.
+// which deletes the destination. Test stays out -- it is the one asked
+// again and again, and the one that creates a repository that has not
+// been created yet -- and the rest are behind a menu that still works
+// with no JavaScript, because every page here does.
 func TestDestinationRowKeepsOneButtonAndAMenu(t *testing.T) {
 	client, _, engine := newUI(t)
 
@@ -2316,13 +2318,14 @@ func TestDestinationRowKeepsOneButtonAndAMenu(t *testing.T) {
 	if !strings.Contains(page, `aria-label="More actions for test"`) {
 		t.Error("the menu does not say whose actions it holds")
 	}
-	// Edit is the one that stays out, and it is still the dialog link.
-	if !strings.Contains(page, `data-dialog-title="Edit “test”"`) {
-		t.Error("Edit is not on the row")
+	// Test is the one that stays out, as a button of its own on the row.
+	if !strings.Contains(page, `<button class="cpr-btn cpr-quiet">Test</button>`) {
+		t.Error("Test is not on the row")
 	}
 	// The rest are still reachable, and still carry their token.
 	for _, want := range []string{
-		`<button class="cpr-menu-item">Test</button>`,
+		`<a class="cpr-menu-item" href="?p=destinations&amp;edit=`,
+		`data-dialog-title="Edit “test”"`,
 		`action="?p=destinations/delete"`,
 		`data-confirm="Remove this destination`,
 	} {

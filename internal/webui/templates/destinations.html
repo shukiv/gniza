@@ -91,24 +91,28 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
       </td>
       <td>{{template "destspace" .Space}}
         {{template "repocensus" .Repository.Census}}</td>
-      {{/* Edit is the one an operator reaches for; the rest live behind the
-           menu. It is a details element rather than a scripted popover, so
-           it opens with the keyboard and still opens with no JavaScript. */}}
+      {{/* Test is the one an operator reaches for: a destination is
+           settled once and asked "is it still there?" every time
+           afterwards, and it is what creates the repository on a
+           destination that has none. Editing one is rarer, so it lives
+           behind the menu with the rest. The menu is a details element
+           rather than a scripted popover, so it opens with the keyboard
+           and still opens with no JavaScript. */}}
       <td class="cpr-right"><div class="cpr-actions">
-        <a class="cpr-btn cpr-quiet" href="?p=destinations&amp;edit={{.ID}}"
-           data-dialog="add-destination" data-dialog-fetch
-           data-dialog-title="Edit “{{.Name}}”">Edit</a>
+        <form method="post" action="?p=destinations/test">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <input type="hidden" name="id" value="{{.ID}}">
+          <button class="cpr-btn cpr-quiet">Test</button>
+        </form>
         <details class="cpr-menu">
           <summary class="cpr-btn cpr-quiet" title="More for {{.Name}}"
                    aria-label="More actions for {{.Name}}">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
           </summary>
           <div class="cpr-menu-body">
-            <form method="post" action="?p=destinations/test">
-              <input type="hidden" name="csrf" value="{{$.CSRF}}">
-              <input type="hidden" name="id" value="{{.ID}}">
-              <button class="cpr-menu-item">Test</button>
-            </form>
+            <a class="cpr-menu-item" href="?p=destinations&amp;edit={{.ID}}"
+               data-dialog="add-destination" data-dialog-fetch
+               data-dialog-title="Edit “{{.Name}}”">Edit</a>
             {{if .Repository.ID}}
             <a class="cpr-menu-item" href="?p=browse&amp;repository={{.Repository.ID}}">Browse</a>
             <form method="post" action="?p=destinations/recovery">

@@ -161,9 +161,15 @@ func (m *Manager) outstanding() uint64 {
 	for path, required := range m.reserved {
 		written, err := treeBytes(path)
 		if err != nil {
-			// Removed, renamed, or unreadable. None of those is a reason
-			// to hold space for it.
-			delete(m.reserved, path)
+			if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+				// The directory is gone, so nothing is coming to it.
+				delete(m.reserved, path)
+				continue
+			}
+			// It is still there but could not be measured, so how much
+			// of the reservation is already on disk is unknown. Hold all
+			// of it rather than hand the same bytes out twice.
+			total += required
 			continue
 		}
 		if required > written {
@@ -258,17 +264,27 @@ func (m *Manager) Retained() ([]Output, error) {
 }
 
 // treeBytes is what a directory occupies, following no symlinks.
-func treeBytes(root string) (uint64, error) {
-	var total uint64
-	err := filepath.Walk(root, func(_ string, info os.FileInfo, err error) error {
+// addSize counts regular files into total. A staging directory is written
+// into while it is measured, so a name that has gone between the listing
+// and the stat is ordinary, not a failure.
+func addSize(total *uint64) filepath.WalkFunc {
+	return func(_ string, info os.FileInfo, err error) error {
 		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
 			return err
 		}
 		if info.Mode().IsRegular() {
-			total += uint64(info.Size())
+			*total += uint64(info.Size())
 		}
 		return nil
-	})
+	}
+}
+
+func treeBytes(root string) (uint64, error) {
+	var total uint64
+	err := filepath.Walk(root, addSize(&total))
 	if err != nil {
 		return 0, fmt.Errorf("staging: measure %s: %w", root, err)
 	}

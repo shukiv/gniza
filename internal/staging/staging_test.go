@@ -2,6 +2,7 @@ package staging
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -392,3 +393,68 @@ func TestAccountsThatFitTogetherStageTogether(t *testing.T) {
 		}
 	}
 }
+
+// A staging directory is being written into while its reservation is
+// read: pkgacct creates, renames and unlinks under it, and a subtree the
+// walk cannot enter is an answer of "I do not know how much is there",
+// not "there is nothing there". Forgetting the reservation on any such
+// answer puts back the bug it was made for.
+func TestAReservationSurvivesADirectoryThatCannotBeMeasured(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a directory whatever its mode says")
+	}
+	root := t.TempDir()
+	free, err := AvailableBytes(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := &Manager{Root: root, MaxConcurrent: 4}
+
+	tooBigTogether := free / 5 * 3
+	first, err := manager.Allocate("first", tooBigTogether)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closed := filepath.Join(first.Path, "unreadable")
+	if err := os.Mkdir(closed, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(closed, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(closed, 0o700) })
+
+	var full *ErrInsufficientSpace
+	if _, err := manager.Allocate("second", tooBigTogether); !errors.As(err, &full) {
+		t.Errorf("a directory that could not be measured gave its reservation up: %v", err)
+	}
+}
+
+// And a file that goes between the listing and the stat is ordinary: the
+// staging directory is being written into the whole time it is measured.
+func TestAFileThatVanishesDuringTheWalkIsNotAnError(t *testing.T) {
+	var total uint64
+	count := addSize(&total)
+	if err := count("stays", fakeFile(7), nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := count("gone", nil, fs.ErrNotExist); err != nil {
+		t.Errorf("a file that went while the walk was running stopped it: %v", err)
+	}
+	if err := count("unreadable", nil, fs.ErrPermission); err == nil {
+		t.Error("a directory that could not be read was measured as empty")
+	}
+	if total != 7 {
+		t.Errorf("the walk counted %d bytes", total)
+	}
+}
+
+// fakeFile is one regular file of the given size, as Walk would hand it over.
+type fakeFile int64
+
+func (f fakeFile) Name() string       { return "file" }
+func (f fakeFile) Size() int64        { return int64(f) }
+func (f fakeFile) Mode() fs.FileMode  { return 0o600 }
+func (f fakeFile) ModTime() time.Time { return time.Time{} }
+func (f fakeFile) IsDir() bool        { return false }
+func (f fakeFile) Sys() any           { return nil }

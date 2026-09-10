@@ -232,7 +232,12 @@ func TestStandaloneBackupAndRestoreThroughTheInterface(t *testing.T) {
 		t.Fatalf("policies = %+v (%v)", policies, err)
 	}
 
-	// 3. Back up now, from the accounts page.
+	// 3. Back up now, from the accounts page. This host has something to
+	//    say about the account: everything is backed up, and a restore of
+	//    it will not get all the way through.
+	s.provider.Warnings = []string{
+		"12352 files are owned by another account, the first of them public_html/wp-config.php",
+	}
 	s.post(t, "/accounts", "/accounts/backup", map[string]string{
 		"account": "customer1", "policy": policies[0].ID,
 	})
@@ -250,6 +255,18 @@ func TestStandaloneBackupAndRestoreThroughTheInterface(t *testing.T) {
 	}
 	if jobs[0].Targets[0].SnapshotID == "" {
 		t.Error("the backup recorded no snapshot")
+	}
+	// A success that may not restore says so on the run, and on the page
+	// somebody reads runs on. It is not a hole in the backup, so nothing
+	// is reported missing.
+	if len(jobs[0].Warnings) != 1 || !strings.Contains(jobs[0].Warnings[0], "public_html/wp-config.php") {
+		t.Errorf("the run does not carry what will stop its restore: %q", jobs[0].Warnings)
+	}
+	if len(jobs[0].Missing) != 0 {
+		t.Errorf("a backup holding the whole account reported something missing: %q", jobs[0].Missing)
+	}
+	if logs := s.page(t, "/logs"); !strings.Contains(logs, "public_html/wp-config.php") {
+		t.Error("the runs page does not say the backup may not restore in full")
 	}
 
 	// 4. The restore page offers that snapshot.

@@ -262,6 +262,10 @@ type JobReport struct {
 	// being told about; what it must never be is counted as a complete
 	// account.
 	Missing []string `json:"missing,omitempty"`
+	// Warnings is what the payload holds but a restore may not be able
+	// to put back, one line each. Unlike Missing it is not a hole in the
+	// backup and does not make the run partial.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // ErrorResponse is the body of any non-2xx reply.

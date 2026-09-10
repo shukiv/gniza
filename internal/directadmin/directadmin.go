@@ -526,6 +526,11 @@ func (r *Real) stageSplit(ctx context.Context, req panel.StageRequest) (pkgacct.
 			{Kind: pkgacct.PartHomedir, Path: dabackup.HomedirPart(req.StagingDir)},
 		},
 	}
+	if warning := r.ownershipWarning(account, func(uid int) (foreignOwners, error) {
+		return archiveOwners(req.StagingDir, uid)
+	}); warning != "" {
+		payload.Warnings = append(payload.Warnings, warning)
+	}
 	if ignored {
 		// Only when this server was asked to read the account where it
 		// lies and would not. A server that was never asked is doing what
@@ -607,6 +612,13 @@ func (r *Real) stageInPlace(ctx context.Context, req panel.StageRequest) (pkgacc
 			{Kind: pkgacct.PartMetadata, Path: dabackup.MetadataPart(req.StagingDir)},
 			{Kind: pkgacct.PartHomedir, Path: home},
 		},
+	}
+	// After the backup, never before it: this walks the home a second
+	// time and must not stand between an account and its backup.
+	if warning := r.ownershipWarning(account, func(uid int) (foreignOwners, error) {
+		return homeOwners(home, uid)
+	}); warning != "" {
+		payload.Warnings = append(payload.Warnings, warning)
 	}
 	return payload, "", payload.Verify()
 }

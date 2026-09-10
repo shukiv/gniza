@@ -72,6 +72,11 @@ type Payload struct {
 	// in it is worth having, and worth being told about, but it is not a
 	// complete account and must never be counted as one.
 	Missing []Omission
+	// Warnings is what this payload holds but a restore of it may not be
+	// able to put back. Nothing is left out for one, and the account is
+	// still complete: it is what somebody has to know before the night
+	// they need the backup, not on it.
+	Warnings []string
 }
 
 // Omission is one thing a payload does not contain, and why.

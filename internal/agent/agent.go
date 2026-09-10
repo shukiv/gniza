@@ -340,6 +340,31 @@ func (a *Agent) holdLease(ctx context.Context, jobID, claimToken string, restore
 // It always returns a report. A failure to stage fails the whole job; a
 // failure to reach one repository fails only that target, because the
 // copies that did land are still good.
+// recordPayload carries what staging found onto the report the
+// controller stores, so it reaches the operator rather than only the log
+// on the machine it happened on.
+func recordPayload(report *protocol.JobReport, payload pkgacct.Payload, log *slog.Logger) {
+	if payload.Degraded {
+		// Not only about deduplication: this is also where a skip that
+		// the host cannot honour in full is said out loud.
+		log.Warn("the payload is not quite what the schedule asked for",
+			"reason", payload.Reason)
+	}
+	for _, omission := range payload.Missing {
+		// At warn, not debug: this is the operator's business on every
+		// run, not something to go looking for.
+		log.Warn("left out of the backup", "what", omission.What, "why", omission.Why)
+		report.Missing = append(report.Missing, omission.String())
+	}
+	for _, warning := range payload.Warnings {
+		// The backup is whole and the run is a success. What it cannot
+		// promise is a restore, and that is the operator's business
+		// tonight rather than on the night they need it.
+		log.Warn("this backup may not restore in full", "why", warning)
+		report.Warnings = append(report.Warnings, warning)
+	}
+}
+
 func (a *Agent) RunJob(ctx context.Context, assignment protocol.JobAssignment) protocol.JobReport {
 	// The token says which attempt this is. The controller refuses a
 	// report that does not carry the token of the attempt it is running,
@@ -411,18 +436,7 @@ func (a *Agent) RunJob(ctx context.Context, assignment protocol.JobAssignment) p
 		report.StagingError = err.Error()
 		return report
 	}
-	if payload.Degraded {
-		// Not only about deduplication: this is also where a skip that
-		// the host cannot honour in full is said out loud.
-		log.Warn("the payload is not quite what the schedule asked for",
-			"reason", payload.Reason)
-	}
-	for _, omission := range payload.Missing {
-		// At warn, not debug: this is the operator's business on every
-		// run, not something to go looking for.
-		log.Warn("left out of the backup", "what", omission.What, "why", omission.Why)
-		report.Missing = append(report.Missing, omission.String())
-	}
+	recordPayload(&report, payload, log)
 	log.Debug("staged an account", "dir", dir.Path, "mode", mode,
 		"parts", len(payload.Parts), "dumps", len(payload.DumpPaths),
 		"degraded", payload.Degraded, "missing", len(payload.Missing))

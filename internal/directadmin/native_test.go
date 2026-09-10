@@ -2,6 +2,7 @@ package directadmin
 
 import (
 	"archive/tar"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -98,9 +99,14 @@ func TestNativeCommandProcess(t *testing.T) {
 		// records and its messages and nothing of the account's own
 		// files. One that does not -- the "ignores-selection" scenario --
 		// writes the whole account whatever it was asked for.
-		if task.Get("what") == "select" && scenario != "ignores-selection" {
+		switch {
+		case task.Get("what") == "select" && scenario != "ignores-selection":
 			writeLeanNativeArchive(t, archive, identity)
-		} else {
+		case scenario == "root-owned-home":
+			writeNativeArchiveWith(t, archive, identity, map[string]string{
+				"backup/home.tar": nestedHomeTar(t),
+			})
+		default:
 			writeNativeArchive(t, archive, identity)
 		}
 		if scenario == "symlink" {
@@ -206,6 +212,34 @@ func writeNativeArchiveWith(t *testing.T, filename, account string, extra map[st
 	if err := errors.Join(tarball.Close(), z.Close(), f.Close()); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// nestedHomeTar is the account's own files as DirectAdmin packs them,
+// with one of them owned by root: the shape six accounts on the
+// validation host are in.
+func nestedHomeTar(t *testing.T) string {
+	t.Helper()
+	var out bytes.Buffer
+	tarball := tar.NewWriter(&out)
+	for _, member := range []struct {
+		name string
+		uid  int
+	}{{"public_html/index.php", 1005}, {"public_html/wp-config.php", 0}} {
+		body := "<?php\n"
+		if err := tarball.WriteHeader(&tar.Header{
+			Name: member.name, Mode: 0o644, Size: int64(len(body)),
+			Typeflag: tar.TypeReg, Uid: member.uid, Gid: 1005,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tarball.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tarball.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return out.String()
 }
 
 func TestNativeStageProducesVerifiedPrivateZstdArchive(t *testing.T) {

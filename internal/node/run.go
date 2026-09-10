@@ -304,6 +304,7 @@ func (e *Engine) runBackup(ctx context.Context, stored nodestore.Job) error {
 
 	stored.StagingErr = report.StagingError
 	stored.Missing = report.Missing
+	stored.Warnings = report.Warnings
 	if len(report.Missing) > 0 {
 		// Something the account has is not in this backup. It is worth
 		// keeping and worth reporting, but it cannot authorise deleting
@@ -450,6 +451,11 @@ func backupDetail(stored nodestore.Job, names map[string]string) string {
 	// below it is about where the backup went, which is routine.
 	for _, missing := range stored.Missing {
 		lines = append(lines, "Not in this backup -- "+missing)
+	}
+	// Second, because it is about the restore rather than the backup:
+	// everything is here, and it may not all go back.
+	for _, warning := range stored.Warnings {
+		lines = append(lines, "May not restore in full -- "+warning)
 	}
 	for _, target := range stored.Targets {
 		where := names[target.RepositoryID]

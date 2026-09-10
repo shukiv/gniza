@@ -339,6 +339,13 @@ type Job struct {
 	// is not a complete account either, so CompleteAccount is false and
 	// termination safety will not accept it.
 	Missing []string `json:"missing,omitempty"`
+	// Warnings is what this run stored but cannot promise to give back,
+	// one line each: a home holding files the account does not own, most
+	// often, which DirectAdmin's restore stops at. Everything is in the
+	// backup, so this is not a hole and does not make the run partial --
+	// it is the difference between a backup and a restore, and nobody
+	// finds it out on the day they need it unless it is written here.
+	Warnings []string `json:"warnings,omitempty"`
 	// Progress is what restic last reported about a running job. It is
 	// cleared when the job finishes: a percentage on a job that is over
 	// says nothing, and "100%" beside a failure would be a lie.

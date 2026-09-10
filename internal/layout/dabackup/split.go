@@ -687,6 +687,27 @@ func (m Member) header() *tar.Header {
 	return header
 }
 
+// EachHomeMember hands over every member of the account's own files in
+// an unpacked tree, with the owner the archive recorded for it.
+//
+// Only the home archive: the outer one is DirectAdmin's own records,
+// which the restore puts back as root and which are root-owned on
+// purpose. A tree read in place has no home members here at all -- those
+// files were never in an archive -- and visits nothing.
+func EachHomeMember(dir string, visit func(name string, uid int)) error {
+	manifest, err := readManifest(dir)
+	if err != nil {
+		return err
+	}
+	if manifest.Home == nil {
+		return nil
+	}
+	for _, member := range manifest.Home.Members {
+		visit(member.Name, member.UID)
+	}
+	return nil
+}
+
 // readManifest reads what UnpackArchive wrote.
 func readManifest(dir string) (Manifest, error) {
 	body, err := os.ReadFile(filepath.Join(MetadataPart(dir), ManifestFile))

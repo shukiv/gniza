@@ -410,7 +410,14 @@ type fixtureExtra struct {
 	// xattrs are put on the member as pax records, which is where tar
 	// keeps an extended attribute.
 	xattrs map[string]string
+	// uid is who owns the member, for the members that are not the
+	// account's own. Nil means the account, which is what almost every
+	// file in a home directory is.
+	uid *int
 }
+
+// uidPtr names an owner for a fixture member, root included.
+func uidPtr(n int) *int { return &n }
 
 // buildSplitFixture writes an archive shaped like the one DirectAdmin
 // 1.709 wrote for gzv0908a: a zstd tar whose three roots are backup/,
@@ -474,9 +481,13 @@ func buildSplitFixture(t *testing.T, account string, extras ...fixtureExtra) str
 		}, "")
 		for _, extra := range extras {
 			if extra.nested && extra.name != "" {
+				uid := 1005
+				if extra.uid != nil {
+					uid = *extra.uid
+				}
 				writeMember(t, tw, &tar.Header{
 					Name: extra.name, Typeflag: tar.TypeReg, Mode: 0o644,
-					Uid: 1005, Gid: 1005, Uname: account, Gname: account, ModTime: when,
+					Uid: uid, Gid: 1005, Uname: account, Gname: account, ModTime: when,
 					PAXRecords: extra.xattrs,
 				}, extra.body)
 			}
@@ -834,4 +845,34 @@ func TestAMemberWhoseNameIsNotUTF8ComesBackTheSame(t *testing.T) {
 		t.Fatalf("putting the archive back together: %v", err)
 	}
 	sameArchive(t, original, rebuilt)
+}
+
+// The restore extracts the nested home archive as the account, so a
+// member in it owned by anybody else is one tar cannot chown and the
+// restore stops there. The backup is the night to find that out, and
+// what the backup has to look at is the manifest.
+func TestTheHomeMembersReportWhoOwnsThem(t *testing.T) {
+	const account = "gzv0908a"
+	archive := buildSplitFixture(t, account,
+		fixtureExtra{nested: true, name: "public_html/wp-config.php", body: "<?php\n", uid: uidPtr(0)},
+		fixtureExtra{nested: true, name: "public_html/index.php", body: "<?php\n"},
+	)
+	dir := t.TempDir()
+	if err := (Layout{}).UnpackArchive(t.Context(), archive, account, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	owners := map[string]int{}
+	if err := EachHomeMember(dir, func(name string, uid int) { owners[name] = uid }); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := owners["public_html/wp-config.php"]; !ok || got != 0 {
+		t.Errorf("the root-owned member reported owner %d (present: %v)", got, ok)
+	}
+	if got := owners["public_html/index.php"]; got != 1005 {
+		t.Errorf("an ordinary member reported owner %d", got)
+	}
+	if _, seen := owners[path.Join(BackupDir, UserConf)]; seen {
+		t.Error("a member of the outer archive was reported as one of the account's own files")
+	}
 }

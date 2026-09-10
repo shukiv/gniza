@@ -47,6 +47,10 @@ type Fake struct {
 	// Excludes is what NativeExcludes returns, for a test that needs the
 	// account to have some.
 	Excludes []string
+	// Warnings is what every staged payload carries back, for a test
+	// that needs a backup which stored everything and may still not
+	// restore in full.
+	Warnings []string
 	// PutBackHome and LoadedDatabases record what was written back into
 	// live accounts, for a test that needs to know a restore did more than
 	// leave a copy behind.
@@ -224,6 +228,7 @@ func (f *Fake) Stage(ctx context.Context, req panel.StageRequest) (pkgacct.Paylo
 			}
 		}
 	}
+	payload.Warnings = f.Warnings
 	return payload, nil
 }
 

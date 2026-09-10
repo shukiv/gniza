@@ -1,8 +1,11 @@
 package reassemble
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -154,16 +157,20 @@ func Verify(ctx context.Context, rebuilt Result) ([]string, error) {
 			continue
 		}
 		path := filepath.Join(root, rebuilt.Layout.DatabaseDir(), dump.Name())
-		body, err := os.ReadFile(path)
+		info, err := dump.Info()
 		if err != nil {
 			return passed, fmt.Errorf("reassemble: read dump %s: %w", dump.Name(), err)
 		}
 		// A truncated or empty dump restores an empty database, which is
 		// worse than an obvious failure.
-		if len(body) == 0 {
+		if info.Size() == 0 {
 			return passed, fmt.Errorf("reassemble: dump %s is empty", dump.Name())
 		}
-		if !strings.Contains(strings.ToUpper(string(body)), "CREATE") {
+		found, err := namesACreate(path)
+		if err != nil {
+			return passed, fmt.Errorf("reassemble: read dump %s: %w", dump.Name(), err)
+		}
+		if !found {
 			return passed, fmt.Errorf("reassemble: dump %s has no CREATE statement", dump.Name())
 		}
 		checked++
@@ -175,6 +182,55 @@ func Verify(ctx context.Context, rebuilt Result) ([]string, error) {
 		passed = append(passed, "no database dumps, which is what this backup was taken as")
 	}
 	return passed, nil
+}
+
+// namesACreate says whether the dump holds a CREATE statement.
+//
+// Read in blocks rather than whole. A dump is the largest file an
+// account has, and this runs on the server that account lives on: the
+// file, a copy of it as a string and an uppercased copy of that is three
+// times the dump resident at once, so a nightly rehearsal of an account
+// with a 4 GiB dump asks for something like 12 GiB on a live hosting
+// node and is killed for it.
+func namesACreate(path string) (bool, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer file.Close()
+
+	word := []byte("CREATE")
+	// The last few bytes of each block start the next one, so a CREATE
+	// lying across a block boundary is still one word.
+	overlap := len(word) - 1
+	buf := make([]byte, overlap+64*1024)
+	carried := 0
+	for {
+		read, err := file.Read(buf[carried:])
+		if read > 0 {
+			block := buf[:carried+read]
+			// Uppercased where it lies: a copy per block is no larger
+			// than a block, but it is another allocation for every 64 KiB
+			// of every dump on the server, and the block is not wanted
+			// afterwards in the case it arrived in.
+			for i, b := range block {
+				if 'a' <= b && b <= 'z' {
+					block[i] = b - ('a' - 'A')
+				}
+			}
+			if bytes.Contains(block, word) {
+				return true, nil
+			}
+			carried = min(len(block), overlap)
+			copy(buf, block[len(block)-carried:])
+		}
+		if errors.Is(err, io.EOF) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+	}
 }
 
 func countFiles(root string) (int, error) {

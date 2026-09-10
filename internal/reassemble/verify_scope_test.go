@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -113,5 +114,40 @@ func TestAFullBackupIsRehearsedAsBefore(t *testing.T) {
 	}
 	if strings.Contains(said, "taken without") {
 		t.Errorf("a full backup was reported as partial: %q", said)
+	}
+}
+
+// A dump is the largest file an account has, and the rehearsal runs on
+// the server that account lives on. Reading one whole, copying it into a
+// string and uppercasing that copy holds three times its size at once,
+// so a nightly rehearsal of an account with a 4 GiB dump asks the kernel
+// for something like 12 GiB on a live hosting node and is killed for it.
+func TestARehearsalDoesNotHoldTheWholeDumpInMemory(t *testing.T) {
+	const size = 32 << 20
+	body := strings.Repeat("-- padding\n", size/11) + "CREATE TABLE orders (id int);\n"
+	rebuilt := buildTree(t, true, map[string]string{"shop.sql": body})
+
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	if _, err := reassemble.Verify(context.Background(), rebuilt); err != nil {
+		t.Fatal(err)
+	}
+	runtime.ReadMemStats(&after)
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > size/4 {
+		t.Errorf("reading a %d byte dump allocated %d bytes", len(body), allocated)
+	}
+}
+
+// The dump is read in blocks, and the statement that says it is a dump
+// can lie across the join between two of them.
+func TestARehearsalFindsACreateAcrossABlockBoundary(t *testing.T) {
+	const block = 64 << 10
+	for offset := block - 8; offset <= block+8; offset++ {
+		body := strings.Repeat(".", offset) + "CREATE TABLE orders (id int);\n"
+		rebuilt := buildTree(t, true, map[string]string{"shop.sql": body})
+		if _, err := reassemble.Verify(context.Background(), rebuilt); err != nil {
+			t.Fatalf("a CREATE %d bytes in was not found: %v", offset, err)
+		}
 	}
 }

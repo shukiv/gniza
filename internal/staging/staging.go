@@ -159,13 +159,17 @@ func (m *Manager) Allocate(key string, estimatedBytes uint64) (*Dir, error) {
 func (m *Manager) outstanding() uint64 {
 	var total uint64
 	for path, required := range m.reserved {
+		// Ask whether the directory is there before measuring it: a walk
+		// that starts at a name which is not there tolerates the missing
+		// name like any other and reports an empty tree, which is
+		// indistinguishable from a reservation nothing has written to yet.
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			// The directory is gone, so nothing is coming to it.
+			delete(m.reserved, path)
+			continue
+		}
 		written, err := treeBytes(path)
 		if err != nil {
-			if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
-				// The directory is gone, so nothing is coming to it.
-				delete(m.reserved, path)
-				continue
-			}
 			// It is still there but could not be measured, so how much
 			// of the reservation is already on disk is unknown. Hold all
 			// of it rather than hand the same bytes out twice.

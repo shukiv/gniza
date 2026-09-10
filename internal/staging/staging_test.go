@@ -458,3 +458,29 @@ func (f fakeFile) Mode() fs.FileMode  { return 0o600 }
 func (f fakeFile) ModTime() time.Time { return time.Time{} }
 func (f fakeFile) IsDir() bool        { return false }
 func (f fakeFile) Sys() any           { return nil }
+
+// A staging directory that is gone releases what it reserved. Something
+// swept it, or the run that owned it died and its work was cleared: no
+// more bytes are coming to a path that is not there, and holding room for
+// them refuses the next account a backup it has space for.
+func TestAStagingDirectoryThatIsGoneReleasesItsReservation(t *testing.T) {
+	root := t.TempDir()
+	free, err := AvailableBytes(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := &Manager{Root: root, MaxConcurrent: 4}
+
+	tooBigTogether := free / 5 * 3
+	first, err := manager.Allocate("first", tooBigTogether)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(first.Path); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := manager.Allocate("second", tooBigTogether); err != nil {
+		t.Errorf("a staging directory that no longer exists held its room: %v", err)
+	}
+}

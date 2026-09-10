@@ -18,8 +18,8 @@ func TestOneItemIsNotSizedAsAWholeAccount(t *testing.T) {
 	const account = 48 << 30
 	const oneDatabase = 800 << 10
 
-	whole := restoreStagingEstimate(protocol.RestoreAccount, account, account, 0)
-	item := restoreStagingEstimate(protocol.RestoreItems, account, account, oneDatabase)
+	whole := restoreStagingEstimate(protocol.RestoreAccount, account, 0)
+	item := restoreStagingEstimate(protocol.RestoreItems, account, oneDatabase)
 
 	if item >= whole {
 		t.Errorf("one item needs %d, a whole account %d: the item is not sized by what it takes",
@@ -38,8 +38,8 @@ func TestOneItemIsNotSizedAsAWholeAccount(t *testing.T) {
 // fill the volume, so the whole-account figure stands.
 func TestAnItemOfUnknownSizeFallsBackToTheAccount(t *testing.T) {
 	const account = 48 << 30
-	if got, want := restoreStagingEstimate(protocol.RestoreItems, account, account, 0),
-		restoreStagingEstimate(protocol.RestoreAccount, account, account, 0); got != want {
+	if got, want := restoreStagingEstimate(protocol.RestoreItems, account, 0),
+		restoreStagingEstimate(protocol.RestoreAccount, account, 0); got != want {
 		t.Errorf("an item of unknown size reserves %d, want the account's %d", got, want)
 	}
 }
@@ -49,7 +49,7 @@ func TestAnItemOfUnknownSizeFallsBackToTheAccount(t *testing.T) {
 // and cPanel's copy of it are on the same volume at once.
 func TestAWholeAccountStillCountsCPanelsOwnCopy(t *testing.T) {
 	const account = 10 << 30
-	got := restoreStagingEstimate(protocol.RestoreAccount, account, account, 0)
+	got := restoreStagingEstimate(protocol.RestoreAccount, account, 0)
 	if got < 2*uint64(account) {
 		t.Errorf("a whole-account restore reserves %d, less than the two copies it makes", got)
 	}
@@ -98,8 +98,8 @@ func TestPickedFilesAreNotSizedAsAWholeAccount(t *testing.T) {
 	const account = 48 << 30
 	const threeFiles = 12 << 20
 
-	whole := restoreStagingEstimate(protocol.RestoreAccount, account, account, 0)
-	picked := restoreStagingEstimate(protocol.RestoreFiles, account, account, threeFiles)
+	whole := restoreStagingEstimate(protocol.RestoreAccount, account, 0)
+	picked := restoreStagingEstimate(protocol.RestoreFiles, account, threeFiles)
 
 	if picked >= whole {
 		t.Errorf("picked files need %d, a whole account %d: the files are not sized by what they are",
@@ -107,5 +107,25 @@ func TestPickedFilesAreNotSizedAsAWholeAccount(t *testing.T) {
 	}
 	if picked <= threeFiles {
 		t.Errorf("a files restore is sized at %d, which does not hold what it restores", picked)
+	}
+}
+
+// TestARestoreIsSizedByTheBackupNotTheLiveAccount.
+//
+// The live account is what is on the disk now, and the backup left part
+// of it out on purpose: on the validation host a 24.4 GiB account with
+// 12 GiB of application backups and 1.3 GiB of trash in it made a 7.1
+// GiB backup, and putting that backup back was refused for wanting 49.9
+// GiB of scratch on a disk with 21.9 GiB free. What the restore writes
+// is the backup, so the backup is what it is sized by.
+func TestARestoreIsSizedByTheBackupNotTheLiveAccount(t *testing.T) {
+	const live = 24 << 30
+	const backup = 7 << 30
+	got := restoreStagingEstimate(protocol.RestoreAccount, backup, 0)
+	if got >= 2*live {
+		t.Errorf("a %d-byte backup reserves %d, two copies of the %d-byte live account", backup, got, live)
+	}
+	if got < 2*backup {
+		t.Errorf("a %d-byte backup reserves %d, less than the two copies the restore makes", backup, got)
 	}
 }

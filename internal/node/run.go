@@ -540,17 +540,17 @@ func (e *Engine) runRestore(ctx context.Context, stored nodestore.Restore) error
 	}
 
 	// The live account is not an estimate of a historical backup. It may
-	// have been deleted, emptied after an incident, or simply grown smaller
-	// since the requested snapshot. Size the root-owned restore workspace
-	// from the snapshot as well, and fail before writing if it cannot even
-	// be identified as this account's backup.
+	// have been deleted, emptied after an incident, grown smaller since
+	// the requested snapshot, or be holding what the backup leaves out.
+	// Size the root-owned restore workspace from the snapshot, and fail
+	// before writing if it cannot even be identified as this account's
+	// backup.
 	wholeAccountApply := stored.Apply && (stored.Kind == protocol.RestoreAccount || stored.Kind == "")
 	snapshotBytes, err := e.snapshotBytes(ctx, stored.RepositoryID, stored.Account, stored.SnapshotID, wholeAccountApply)
 	if err != nil {
 		return e.failRestore(stored, err.Error())
 	}
-	account.SizeBytes = restoreStagingEstimate(stored.Kind, account.SizeBytes, snapshotBytes,
-		e.itemBytes(ctx, stored))
+	account.SizeBytes = restoreStagingEstimate(stored.Kind, snapshotBytes, e.itemBytes(ctx, stored))
 
 	now := time.Now().UTC()
 	stored.Status = job.StatusRunning
@@ -747,7 +747,12 @@ func sizeOfEntries(entries []resticrun.Entry) uint64 {
 //
 // A whole-account restore writes the account tree and then a second copy
 // of it: either the tar it repacks, or the copy restorepkg makes beside
-// whatever it is handed. Two copies.
+// whatever it is handed. Two copies of the backup -- not of the account
+// that is on the disk now, which the backup left part of on purpose. On
+// the validation host a 24.4 GiB account with 12 GiB of application
+// backups and 1.3 GiB of trash in it made a 7.1 GiB backup, and putting
+// it back was refused for wanting 49.9 GiB of scratch on a disk with
+// 21.9 GiB free.
 //
 // A restore of one item writes that item. Sizing it as a whole account
 // made taking one 800 KiB database out of a 48.7 GiB account ask for
@@ -756,7 +761,7 @@ func sizeOfEntries(entries []resticrun.Entry) uint64 {
 // itemBytes is what the backup says those items come to; zero means the
 // backup could not be asked, and then the account's own figure stands
 // rather than a guess that would fill the volume.
-func restoreStagingEstimate(kind string, liveBytes, snapshotBytes, itemBytes uint64) uint64 {
+func restoreStagingEstimate(kind string, snapshotBytes, itemBytes uint64) uint64 {
 	if snapshotBytes == 0 {
 		return 0
 	}
@@ -766,7 +771,7 @@ func restoreStagingEstimate(kind string, liveBytes, snapshotBytes, itemBytes uin
 			return reassemble.ArchiveBytes(itemBytes)
 		}
 	}
-	return reassemble.ArchiveBytes(max(liveBytes, snapshotBytes))
+	return reassemble.ArchiveBytes(snapshotBytes)
 }
 
 // runDrill rehearses a restore and records what it proved.

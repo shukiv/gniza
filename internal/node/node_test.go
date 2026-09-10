@@ -94,16 +94,14 @@ func TestSourceOperationsStayOnTheAppendOnlyEndpoint(t *testing.T) {
 // either the tar repacked from it or the copy restorepkg makes beside
 // whatever it is handed. It was three copies, counting a downloaded
 // payload that split mode never writes -- restic restores each part
-// straight into its slot in the tree.
+// straight into its slot in the tree. And it is the backup's size, not
+// the live account's, whatever the account on the disk has grown to.
 func TestRestoreStagingUsesTheHistoricalSnapshotSize(t *testing.T) {
 	const gib = uint64(1 << 30)
-	if got := node.RestoreStagingEstimateForTest("account", gib, 10*gib); got != 21*gib {
+	if got := node.RestoreStagingEstimateForTest("account", 10*gib); got != 21*gib {
 		t.Fatalf("whole-account estimate = %d GiB, want 21", got/gib)
 	}
-	if got := node.RestoreStagingEstimateForTest("account", 12*gib, 10*gib); got != 25*gib {
-		t.Fatalf("live-account estimate = %d GiB, want 25", got/gib)
-	}
-	if got := node.RestoreStagingEstimateForTest("items", 0, 0); got != 0 {
+	if got := node.RestoreStagingEstimateForTest("items", 0); got != 0 {
 		t.Fatalf("unknown granular estimate = %d, want a refusal", got)
 	}
 }

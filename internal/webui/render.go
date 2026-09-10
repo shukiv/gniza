@@ -36,6 +36,9 @@ type page struct {
 	// with a known fault should say so where it is being used.
 	Update *updateNotice
 	Assets assets
+	// LiveURL is where the page fetches itself from to keep current, when
+	// the browser's own address would not answer with it. See liveURLFor.
+	LiveURL string
 	// Fonts are the @font-face rules for this request. Where the
 	// typefaces are fetched from depends on the panel, so they are
 	// written per request rather than embedded in the stylesheet.
@@ -83,6 +86,7 @@ func (s *Server) renderWithCSRF(
 		Title: title, Nav: nav, CSRF: csrf,
 		Flash: flashFrom(r), Data: data, Assets: s.assets,
 		Fonts:          fontFaces(fontBaseFor(r)),
+		LiveURL:        liveURLFor(r),
 		RunningVersion: agent.Version,
 		Panel:          s.panelName(),
 		Cpanel:         s.panelName() == "cPanel",

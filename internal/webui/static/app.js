@@ -639,7 +639,11 @@
     if (document.querySelector("dialog[open]")) { schedule(); return; }
 
     inFlight = true;
-    window.fetch(window.location.href, {
+    // Through DirectAdmin's Evolution skin the address bar is the skin's,
+    // and fetching it answers with the skin; the page says where it can
+    // be fetched from instead.
+    var self = document.querySelector('meta[name="gniza-live"]');
+    window.fetch(self && self.content ? self.content : window.location.href, {
       credentials: "same-origin",
       headers: { "X-Gniza-Live": "1" }
     }).then(function (response) {

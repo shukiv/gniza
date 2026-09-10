@@ -48,6 +48,33 @@ func fontFaces(base string) template.CSS {
 }
 
 // fontBaseFor is where this request should fetch the typefaces from.
+// liveURLFor is where a page served through DirectAdmin can fetch itself
+// from to keep current. Evolution opens a plugin through its own wrapper,
+// so the address in the browser is DirectAdmin's rather than the
+// plugin's, and fetching that address gets Evolution's shell back with
+// none of the page's regions in it -- the Version card said
+// "Downloading" for as long as it was open while the release it named
+// was installed and running underneath. The plugin's own address, at the
+// level the session has, answers with the page. Empty everywhere else:
+// there the browser's own address is the right one.
+func liveURLFor(r *http.Request) string {
+	who := daPrincipalOf(r)
+	if who.Username == "" {
+		return ""
+	}
+	base := "/CMD_PLUGINS/gniza/index.html"
+	switch who.UserType {
+	case "admin":
+		base = "/CMD_PLUGINS_ADMIN/gniza/index.html"
+	case "reseller":
+		base = "/CMD_PLUGINS_RESELLER/gniza/index.html"
+	}
+	if r.URL.RawQuery == "" {
+		return base
+	}
+	return base + "?" + r.URL.RawQuery
+}
+
 func fontBaseFor(r *http.Request) string {
 	if daPrincipalOf(r).Username != "" {
 		return daFontBase

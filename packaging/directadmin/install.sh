@@ -33,6 +33,40 @@ PLUGIN_USER=gniza-plugin
 say() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
+# set_colours decides whether this run may use terminal escapes.
+#
+# Only when the output is a terminal: piped into a file or a log, escapes
+# are noise an operator has to read around. NO_COLOR is honoured because
+# it is the convention an operator sets once and expects obeyed.
+set_colours() {
+	if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+		WARN_ON=$(printf '\033[1;33m')
+		WARN_OFF=$(printf '\033[0m')
+	else
+		WARN_ON=
+		WARN_OFF=
+	fi
+}
+
+# warn_block prints the one thing an operator must not scroll past.
+#
+# It is the last thing said after a wall of installer output, and it was
+# said in the same voice as everything above it -- so it read as another
+# line of progress. A rule and a colour are what make it the thing the
+# eye stops on.
+warn_block() {
+	_wb_heading=$1
+	shift
+	_wb_rule="------------------------------------------------------------------------"
+	printf '\n%s%s%s\n' "$WARN_ON" "$_wb_rule" "$WARN_OFF"
+	printf '%s  %s%s\n' "$WARN_ON" "$_wb_heading" "$WARN_OFF"
+	printf '%s%s%s\n' "$WARN_ON" "$_wb_rule" "$WARN_OFF"
+	for _wb_line in "$@"; do
+		printf '  %s\n' "$_wb_line"
+	done
+	printf '%s%s%s\n' "$WARN_ON" "$_wb_rule" "$WARN_OFF"
+}
+
 # install_binary puts an executable in place atomically.
 #
 # install(1) writes over the destination where it stands, so for the
@@ -308,7 +342,14 @@ say ""
 say "The administrator's page is under Admin Tools, and runs as"
 say "$PLUGIN_USER. Gniza asks DirectAdmin whose session opened it and"
 say "serves an administrator's session only."
-say ""
-say "The DirectAdmin provider is unfinished: it backs up a whole account"
-say "as one archive and refuses the things that need an answer only a"
-say "running DirectAdmin can give. Read ADR 0019 before relying on it."
+
+# The wording is dabackup.Provisional, which the agent prints too. Say it
+# differently here and the two drift: this installer told operators the
+# provider "backs up a whole account as one archive" for every release
+# after split mode landed. A test compares the two.
+set_colours
+warn_block "The DirectAdmin provider is unfinished" \
+	"DirectAdmin archives were validated on 1.709 and split mode" \
+	"rebuilds one header for header, but no account has yet been" \
+	"restored from an archive Gniza rebuilt, and granular restore and" \
+	"the session bridge remain experimental: see ADR 0019"

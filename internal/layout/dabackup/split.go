@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/klauspost/compress/zstd"
 
@@ -158,6 +160,82 @@ type Member struct {
 	// not in the tree: it was opened, and it is written again from the
 	// members in Manifest.Home.
 	Nested bool `json:"nested,omitempty"`
+}
+
+// rawSentinel marks a manifest string that is not the text it looks
+// like.
+//
+// A filename is a sequence of bytes, and the kernel does not require it
+// to be UTF-8: an FTP upload of a cp1255 or Latin-1 name puts bytes on
+// disk that are not. The manifest is JSON, and encoding/json replaces
+// every byte it cannot read as UTF-8 with U+FFFD without saying so, so a
+// name written down straight is a name that no longer opens the file
+// stored beside it -- the backup succeeds tonight, and every repack from
+// it afterwards looks for a body that is not there. Such a value goes
+// down as base64 behind a leading NUL instead, which no filename holds,
+// and which is itself escaped whenever a value really does begin with
+// one, so the marker never means anything else.
+const rawSentinel = "\x00"
+
+// escapeRaw makes one string safe to write into the manifest.
+func escapeRaw(text string) string {
+	if utf8.ValidString(text) && !strings.HasPrefix(text, rawSentinel) {
+		return text
+	}
+	return rawSentinel + base64.StdEncoding.EncodeToString([]byte(text))
+}
+
+// unescapeRaw gives back what escapeRaw was handed.
+func unescapeRaw(text string) string {
+	rest, marked := strings.CutPrefix(text, rawSentinel)
+	if !marked {
+		return text
+	}
+	decoded, err := base64.StdEncoding.DecodeString(rest)
+	if err != nil {
+		// Nothing writes this but escapeRaw. A value that is not what it
+		// wrote is left as it stands rather than dropped: what comes of
+		// that is a member the repack refuses by name, and not a member
+		// that quietly goes missing from the account.
+		return text
+	}
+	return string(decoded)
+}
+
+// converted is a copy of the member with every field that carries bytes
+// from the archive, rather than text of Gniza's own, put through convert.
+func (m Member) converted(convert func(string) string) Member {
+	m.Name = convert(m.Name)
+	m.Linkname = convert(m.Linkname)
+	m.Body = convert(m.Body)
+	if len(m.Xattrs) > 0 {
+		xattrs := make(map[string]string, len(m.Xattrs))
+		for key, value := range m.Xattrs {
+			xattrs[convert(key)] = convert(value)
+		}
+		m.Xattrs = xattrs
+	}
+	return m
+}
+
+// memberJSON is Member without its marshalling, so the two methods below
+// can hand it to encoding/json without calling themselves.
+type memberJSON Member
+
+// MarshalJSON writes the member down so that every byte it carries comes
+// back.
+func (m Member) MarshalJSON() ([]byte, error) {
+	return json.Marshal(memberJSON(m.converted(escapeRaw)))
+}
+
+// UnmarshalJSON reads back what MarshalJSON wrote.
+func (m *Member) UnmarshalJSON(data []byte) error {
+	var read memberJSON
+	if err := json.Unmarshal(data, &read); err != nil {
+		return err
+	}
+	*m = Member(read).converted(unescapeRaw)
+	return nil
 }
 
 // UnpackArchive takes a DirectAdmin account archive apart into a manifest

@@ -809,3 +809,29 @@ func TestATreeThatIsAlreadyThereIsNotWrittenOver(t *testing.T) {
 		}
 	}
 }
+
+// A filename that is not UTF-8 is a filename all the same. An FTP client
+// uploads a name in cp1255 or Latin-1, the kernel stores whatever bytes
+// arrived, and tar carries them through unchanged. The manifest is JSON,
+// and encoding/json replaces every byte it cannot read as UTF-8 with
+// U+FFFD -- so the name written down stops being the name of the file
+// that was written beside it. The backup succeeds tonight, and every
+// repack from it afterwards looks for a body that is not there.
+func TestAMemberWhoseNameIsNotUTF8ComesBackTheSame(t *testing.T) {
+	account := "gzv0908a"
+	original := buildSplitFixture(t, account,
+		fixtureExtra{name: "domains/caf\xe9.txt", body: "latin\n"},
+		fixtureExtra{nested: true, name: "caf\xe9-nested.txt", body: "nested\n"},
+		fixtureExtra{name: "domains/acl.txt", body: "acl\n",
+			xattrs: map[string]string{"SCHILY.xattr.system.posix_acl_access": "\x02\x00\x00\x00\xff\xfe"}},
+	)
+	dir := t.TempDir()
+	if err := (Layout{}).UnpackArchive(context.Background(), original, account, dir); err != nil {
+		t.Fatalf("taking the archive apart: %v", err)
+	}
+	rebuilt, err := (Layout{}).PackArchive(context.Background(), dir, account, t.TempDir())
+	if err != nil {
+		t.Fatalf("putting the archive back together: %v", err)
+	}
+	sameArchive(t, original, rebuilt)
+}

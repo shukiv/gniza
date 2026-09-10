@@ -681,3 +681,87 @@ func TestARecordedFiringDoesNotUndoAnEdit(t *testing.T) {
 		t.Error("the firing was not recorded")
 	}
 }
+
+// A destination is usually removed because the key it holds has leaked.
+// The page said it was gone and the sealed key pair stayed in state.db,
+// openable with the master key that sits on the same host -- so the one
+// action an operator takes to revoke an access key revoked nothing.
+func TestRemovingADestinationRevokesWhatOnlyItHeld(t *testing.T) {
+	store := newStore(t)
+	credentials, err := store.PutSecret("s3", []byte("sealed key pair"), "master")
+	if err != nil {
+		t.Fatal(err)
+	}
+	password, err := store.PutSecret("restic", []byte("sealed password"), "master")
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared, err := store.PutSecret("s3", []byte("sealed and used twice"), "master")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	going, err := store.PutDestination(nodestore.Destination{
+		Name: "offsite", CredentialsSecretID: credentials,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PutRepository(nodestore.Repository{
+		Path: "offsite/repo", DestinationID: going.ID, PasswordSecretID: password,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A second repository here is sealed under the same password as one
+	// somewhere else, which is not this destination's to revoke.
+	if _, err := store.PutRepository(nodestore.Repository{
+		Path: "offsite/other", DestinationID: going.ID, PasswordSecretID: shared,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	staying, err := store.PutDestination(nodestore.Destination{Name: "second"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PutRepository(nodestore.Repository{
+		Path: "second/repo", DestinationID: staying.ID, PasswordSecretID: shared,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.DeleteDestination(going.ID); err != nil {
+		t.Fatal(err)
+	}
+	for what, id := range map[string]string{
+		"the destination's credentials": credentials,
+		"the repository's password":     password,
+	} {
+		if _, err := store.Secret(id); !errors.Is(err, nodestore.ErrNotFound) {
+			t.Errorf("%s is still in the state file: %v", what, err)
+		}
+	}
+	if _, err := store.Secret(shared); err != nil {
+		t.Errorf("a password another repository is still sealed under was revoked: %v", err)
+	}
+}
+
+// The same for somewhere notifications are sent: a webhook URL with a
+// token in it is a credential, and removing the channel is how it is
+// taken back.
+func TestRemovingAChannelRevokesItsCredentials(t *testing.T) {
+	store := newStore(t)
+	sealed, err := store.PutSecret("webhook", []byte("sealed url"), "master")
+	if err != nil {
+		t.Fatal(err)
+	}
+	channel, err := store.PutChannel(nodestore.Channel{Name: "ops", SecretsID: sealed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DeleteChannel(channel.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Secret(sealed); !errors.Is(err, nodestore.ErrNotFound) {
+		t.Errorf("the channel's credentials are still in the state file: %v", err)
+	}
+}

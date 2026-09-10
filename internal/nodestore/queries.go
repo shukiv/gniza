@@ -187,40 +187,132 @@ func (s *Store) Destinations() ([]Destination, error) {
 // to reach them. It is refused while a schedule still points at the
 // repository, because that schedule would then silently stop making one of
 // the copies it promises.
+// All of it in one transaction: a failure partway through a record at a
+// time leaves a destination whose repository records are already gone,
+// and with them the only pointers to their restic passwords.
 func (s *Store) DeleteDestination(id string) error {
-	repos, err := s.Repositories()
-	if err != nil {
-		return err
-	}
-	policies, err := s.Policies()
-	if err != nil {
-		return err
-	}
-
-	var owned []Repository
-	for _, repo := range repos {
-		if repo.DestinationID == id {
-			owned = append(owned, repo)
+	return s.db.Update(func(tx *bolt.Tx) error {
+		destinations := tx.Bucket(bucketDestinations)
+		raw := destinations.Get([]byte(id))
+		if raw == nil {
+			return ErrNotFound
 		}
-	}
-	for _, repo := range owned {
-		for _, policy := range policies {
+		var dest Destination
+		if err := json.Unmarshal(raw, &dest); err != nil {
+			return fmt.Errorf("nodestore: decode destination %s: %w", id, err)
+		}
+
+		owned := map[string]bool{}
+		revoke := []string{dest.CredentialsSecretID}
+		repositories := tx.Bucket(bucketRepositories)
+		if err := repositories.ForEach(func(key, raw []byte) error {
+			var repo Repository
+			if err := json.Unmarshal(raw, &repo); err != nil {
+				return fmt.Errorf("nodestore: decode repository %s: %w", key, err)
+			}
+			if repo.DestinationID != id {
+				return nil
+			}
+			owned[repo.ID] = true
+			revoke = append(revoke, repo.PasswordSecretID)
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		if err := tx.Bucket(bucketPolicies).ForEach(func(key, raw []byte) error {
+			var policy Policy
+			if err := json.Unmarshal(raw, &policy); err != nil {
+				return fmt.Errorf("nodestore: decode policy %s: %w", key, err)
+			}
 			for _, target := range policy.RepositoryIDs {
-				if target == repo.ID {
+				if owned[target] {
 					return fmt.Errorf(
 						"nodestore: the schedule %q still sends backups here; "+
 							"remove it from that schedule first", policy.Name)
 				}
 			}
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		for repoID := range owned {
+			if err := repositories.Delete([]byte(repoID)); err != nil {
+				return err
+			}
+		}
+		if err := destinations.Delete([]byte(id)); err != nil {
+			return err
+		}
+		return revokeSecrets(tx, revoke)
+	})
+}
+
+// revokeSecrets removes sealed credentials nothing points at any more.
+//
+// A destination is usually removed because the key it holds has leaked,
+// so the sealed copy goes with the record that named it: leaving it
+// behind leaves an access key openable with the master key on the same
+// host, after the one action an operator takes to revoke it. A secret
+// two records share is not this one's to revoke, so anything still
+// pointed at is left where it is.
+func revokeSecrets(tx *bolt.Tx, ids []string) error {
+	wanted := map[string]bool{}
+	for _, id := range ids {
+		if id != "" {
+			wanted[id] = true
 		}
 	}
+	if len(wanted) == 0 {
+		return nil
+	}
 
-	for _, repo := range owned {
-		if err := s.delete(bucketRepositories, repo.ID); err != nil {
+	held := map[string]bool{}
+	scan := func(bucket []byte, of func([]byte) (string, error)) error {
+		return tx.Bucket(bucket).ForEach(func(key, raw []byte) error {
+			id, err := of(raw)
+			if err != nil {
+				return fmt.Errorf("nodestore: decode %s/%s: %w", bucket, key, err)
+			}
+			if id != "" {
+				held[id] = true
+			}
+			return nil
+		})
+	}
+	if err := scan(bucketDestinations, func(raw []byte) (string, error) {
+		var dest Destination
+		err := json.Unmarshal(raw, &dest)
+		return dest.CredentialsSecretID, err
+	}); err != nil {
+		return err
+	}
+	if err := scan(bucketRepositories, func(raw []byte) (string, error) {
+		var repo Repository
+		err := json.Unmarshal(raw, &repo)
+		return repo.PasswordSecretID, err
+	}); err != nil {
+		return err
+	}
+	if err := scan(bucketChannels, func(raw []byte) (string, error) {
+		var channel Channel
+		err := json.Unmarshal(raw, &channel)
+		return channel.SecretsID, err
+	}); err != nil {
+		return err
+	}
+
+	secrets := tx.Bucket(bucketSecrets)
+	for id := range wanted {
+		if held[id] {
+			continue
+		}
+		if err := secrets.Delete([]byte(id)); err != nil {
 			return err
 		}
 	}
-	return s.delete(bucketDestinations, id)
+	return nil
 }
 
 // --- repositories ---
@@ -404,7 +496,23 @@ func (s *Store) Channels() ([]Channel, error) {
 }
 
 // DeleteChannel removes one.
-func (s *Store) DeleteChannel(id string) error { return s.delete(bucketChannels, id) }
+func (s *Store) DeleteChannel(id string) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		channels := tx.Bucket(bucketChannels)
+		raw := channels.Get([]byte(id))
+		if raw == nil {
+			return ErrNotFound
+		}
+		var channel Channel
+		if err := json.Unmarshal(raw, &channel); err != nil {
+			return fmt.Errorf("nodestore: decode channel %s: %w", id, err)
+		}
+		if err := channels.Delete([]byte(id)); err != nil {
+			return err
+		}
+		return revokeSecrets(tx, []string{channel.SecretsID})
+	})
+}
 
 // --- jobs ---
 

@@ -215,6 +215,12 @@ measured; either way a DirectAdmin restore wants a group pass after it.
   `user_backups/`, `admin_backups/` — and, unlike DirectAdmin, it also
   skips the caches that are regenerated on their own: CloudLinux's
   `.cagefs` was 3.2 GiB of one 10.8 GiB account on the validation host.
+  It also skips `application_backups`, where Installatron and Softaculous
+  write a compressed copy of the site and a dump of its database on every
+  automatic update -- 12 GiB of a 20 GiB account on
+  `server-182-54-236-143.da.direct`. Each of those archives is a fresh
+  compression, so it deduplicates against nothing, and what it holds is
+  what the snapshot already holds directly from `domains/`.
 
 ## The measurement — 2026-09-10
 

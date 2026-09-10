@@ -164,3 +164,23 @@ func TestTheDirectoriesTheAccountDoesNotOwnAreLeftOut(t *testing.T) {
 			"carries it fails: %v", excludes)
 	}
 }
+
+// Installatron and Softaculous keep an archive of the site and its
+// database under the account's home, one per automatic update, and each
+// one is a fresh compression of data that has barely moved. Restic
+// deduplicates identical chunks and a new archive of a changed site
+// shares almost none, so this is gigabytes of near-full ingest every
+// night to store a copy of what the snapshot already holds directly.
+//
+// On server-182-54-236-143.da.direct it was 12 GiB of a 20 GiB account.
+func TestTheAccountsApplicationBackupsAreLeftOut(t *testing.T) {
+	excludes := (&Real{}).NativeExcludes("/home/studio")
+	found := false
+	for _, exclude := range excludes {
+		found = found || exclude == "/home/studio/application_backups"
+	}
+	if !found {
+		t.Errorf("the account's own application backups are not excluded, so a "+
+			"backup of a backup is stored every night: %v", excludes)
+	}
+}

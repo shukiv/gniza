@@ -196,6 +196,16 @@ func (r *Real) NativeExcludes(home string) []string {
 		// restore drill, see ADR 0021. It was empty on all 142 accounts
 		// of the validation host, and JetBackup makes it again.
 		".jb-roundcube",
+		// And the archives Installatron and Softaculous write under the
+		// home on every automatic update: a copy of the site and a dump
+		// of its database, freshly compressed each time. Restic
+		// deduplicates identical chunks, and a new compression of a site
+		// that has changed shares almost none of them, so this is
+		// gigabytes of near-full ingest every night for a backup of what
+		// the snapshot already holds directly. On
+		// server-182-54-236-143.da.direct it was 12 GiB of a 20 GiB
+		// account.
+		"application_backups",
 	}
 	excludes := make([]string, 0, len(skipped))
 	for _, name := range skipped {

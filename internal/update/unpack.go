@@ -28,7 +28,8 @@ const (
 
 // Unpack writes the contents of a verified release tarball into dir.
 //
-// Only ordinary files and directories under cprest-plugin/ are written.
+// Only ordinary files and directories under the package's own top
+// directory are written.
 // A tar can name anything -- a path climbing out of the directory, a
 // symlink into /etc, a device node -- and this one has been checked
 // against a signature but is still an archive that arrived over a
@@ -36,7 +37,7 @@ const (
 //
 // The caller has already checked the signature and the checksum. Nothing
 // here treats the archive as trusted; it only makes it a directory.
-func Unpack(tarball, dir string) error {
+func Unpack(tarball, dir string, want Package) error {
 	file, err := os.Open(tarball)
 	if err != nil {
 		return err
@@ -67,7 +68,7 @@ func Unpack(tarball, dir string) error {
 		if entries > maxEntries {
 			return fmt.Errorf("update: the release has more than %d files in it", maxEntries)
 		}
-		name, err := safeName(header.Name)
+		name, err := safeName(header.Name, want.TopDir)
 		if err != nil {
 			return err
 		}
@@ -111,25 +112,25 @@ func Unpack(tarball, dir string) error {
 		}
 	}
 
-	installer := filepath.Join(dir, TopDir, "install.sh")
+	installer := filepath.Join(dir, want.TopDir, "install.sh")
 	if _, err := os.Stat(installer); err != nil {
-		return fmt.Errorf("update: that release has no %s/install.sh in it", TopDir)
+		return fmt.Errorf("update: that release has no %s/install.sh in it", want.TopDir)
 	}
 	return nil
 }
 
 // safeName is the path an entry may be written to, or an error saying why
 // it may not be written at all. An empty name is the top directory itself.
-func safeName(name string) (string, error) {
+func safeName(name, top string) (string, error) {
 	clean := path.Clean(strings.TrimPrefix(strings.ReplaceAll(name, `\`, "/"), "./"))
-	if clean == "." || clean == TopDir {
+	if clean == "." || clean == top {
 		return "", nil
 	}
 	if path.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") {
 		return "", fmt.Errorf("update: the release names a path outside itself: %s", name)
 	}
-	if clean != TopDir && !strings.HasPrefix(clean, TopDir+"/") {
-		return "", fmt.Errorf("update: the release holds %s, which is not under %s/", name, TopDir)
+	if !strings.HasPrefix(clean, top+"/") {
+		return "", fmt.Errorf("update: the release holds %s, which is not under %s/", name, top)
 	}
 	return clean, nil
 }

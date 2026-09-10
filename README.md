@@ -38,9 +38,9 @@ a cPanel server cannot destroy your backup history.
 Both run the same code for the parts that make a backup correct. See
 [ADR 7](docs/adr/0007-standalone-mode.md) for what standalone gives up.
 
-## Installing the WHM plugin
+## Installing the plugin
 
-On the cPanel server, as root:
+On the server, as root:
 
 ```bash
 curl -fsSL https://github.com/shukiv/gniza/releases/latest/download/get.sh | sh
@@ -49,6 +49,13 @@ curl -fsSL https://github.com/shukiv/gniza/releases/latest/download/get.sh | sh
 That fetches the newest release, checks it against the checksums published
 beside it, and runs the installer inside it. `GNIZA_VERSION=v1.2.3` before
 `sh` pins a particular release instead of the newest.
+
+A release publishes one package per panel and signs both in the same
+checksums: `get.sh` looks for `/usr/local/cpanel` and `/usr/local/directadmin`
+and installs the one this server is. On a machine with neither it says so
+and installs nothing. What the DirectAdmin plugin does not do yet, it says
+on the page where an operator reads it; see
+[ADR 19](docs/adr/0019-the-panel-behind-an-interface.md).
 
 Piping a script into a root shell is a reasonable thing to refuse, given what
 this one installs. The same install, read first:
@@ -77,7 +84,7 @@ Not on the **Manage Plugins** page — that lists cPanel's own RPM addons.
 A plugin registered through AppConfig appears in the sidebar, and its
 registration under **Development → Apps Managed by AppConfig**.
 
-The installer refuses anything that is not a cPanel server, installs restic
+The WHM installer refuses anything that is not a cPanel server, installs restic
 if the server has none — the version Gniza is built against, checked against
 restic's own published checksum — installs the service and the plugin,
 registers it with WHM through AppConfig, confirms WHM kept the registration,

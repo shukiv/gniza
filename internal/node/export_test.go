@@ -36,3 +36,7 @@ func BackupMessage(stored nodestore.Job) (notify.Message, bool) {
 func (e *Engine) TakeCensusForTest(ctx context.Context, now time.Time) {
 	e.takeCensus(ctx, now)
 }
+
+// InstallerWrapperForTest is the script the transient unit runs, so a
+// test can run it the way systemd would rather than a copy of it.
+const InstallerWrapperForTest = installerWrapper

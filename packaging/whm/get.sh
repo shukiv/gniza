@@ -1,5 +1,5 @@
 #!/bin/sh
-# Put Gniza on this cPanel server, from a published release.
+# Put Gniza on this server, from a published release.
 #
 #   curl -fsSL https://github.com/shukiv/gniza/releases/latest/download/get.sh | sh
 #
@@ -45,16 +45,32 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 # running the half that arrived.
 main() {
     [ "$(id -u)" = 0 ] || die "run this as root"
-    [ -d /usr/local/cpanel ] || die "this does not look like a cPanel server (/usr/local/cpanel is missing)"
 
     case "$(uname -m)" in
         x86_64) arch=amd64 ;;
         *)      die "the published builds are x86-64 only; on $(uname -m), build from source with 'make plugin'" ;;
     esac
-    # The published asset keeps the name from before the rename to Gniza,
+
+    # Which package this server takes. A release publishes one per panel,
+    # and installing the other one puts a plugin on a machine that has no
+    # panel to show it. cPanel first, so a server that somehow has both
+    # directories gets the package it has always had.
+    #
+    # The cPanel asset keeps the name from before the rename to Gniza,
     # because servers running an older release ask for it by that name.
     # See internal/update/install.go.
-    tarball=cprest-plugin-$arch.tar.gz
+    if [ -d /usr/local/cpanel ]; then
+        panel=cPanel
+        tarball=cprest-plugin-$arch.tar.gz
+        tree=cprest-plugin
+    elif [ -d /usr/local/directadmin ]; then
+        panel=DirectAdmin
+        tarball=gniza-directadmin-$arch.tar.gz
+        tree=gniza-directadmin
+    else
+        die "this does not look like a cPanel or a DirectAdmin server (neither /usr/local/cpanel nor /usr/local/directadmin is here)"
+    fi
+    say "installing the $panel package"
 
     if [ -n "${GNIZA_VERSION:-}" ]; then
         base=$RELEASES/download/$GNIZA_VERSION
@@ -117,14 +133,14 @@ main() {
     fi
 
     tar -C "$work" -xzf "$work/$tarball"
-    [ -f "$work/cprest-plugin/install.sh" ] || die "that tarball has no cprest-plugin/install.sh in it"
+    [ -f "$work/$tree/install.sh" ] || die "that tarball has no $tree/install.sh in it"
 
     # Run it through sh rather than as a program. cPanel mounts /tmp and
     # /var/tmp noexec, so a script unpacked there cannot be executed even by
     # root, whatever its mode says. Nothing in the package is executed from
     # here: the installer copies its files into place with install(1).
     say "running the installer"
-    sh "$work/cprest-plugin/install.sh"
+    sh "$work/$tree/install.sh"
 }
 
 main "$@"

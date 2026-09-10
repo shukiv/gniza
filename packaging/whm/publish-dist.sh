@@ -2,8 +2,8 @@
 # Put a signed build on the dist branch, which is what a server following
 # the work reads its updates from.
 #
-# The branch holds three files and nothing else: the plugin tarball, the
-# checksums, and the signature over them. It is written with git's plumbing
+# The branch holds four files and nothing else: a plugin tarball for each
+# panel, the checksums, and the signature over them. It is written with git's plumbing
 # rather than by checking the branch out, so the working tree this is run
 # from is not touched and no branch is switched.
 #
@@ -18,7 +18,9 @@ REMOTE=${GNIZA_DIST_REMOTE:-origin}
 say() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
-for name in cprest-plugin-amd64.tar.gz SHA256SUMS SHA256SUMS.sig; do
+FILES="cprest-plugin-amd64.tar.gz gniza-directadmin-amd64.tar.gz SHA256SUMS SHA256SUMS.sig"
+
+for name in $FILES; do
     [ -f "$BIN/$name" ] || die "$BIN/$name is missing; run make release, not this script"
 done
 
@@ -28,9 +30,9 @@ openssl dgst -sha256 -verify internal/update/release.pub \
     -signature "$BIN/SHA256SUMS.sig" "$BIN/SHA256SUMS" >/dev/null \
     || die "the checksums are not signed by the release key; nothing was published"
 
-# One tree of three blobs, made without touching the working tree.
+# One tree of those blobs, made without touching the working tree.
 tree=$(
-    for name in cprest-plugin-amd64.tar.gz SHA256SUMS SHA256SUMS.sig; do
+    for name in $FILES; do
         blob=$(git hash-object -w "$BIN/$name")
         printf '100644 blob %s\t%s\n' "$blob" "$name"
     done | git mktree

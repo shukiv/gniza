@@ -76,3 +76,73 @@ func versionExpression(t *testing.T) string {
 	}
 	return strings.TrimSpace(string(found[1]))
 }
+
+// TestTheInstallerPicksThePackageForThePanelOnTheServer covers the other
+// line of get.sh that decides what happens: which of the two published
+// packages this machine takes. Installing the wrong one puts a plugin on
+// a server with no panel to show it, and leaves the machine's own panel
+// without one -- so the choice is made from what is on the disk, and a
+// server with neither panel is told so instead of being installed onto.
+func TestTheInstallerPicksThePackageForThePanelOnTheServer(t *testing.T) {
+	block := panelExpression(t)
+
+	for _, server := range []struct {
+		name    string
+		dirs    []string
+		tarball string
+		tree    string
+	}{
+		{"cPanel", []string{"cpanel"}, "cprest-plugin-amd64.tar.gz", "cprest-plugin"},
+		{"DirectAdmin", []string{"directadmin"}, "gniza-directadmin-amd64.tar.gz", "gniza-directadmin"},
+		{"both, which keeps the package it has always had",
+			[]string{"cpanel", "directadmin"}, "cprest-plugin-amd64.tar.gz", "cprest-plugin"},
+		{"neither", nil, "", ""},
+	} {
+		t.Run(server.name, func(t *testing.T) {
+			root := t.TempDir()
+			for _, dir := range server.dirs {
+				if err := os.MkdirAll(filepath.Join(root, "usr", "local", dir), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// The block as it ships, reading the temporary machine
+			// instead of this one.
+			script := "set -eu\narch=amd64\n" +
+				"die() { printf 'error: %s\\n' \"$*\" >&2; exit 1; }\nsay() { :; }\n" +
+				strings.ReplaceAll(block, "/usr/local/", root+"/usr/local/") +
+				"\nprintf '%s %s' \"$tarball\" \"$tree\"\n"
+			out, err := exec.Command("sh", "-c", script).CombinedOutput()
+			if server.tarball == "" {
+				if err == nil {
+					t.Fatalf("a server with no panel was installed onto: %s", out)
+				}
+				if !strings.Contains(string(out), "DirectAdmin") {
+					t.Errorf("the refusal does not say what it looked for: %s", out)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("running the installer's own choice: %v: %s", err, out)
+			}
+			if got, want := string(out), server.tarball+" "+server.tree; got != want {
+				t.Errorf("the installer takes %q, and wants %q", got, want)
+			}
+		})
+	}
+}
+
+// panelExpression is the choice out of get.sh itself, so this test checks
+// the installer that ships rather than a copy of it.
+func panelExpression(t *testing.T) string {
+	t.Helper()
+	script, err := os.ReadFile(filepath.Join("..", "..", "packaging", "whm", "get.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := regexp.MustCompile(`(?s)\n( *if \[ -d /usr/local/cpanel \].*?\n *fi\n)`).
+		FindSubmatch(script)
+	if found == nil {
+		t.Fatal("get.sh no longer chooses a package in a form this test can find")
+	}
+	return string(found[1])
+}

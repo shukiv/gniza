@@ -26,35 +26,24 @@ const upgradeGivesUp = 30 * time.Minute
 
 // installerWrapper is what the transient unit runs. It takes no arguments
 // and interpolates nothing: it works from its own directory, so the only
-// thing that decides what it installs is where it was written.
+// thing that decides what it installs is where it was written, and the
+// two directory names it looks for are the two a release publishes.
 const installerWrapper = `#!/bin/sh
 # Written by gniza. Runs the installer of a release that has already been
 # checked against the release key, and records what it said.
 cd "$(dirname "$0")" || exit 1
 exec >install.log 2>&1
-sh cprest-plugin/install.sh
-echo $? > status
+# One package is unpacked here, the one published for this server's panel.
+for tree in cprest-plugin gniza-directadmin; do
+	if [ -f "$tree/install.sh" ]; then
+		sh "$tree/install.sh"
+		echo $? > status
+		exit 0
+	fi
+done
+echo "the release left no installer here"
+echo 1 > status
 `
-
-// releaseCarriesThisPanel says whether what a release holds is the plugin
-// this server runs.
-//
-// A release carries one plugin tree, cprest-plugin, and that is WHM's.
-// The DirectAdmin package is deliberately not published (ADR 0019), so on
-// that panel there is nothing here to install: running the installer
-// anyway unpacks a cPanel plugin onto a machine that has no cPanel, and
-// leaves the plugin that is actually running exactly as it was. An
-// operator told why can go and install the package by hand; one who
-// pressed a button that ran the wrong installer has to work out what it
-// did first.
-func releaseCarriesThisPanel(panelName string) error {
-	if panelName == "cPanel" {
-		return nil
-	}
-	return fmt.Errorf("a published release carries the WHM plugin only, so a %s server "+
-		"cannot install one from here; install the %s package by hand",
-		panelName, panelName)
-}
 
 // upgradeDir is where releases are unpacked, beside the staging root
 // rather than in it: staging is swept.
@@ -116,8 +105,12 @@ func (e *Engine) StartUpgrade(version string) error {
 	if err != nil {
 		return err
 	}
-	if err := releaseCarriesThisPanel(e.PanelName()); err != nil {
-		return err
+	// Which package this server takes, asked before anything is fetched:
+	// a panel a release publishes nothing for is one where the button
+	// would install another panel's plugin, and it must say so instead.
+	if _, err := update.PackageFor(e.PanelName()); err != nil {
+		return fmt.Errorf("a release publishes no package for %s, so this server cannot "+
+			"install one from here", e.PanelName())
 	}
 	switch {
 	case channel != update.ChannelDist && !update.IsRelease(version):
@@ -256,11 +249,15 @@ func (e *Engine) runUpgrade(state nodestore.UpgradeState) error {
 				update.DistBranch, published.Version)
 		}
 	}
-	tarball, err := source.Fetch(ctx, state.Version, dir)
+	want, err := update.PackageFor(e.PanelName())
 	if err != nil {
 		return err
 	}
-	if err := update.Unpack(tarball, dir); err != nil {
+	tarball, err := source.Fetch(ctx, state.Version, dir, want)
+	if err != nil {
+		return err
+	}
+	if err := update.Unpack(tarball, dir, want); err != nil {
 		return err
 	}
 	// The tarball has done its job and is 16 MB of what is now unpacked

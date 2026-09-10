@@ -50,6 +50,43 @@ const (
 	SigName     = "SHA256SUMS.sig"
 )
 
+// Package is what one panel takes out of a release: the asset published
+// for it, and the single directory that asset unpacks to.
+//
+// A release publishes one per panel and signs both in the same file. A
+// server installs the one for the panel it runs: the other one is a
+// plugin for a panel that is not there, and installing it would leave the
+// panel that is there without one.
+type Package struct {
+	Asset  string
+	TopDir string
+}
+
+// The published packages. cPanel's keeps the pre-Gniza spelling for the
+// reason above; DirectAdmin's was named after the rename and says what it
+// is.
+var (
+	WHMPackage         = Package{Asset: TarballName, TopDir: TopDir}
+	DirectAdminPackage = Package{Asset: "gniza-directadmin-amd64.tar.gz", TopDir: "gniza-directadmin"}
+)
+
+// PackageFor is the release package for a panel, by the name the panel's
+// provider goes by.
+//
+// A panel with no package is not one this server can install from here.
+// That is a refusal rather than a guess: the two packages install
+// different files in different places, and the wrong one run as root
+// would put a plugin on a machine with nothing to show it.
+func PackageFor(panelName string) (Package, error) {
+	switch panelName {
+	case "cPanel":
+		return WHMPackage, nil
+	case "DirectAdmin":
+		return DirectAdminPackage, nil
+	}
+	return Package{}, fmt.Errorf("update: a release publishes no package for %s", panelName)
+}
+
 // What is accepted off the network. A release tarball is around 16 MB and
 // the other two are a few hundred bytes; these are room to grow, not
 // estimates. Nothing here is streamed into anything that would run before
@@ -169,7 +206,7 @@ func parseKey(body []byte) (*ecdsa.PublicKey, error) {
 //
 // Nothing is unpacked here and nothing is run. What comes back is a file
 // this server has decided it can believe.
-func (s Source) Fetch(ctx context.Context, version, dir string) (string, error) {
+func (s Source) Fetch(ctx context.Context, version, dir string, want Package) (string, error) {
 	if !s.Flat && !IsRelease(version) {
 		return "", fmt.Errorf("update: %q is not a release version", version)
 	}
@@ -185,7 +222,7 @@ func (s Source) Fetch(ctx context.Context, version, dir string) (string, error) 
 		return "", fmt.Errorf("update: what is published is %s, not the %s that was asked for",
 			describe(manifest.Version), version)
 	}
-	want, err := sumFor(sums, TarballName)
+	sum, err := sumFor(sums, want.Asset)
 	if err != nil {
 		return "", err
 	}
@@ -193,14 +230,14 @@ func (s Source) Fetch(ctx context.Context, version, dir string) (string, error) 
 		return "", err
 	}
 
-	tarball := filepath.Join(dir, TarballName)
-	got, err := s.download(ctx, version, TarballName, tarball)
+	tarball := filepath.Join(dir, want.Asset)
+	got, err := s.download(ctx, version, want.Asset, tarball)
 	if err != nil {
 		return "", err
 	}
-	if got != want {
+	if got != sum {
 		_ = os.Remove(tarball)
-		return "", fmt.Errorf("update: %s does not match the signed checksum", TarballName)
+		return "", fmt.Errorf("update: %s does not match the signed checksum", want.Asset)
 	}
 	return tarball, nil
 }

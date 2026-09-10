@@ -2,6 +2,7 @@ package node_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/shukiv/gniza/internal/agent"
 	"github.com/shukiv/gniza/internal/cpanel"
 	"github.com/shukiv/gniza/internal/job"
+	"github.com/shukiv/gniza/internal/node"
 	"github.com/shukiv/gniza/internal/nodestore"
 )
 
@@ -292,19 +294,19 @@ func TestAVersionThatNamesTheDirectoryAboveIsNotInstalled(t *testing.T) {
 	}
 }
 
-// directAdminFake is the fake provider under the name of the other panel.
-// What the upgrade path needs to know about a panel is only what it is
-// called: the release names the plugin tree it carries, and there is one.
-type directAdminFake struct{ *cpanel.Fake }
+// unknownPanelFake is the fake provider under the name of a panel no
+// release publishes a package for. What the upgrade path needs to know
+// about a panel is only what it is called: the name chooses the package,
+// and a name with no package is a server that cannot install from here.
+type unknownPanelFake struct{ *cpanel.Fake }
 
-func (directAdminFake) Name() string { return "DirectAdmin" }
+func (unknownPanelFake) Name() string { return "Plesk" }
 
-// TestAnUpgradeIsRefusedWhereTheReleaseCarriesNoPluginForThisPanel: a
-// published release holds the WHM plugin and nothing else. Installing it
-// on a DirectAdmin server unpacks a cPanel plugin onto a machine with no
-// cPanel and leaves the plugin that is actually running untouched. Say so
-// instead of running it.
-func TestAnUpgradeIsRefusedWhereTheReleaseCarriesNoPluginForThisPanel(t *testing.T) {
+// TestAnUpgradeIsRefusedWhereTheReleaseCarriesNoPackageForThisPanel: a
+// release publishes one package per panel, and installing another panel's
+// puts a plugin on a machine with nothing to show it while leaving the
+// panel that is there without one. Say so instead of running it.
+func TestAnUpgradeIsRefusedWhereTheReleaseCarriesNoPackageForThisPanel(t *testing.T) {
 	root := t.TempDir()
 	store, err := nodestore.Open(filepath.Join(root, "state.db"))
 	if err != nil {
@@ -319,7 +321,7 @@ func TestAnUpgradeIsRefusedWhereTheReleaseCarriesNoPluginForThisPanel(t *testing
 		t.Fatal(err)
 	}
 	engine := newEngineOnPanel(t, store, root,
-		directAdminFake{&cpanel.Fake{Root: filepath.Join(root, "cpanel")}})
+		unknownPanelFake{&cpanel.Fake{Root: filepath.Join(root, "cpanel")}})
 
 	was := agent.Version
 	agent.Version = "v1.2.3"
@@ -333,9 +335,9 @@ func TestAnUpgradeIsRefusedWhereTheReleaseCarriesNoPluginForThisPanel(t *testing
 
 	err = engine.StartUpgrade("v1.3.0")
 	if err == nil {
-		t.Fatal("a release with no plugin for this panel was installed")
+		t.Fatal("a release with no package for this panel was installed")
 	}
-	if !strings.Contains(err.Error(), "DirectAdmin") {
+	if !strings.Contains(err.Error(), "Plesk") {
 		t.Errorf("the refusal does not say which panel this server is on: %v", err)
 	}
 	state, err := store.UpgradeState()
@@ -344,5 +346,62 @@ func TestAnUpgradeIsRefusedWhereTheReleaseCarriesNoPluginForThisPanel(t *testing
 	}
 	if !state.StartedAt.IsZero() {
 		t.Errorf("a refused upgrade was recorded as started: %+v", state)
+	}
+}
+
+// TestTheWrapperRunsTheInstallerThatWasUnpacked: the transient unit runs
+// this script as root and nothing else decides what gets installed. It
+// used to name the cPanel tree outright, so on a DirectAdmin server it
+// ran an installer that was not there. It now runs whichever package the
+// download left beside it -- there is one -- and records what it said.
+func TestTheWrapperRunsTheInstallerThatWasUnpacked(t *testing.T) {
+	for _, tree := range []string{"cprest-plugin", "gniza-directadmin"} {
+		t.Run(tree, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(dir, tree), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			installed := filepath.Join(dir, "installed")
+			if err := os.WriteFile(filepath.Join(dir, tree, "install.sh"),
+				[]byte("#!/bin/sh\necho ran > "+installed+"\nexit 0\n"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			wrapper := filepath.Join(dir, "run.sh")
+			if err := os.WriteFile(wrapper, []byte(node.InstallerWrapperForTest), 0o700); err != nil {
+				t.Fatal(err)
+			}
+
+			if out, err := exec.Command("sh", wrapper).CombinedOutput(); err != nil {
+				t.Fatalf("running the wrapper: %v: %s", err, out)
+			}
+			if _, err := os.Stat(installed); err != nil {
+				t.Errorf("the installer in %s was not run: %v", tree, err)
+			}
+			status, err := os.ReadFile(filepath.Join(dir, "status"))
+			if err != nil {
+				t.Fatalf("the wrapper recorded no status: %v", err)
+			}
+			if strings.TrimSpace(string(status)) != "0" {
+				t.Errorf("the wrapper recorded status %q", status)
+			}
+		})
+	}
+
+	// A directory with no package in it installs nothing and says so,
+	// rather than reporting the success of a script that never ran.
+	dir := t.TempDir()
+	wrapper := filepath.Join(dir, "run.sh")
+	if err := os.WriteFile(wrapper, []byte(node.InstallerWrapperForTest), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("sh", wrapper).CombinedOutput(); err != nil {
+		t.Fatalf("running the wrapper: %v: %s", err, out)
+	}
+	status, err := os.ReadFile(filepath.Join(dir, "status"))
+	if err != nil {
+		t.Fatalf("the wrapper recorded no status: %v", err)
+	}
+	if strings.TrimSpace(string(status)) == "0" {
+		t.Error("a release that unpacked no installer was recorded as installed")
 	}
 }

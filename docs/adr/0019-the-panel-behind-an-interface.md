@@ -161,6 +161,27 @@ plugin-session authentication, lifecycle isolation and new-account recovery
 remain open. These results do not authorize a production deployment or make
 the experimental package release-ready.
 
+## The DirectAdmin package is published — 2026-09-10
+
+The earlier position was that the DirectAdmin package stays off the
+releases page because it is a curl away from being run against a
+customer's server. What that produced instead was a DirectAdmin server
+whose operator ran the published one-line install and was told:
+
+    error: this does not look like a cPanel server (/usr/local/cpanel is missing)
+
+A server nobody can install onto is not a server that is protected; it is
+one that gets installed by hand from a tarball copied over ssh, without a
+signature check anybody performed. So a release now publishes
+`gniza-directadmin-amd64.tar.gz` beside `cprest-plugin-amd64.tar.gz`,
+both signed by the one `SHA256SUMS`, and `get.sh` installs whichever
+panel the server it runs on has. The in-app upgrade fetches the same
+package by the same rule.
+
+What the DirectAdmin provider still refuses to do it refuses on the
+server and says so there, which is where an operator can act on it. The
+frozen cPanel names are untouched, as this document already required.
+
 ### 8. Where the archive keeps an account's database dumps
 
 A finished restore is held to the databases the archive names, the way the

@@ -57,6 +57,23 @@ func newReleaseFor(t *testing.T, tarball []byte, version string) *release {
 	}
 }
 
+// publish adds another asset to a release and signs the checksums again,
+// the way a build that writes one line per package does.
+func (r *release) publish(t *testing.T, name string, body []byte) {
+	t.Helper()
+	sum := sha256.Sum256(body)
+	sums := append([]byte{}, r.files[SumsName]...)
+	sums = append(sums, []byte(hex.EncodeToString(sum[:])+"  "+name+"\n")...)
+	digest := sha256.Sum256(sums)
+	signature, err := ecdsa.SignASN1(rand.Reader, r.key, digest[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.files[name] = body
+	r.files[SumsName] = sums
+	r.files[SigName] = signature
+}
+
 func (r *release) serve(t *testing.T) Source {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -109,7 +126,7 @@ func TestFetchTakesASignedRelease(t *testing.T) {
 	source := published.serve(t)
 	dir := t.TempDir()
 
-	tarball, err := source.Fetch(context.Background(), "v9.9.9", dir)
+	tarball, err := source.Fetch(context.Background(), "v9.9.9", dir, WHMPackage)
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -122,7 +139,7 @@ func TestFetchTakesASignedRelease(t *testing.T) {
 	}
 
 	into := filepath.Join(dir, "unpacked")
-	if err := Unpack(tarball, into); err != nil {
+	if err := Unpack(tarball, into, WHMPackage); err != nil {
 		t.Fatalf("Unpack: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(into, "cprest-plugin", "install.sh")); err != nil {
@@ -199,7 +216,7 @@ func TestFetchRefusesWhatTheKeyDidNotSign(t *testing.T) {
 			source := published.serve(t)
 			dir := t.TempDir()
 
-			if _, err := source.Fetch(context.Background(), "v9.9.9", dir); err == nil {
+			if _, err := source.Fetch(context.Background(), "v9.9.9", dir, WHMPackage); err == nil {
 				t.Fatal("a release that should not have been believed was accepted")
 			}
 			// Nothing that failed a check is left where an installer
@@ -217,7 +234,7 @@ func TestFetchOnlyTakesReleaseVersions(t *testing.T) {
 	for _, version := range []string{
 		"", "dev", "v0.1", "v0.1.0-3-gabc1234-dirty", "../../etc", "v1.0.0/x", "v9.9.9\n", " v9.9.9",
 	} {
-		if _, err := source.Fetch(context.Background(), version, t.TempDir()); err == nil {
+		if _, err := source.Fetch(context.Background(), version, t.TempDir(), WHMPackage); err == nil {
 			t.Errorf("%q was fetched", version)
 		}
 	}
@@ -239,7 +256,7 @@ func TestUnpackRefusesWhatWritesElsewhere(t *testing.T) {
 			if err := os.WriteFile(tarball, plugin(t, entry), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if err := Unpack(tarball, filepath.Join(dir, "unpacked")); err == nil {
+			if err := Unpack(tarball, filepath.Join(dir, "unpacked"), WHMPackage); err == nil {
 				t.Fatal("the archive was unpacked")
 			}
 			if _, err := os.Stat(filepath.Join(dir, "evil")); err == nil {
@@ -269,7 +286,7 @@ func TestUnpackNeedsAnInstaller(t *testing.T) {
 	if err := os.WriteFile(tarball, buffer.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := Unpack(tarball, filepath.Join(dir, "unpacked")); err == nil {
+	if err := Unpack(tarball, filepath.Join(dir, "unpacked"), WHMPackage); err == nil {
 		t.Fatal("an archive with no installer in it was accepted")
 	}
 }
@@ -320,7 +337,7 @@ func TestFetchFollowsARedirectButNotOffHTTPS(t *testing.T) {
 		t.Cleanup(front.Close)
 
 		source := Source{Client: front.Client(), Base: front.URL, Key: &published.key.PublicKey}
-		if _, err := source.Fetch(context.Background(), "v9.9.9", t.TempDir()); err != nil {
+		if _, err := source.Fetch(context.Background(), "v9.9.9", t.TempDir(), WHMPackage); err != nil {
 			t.Fatalf("Fetch through a redirect: %v", err)
 		}
 	})
@@ -332,7 +349,7 @@ func TestFetchFollowsARedirectButNotOffHTTPS(t *testing.T) {
 		t.Cleanup(secure.Close)
 
 		source := Source{Client: secure.Client(), Base: secure.URL, Key: &published.key.PublicKey}
-		_, err := source.Fetch(context.Background(), "v9.9.9", t.TempDir())
+		_, err := source.Fetch(context.Background(), "v9.9.9", t.TempDir(), WHMPackage)
 		if err == nil {
 			t.Fatal("a download was followed off https onto a plain connection")
 		}
@@ -349,7 +366,7 @@ func TestFetchFollowsARedirectButNotOffHTTPS(t *testing.T) {
 		t.Cleanup(loop.Close)
 
 		source := Source{Client: loop.Client(), Base: loop.URL, Key: &published.key.PublicKey}
-		if _, err := source.Fetch(context.Background(), "v9.9.9", t.TempDir()); err == nil {
+		if _, err := source.Fetch(context.Background(), "v9.9.9", t.TempDir(), WHMPackage); err == nil {
 			t.Fatal("a redirect loop was followed to the end")
 		}
 	})
@@ -362,7 +379,7 @@ func TestFetchReadsOnlyOverHTTP(t *testing.T) {
 	published := newRelease(t, plugin(t))
 	for _, base := range []string{"file:///tmp", "ftp://example.com/releases", "/tmp/releases"} {
 		source := Source{Base: base, Key: &published.key.PublicKey}
-		_, err := source.Fetch(context.Background(), "v9.9.9", t.TempDir())
+		_, err := source.Fetch(context.Background(), "v9.9.9", t.TempDir(), WHMPackage)
 		if err == nil {
 			t.Errorf("%q was read from", base)
 		}
@@ -418,7 +435,7 @@ func TestDistChannelReadsTheBranch(t *testing.T) {
 		t.Errorf("built at %s, want %s", published.BuiltAt, built)
 	}
 
-	if _, err := source.Fetch(context.Background(), published.Version, t.TempDir()); err != nil {
+	if _, err := source.Fetch(context.Background(), published.Version, t.TempDir(), WHMPackage); err != nil {
 		t.Fatalf("Fetch from the branch: %v", err)
 	}
 
@@ -426,7 +443,7 @@ func TestDistChannelReadsTheBranch(t *testing.T) {
 	// if a different build is published between the page and the button,
 	// the install stops rather than fetching something else.
 	files = sign("v0.1.0-19-gdef5678", built.Add(time.Minute), plugin(t))
-	if _, err := source.Fetch(context.Background(), "v0.1.0-18-gabc1234", t.TempDir()); err == nil {
+	if _, err := source.Fetch(context.Background(), "v0.1.0-18-gabc1234", t.TempDir(), WHMPackage); err == nil {
 		t.Error("a build nobody agreed to was installed")
 	}
 
@@ -435,4 +452,82 @@ func TestDistChannelReadsTheBranch(t *testing.T) {
 	if _, err := source.Published(context.Background(), ""); err == nil {
 		t.Error("an unsigned branch build was believed")
 	}
+}
+
+// TestEachPanelTakesItsOwnPackage: a release publishes one package per
+// panel, signed in the same checksums, and a server takes the one for the
+// panel it runs. A DirectAdmin server that fetched cPanel's would install
+// a plugin for a panel that is not there and leave its own without one.
+func TestEachPanelTakesItsOwnPackage(t *testing.T) {
+	forDirectAdmin := packageFor(t, DirectAdminPackage.TopDir)
+	published := newRelease(t, plugin(t))
+	published.publish(t, DirectAdminPackage.Asset, forDirectAdmin)
+	source := published.serve(t)
+
+	if _, err := PackageFor("Plesk"); err == nil {
+		t.Error("a panel a release publishes nothing for was given a package")
+	}
+	want, err := PackageFor("DirectAdmin")
+	if err != nil {
+		t.Fatalf("PackageFor(DirectAdmin): %v", err)
+	}
+
+	dir := t.TempDir()
+	tarball, err := source.Fetch(context.Background(), "v9.9.9", dir, want)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	if filepath.Base(tarball) != DirectAdminPackage.Asset {
+		t.Errorf("a DirectAdmin server downloaded %s", filepath.Base(tarball))
+	}
+	into := filepath.Join(dir, "unpacked")
+	if err := Unpack(tarball, into, want); err != nil {
+		t.Fatalf("Unpack: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(into, DirectAdminPackage.TopDir, "install.sh")); err != nil {
+		t.Errorf("the DirectAdmin installer is not there: %v", err)
+	}
+
+	// And the two do not stand in for one another: the cPanel package
+	// unpacked as DirectAdmin's is a directory that is not the one being
+	// asked for, whatever it holds.
+	if err := Unpack(filepath.Join(dir, "wrong.tar.gz"), into, want); err == nil {
+		t.Error("a tarball that is not there unpacked")
+	}
+	whm := filepath.Join(dir, WHMPackage.Asset)
+	if err := os.WriteFile(whm, published.files[TarballName], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Unpack(whm, filepath.Join(dir, "crossed"), want); err == nil {
+		t.Error("a DirectAdmin server unpacked the cPanel package")
+	}
+}
+
+// packageFor is a tarball shaped like a release for one panel: one top
+// directory, named for that package, with the installer in it.
+func packageFor(t *testing.T, top string) []byte {
+	t.Helper()
+	var buffer bytes.Buffer
+	zipped := gzip.NewWriter(&buffer)
+	archive := tar.NewWriter(zipped)
+	for name, body := range map[string]string{
+		top + "/install.sh":  "#!/bin/sh\nexit 0\n",
+		top + "/gniza-agent": "not really a binary",
+	} {
+		if err := archive.WriteHeader(&tar.Header{
+			Name: name, Mode: 0o755, Size: int64(len(body)), Typeflag: tar.TypeReg,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := archive.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := zipped.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buffer.Bytes()
 }

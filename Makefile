@@ -39,7 +39,7 @@ build:
 # an older release have those spellings compiled in and ask for exactly them;
 # see internal/update/install.go. Everything inside the tarball is named
 # gniza.
-plugin:
+plugin: directadmin-package
 	# From scratch every time. This directory is assembled by copying into
 	# it, so a file that was in the package yesterday and is not in it today
 	# stays there and ships -- which is how a build after the rename to
@@ -67,14 +67,22 @@ plugin:
 	@# for one release cannot be published again under another tag. sha256sum
 	@# ignores a line beginning with #, and so does everything that reads
 	@# this.
+	@# Both packages are signed by the one file: get.sh downloads the one
+	@# for the panel it finds and checks it against these lines, so a
+	@# release that signs only cPanel's leaves a DirectAdmin server with
+	@# nothing it can verify.
 	cd $(BIN) && { printf '# cprest %s %s\n' '$(VERSION)' '$(BUILT_AT)'; \
-		sha256sum cprest-plugin-$(PLUGIN_ARCH).tar.gz get.sh; } > SHA256SUMS
+		sha256sum cprest-plugin-$(PLUGIN_ARCH).tar.gz \
+			gniza-directadmin-$(PLUGIN_ARCH).tar.gz get.sh; } > SHA256SUMS
 	@echo
-	@echo "built $(BIN)/cprest-plugin-$(PLUGIN_ARCH).tar.gz, $(BIN)/get.sh and $(BIN)/SHA256SUMS"
-	@echo "copy it to the cPanel server:"
-	@echo "  scp $(BIN)/cprest-plugin-$(PLUGIN_ARCH).tar.gz root@your-server:/root/"
+	@echo "built $(BIN)/cprest-plugin-$(PLUGIN_ARCH).tar.gz, $(BIN)/gniza-directadmin-$(PLUGIN_ARCH).tar.gz,"
+	@echo "$(BIN)/get.sh and $(BIN)/SHA256SUMS"
+	@echo "copy the one for the panel to the server:"
+	@echo "  scp $(BIN)/cprest-plugin-$(PLUGIN_ARCH).tar.gz root@your-cpanel-server:/root/"
+	@echo "  scp $(BIN)/gniza-directadmin-$(PLUGIN_ARCH).tar.gz root@your-directadmin-server:/root/"
 	@echo "then there, as root:"
 	@echo "  tar xzf cprest-plugin-$(PLUGIN_ARCH).tar.gz && cprest-plugin/install.sh"
+	@echo "  tar xzf gniza-directadmin-$(PLUGIN_ARCH).tar.gz && sh gniza-directadmin/install.sh"
 
 # Publish this build to the dist branch, signed.
 #
@@ -88,11 +96,12 @@ plugin:
 # from the repository and never written into one.
 # The DirectAdmin package.
 #
-# It is deliberately not part of a release. The DirectAdmin provider backs
-# up a whole account and refuses everything that needs an answer only a
-# running DirectAdmin can give (ADR 0019), and a package on the releases
-# page is one curl away from being run against a customer's server. This
-# target builds it for whoever is doing that verification.
+# It is published beside the cPanel one, and get.sh installs whichever the
+# server it runs on is: a DirectAdmin server told to install by hand what
+# a release does not carry is a server that does not get installed. What
+# the DirectAdmin provider still refuses to do, it refuses on the server
+# and says so there (ADR 0019); a package nobody can fetch does not make
+# that any safer.
 directadmin-package:
 	rm -rf $(BIN)/gniza-directadmin
 	mkdir -p $(BIN)/gniza-directadmin/directadmin
@@ -127,7 +136,7 @@ directadmin-package:
 	find $(BIN)/gniza-directadmin -type d -exec chmod 00755 {} +
 	tar -C $(BIN) --owner=0 --group=0 --numeric-owner --mode='u+rwX,go+rX,go-w' \
 		-czf $(BIN)/gniza-directadmin-$(PLUGIN_ARCH).tar.gz gniza-directadmin
-	@echo "built $(BIN)/gniza-directadmin-$(PLUGIN_ARCH).tar.gz -- unfinished, see ADR 0019"
+	@echo "built $(BIN)/gniza-directadmin-$(PLUGIN_ARCH).tar.gz"
 
 # The same plugin in the shape DirectAdmin's own plugin manager takes: a
 # tar.gz of the plugin's files with nothing wrapped around them. The

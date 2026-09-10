@@ -43,7 +43,10 @@ jobs:
       - name: Known vulnerabilities
         run: make vuln
 
-      - name: Build the plugin tarball
+      # Both packages: "make plugin" builds the DirectAdmin one as well,
+      # because get.sh installs whichever panel the server it runs on has
+      # and both are checked against the one signed SHA256SUMS.
+      - name: Build the plugin tarballs
         run: make plugin
 
       # And check the artifact itself, not only the source it was built
@@ -98,6 +101,7 @@ jobs:
           fi
           gh release create "$GITHUB_REF_NAME" "$@" \
             bin/cprest-plugin-amd64.tar.gz \
+            bin/gniza-directadmin-amd64.tar.gz \
             bin/SHA256SUMS \
             bin/SHA256SUMS.sig \
             bin/get.sh

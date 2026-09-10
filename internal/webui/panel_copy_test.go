@@ -78,12 +78,12 @@ func TestTheCPanelPagesStillNameCPanelsOwnMechanisms(t *testing.T) {
 	}
 }
 
-// TestTheVersionCardOffersNoInstallOnAnotherPanel:
-// a published release carries the WHM plugin, so the button that installs
-// one would install the wrong plugin on a DirectAdmin server. The card
-// still says what has been released -- an operator who reads it can
-// install the package by hand -- and does not offer to do it from here.
-func TestTheVersionCardOffersNoInstallOnAnotherPanel(t *testing.T) {
+// TestTheVersionCardOffersTheInstallOnEitherPanel: a release publishes a
+// package per panel, so a DirectAdmin server installs from here exactly
+// as a cPanel one does. This is the page half of that -- a card that
+// names a release and offers no way to install it leaves an operator
+// looking for a command nobody wrote down.
+func TestTheVersionCardOffersTheInstallOnEitherPanel(t *testing.T) {
 	client, _, engine := newUIOnDirectAdmin(t)
 	// The card offers an install only over a released build, so this is
 	// one: with a development version running, nothing is ever offered
@@ -106,10 +106,7 @@ func TestTheVersionCardOffersNoInstallOnAnotherPanel(t *testing.T) {
 	if !strings.Contains(page, "v99.0.0") {
 		t.Fatal("the card does not say what has been released, so this proves nothing")
 	}
-	if strings.Contains(page, "settings/update/install") {
-		t.Error("a DirectAdmin server is offered the WHM plugin to install")
-	}
-	if !strings.Contains(page, "by hand") {
-		t.Error("the card does not say how to install it instead")
+	if !strings.Contains(page, "settings/update/install") {
+		t.Error("a DirectAdmin server is not offered the release it could install")
 	}
 }

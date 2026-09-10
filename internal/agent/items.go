@@ -566,7 +566,17 @@ func checkDatabaseDumps(names []string, present map[string]bool,
 	if len(names) == 0 {
 		return nil, nil, "", errors.New("agent: no database was named to restore")
 	}
+	// One name is one database however many times it was asked for. A
+	// repeat used to be created twice: the first CreateDatabase
+	// succeeded, the second was refused as already existing, and the run
+	// stopped before the dumps were loaded -- leaving the account with a
+	// newly made empty database and a report saying the restore failed.
+	seen := make(map[string]bool, len(names))
 	for _, name := range names {
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
 		dump := filepath.Join(databases, name+".sql")
 		if _, err := os.Stat(dump); err != nil {
 			return nil, nil, fmt.Sprintf(

@@ -71,13 +71,19 @@ func PanelURL(confPath string) (string, error) {
 		}
 	}
 
-	// ssl=1 is what a real host has. A panel serving plain HTTP is
-	// reached over plain HTTP: the session already travels in clear to
-	// reach that panel at all, and speaking https to something not
-	// listening for it reaches nothing.
-	scheme := "https"
-	if values["ssl"] == "0" {
-		scheme = "http"
+	// Only ssl=1 is SSL, which is how DirectAdmin reads its own file:
+	// the line is absent until somebody turns SSL on, and until then the
+	// panel serves plain HTTP. Assuming https for a missing line asked
+	// an unencrypted panel a question in a language it does not speak --
+	// "http: server gave HTTP response to HTTPS client" -- and the page
+	// could not find out who was looking at it.
+	//
+	// A panel serving plain HTTP is reached over plain HTTP: the session
+	// already travels in clear to reach that panel at all, and speaking
+	// https to something not listening for it reaches nothing.
+	scheme := "http"
+	if values["ssl"] == "1" {
+		scheme = "https"
 	}
 	return fmt.Sprintf("%s://%s:%d", scheme, name, port), nil
 }

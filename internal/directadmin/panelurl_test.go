@@ -45,6 +45,21 @@ func TestThePanelIsReachedAtTheNameItCallsItself(t *testing.T) {
 			want: "http://panel.example.invalid:2222",
 		},
 		{
+			// DirectAdmin writes no ssl line until somebody turns SSL
+			// on, and serves plain HTTP until then. A server-182 host
+			// installed in September 2026 had no such line and answered
+			// nothing at all on https, so the plugin page could not ask
+			// who was looking at it:
+			//
+			//   http: server gave HTTP response to HTTPS client
+			//
+			// Absent is off, which is what DirectAdmin itself does with
+			// it.
+			name: "no ssl line at all",
+			conf: "servername=panel.example.invalid\n",
+			want: "http://panel.example.invalid:2222",
+		},
+		{
 			name: "spaces and comments",
 			conf: "# the panel\n servername = panel.example.invalid \n\nssl=1\n",
 			want: "https://panel.example.invalid:2222",

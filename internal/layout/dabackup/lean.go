@@ -2,6 +2,7 @@ package dabackup
 
 import (
 	"archive/tar"
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -450,11 +451,8 @@ func (Layout) AddMetadataMember(dir, name string) error {
 	if !stat.Mode().IsRegular() {
 		return fmt.Errorf("dabackup: record %s: not a regular file", name)
 	}
-	member := Member{
-		Name: clean, Typeflag: tar.TypeReg, Mode: 0o600,
-		Uname: "root", Gname: "root",
-		ModTime: stat.ModTime(), Size: stat.Size(), Body: body,
-	}
+	member := recordMember(&manifest, clean, tar.TypeReg, 0o644)
+	member.ModTime, member.Size, member.Body = stat.ModTime(), stat.Size(), body
 	for i, existing := range manifest.Outer.Members {
 		if existingClean, err := safeMemberName(existing.Name); err == nil && existingClean == clean {
 			manifest.Outer.Members[i] = member
@@ -463,6 +461,143 @@ func (Layout) AddMetadataMember(dir, name string) error {
 	}
 	manifest.Outer.Members = append(manifest.Outer.Members, member)
 	return writeManifest(dir, manifest)
+}
+
+// recordMember is a member of backup/ made here rather than by
+// DirectAdmin, owned the way DirectAdmin owns the rest of backup/: by the
+// account, which is read off user.conf's own header. DirectAdmin's own
+// archive writes roundcube.xml, the mailbox limits and the imap marker
+// as <account>:<account> mode 644, measured on 1.709 on 2026-09-11.
+func recordMember(manifest *Manifest, name string, typeflag byte, mode int64) Member {
+	member := Member{Name: name, Typeflag: typeflag, Mode: mode, ModTime: time.Now()}
+	for _, existing := range manifest.Outer.Members {
+		if path.Clean(existing.Name) == path.Join(BackupDir, UserConf) {
+			member.UID, member.GID = existing.UID, existing.GID
+			member.Uname, member.Gname = existing.Uname, existing.Gname
+			break
+		}
+	}
+	// An account's user and group carry its name.
+	if member.Uname == "" {
+		member.Uname = manifest.Account
+	}
+	if member.Gname == "" {
+		member.Gname = manifest.Account
+	}
+	return member
+}
+
+// directImapMarker is the member DirectAdmin's restore reads before it
+// reads the messages out of imap/: without it, imap/ is not extracted,
+// however much is in it. DirectAdmin's own backup writes one per domain
+// with email_data, which a lean backup leaves out, and a rebuilt archive
+// without them restored an account on 2026-09-11 with every message
+// left behind while DirectAdmin's own archive of the same account put
+// them back. Its body is the mailbox count, as DirectAdmin writes it.
+const directImapMarker = ".direct_imap_backup"
+
+// sayItsMailIsDirect writes the marker for every domain whose messages
+// the rebuilt archive carries under imap/, into the tree and into the
+// manifest with that domain's other records, before the account's own
+// directories.
+func sayItsMailIsDirect(root *os.Root, manifest *Manifest) error {
+	var domains []string
+	seen := map[string]bool{}
+	for _, member := range manifest.Outer.Members {
+		clean := path.Clean(member.Name)
+		first, rest, _ := strings.Cut(clean, "/")
+		if first != MailDir || rest == "" {
+			continue
+		}
+		domain, _, _ := strings.Cut(rest, "/")
+		if !seen[domain] {
+			seen[domain] = true
+			domains = append(domains, domain)
+		}
+	}
+	for _, domain := range domains {
+		if err := writeDirectImapMarker(root, manifest, domain); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeDirectImapMarker(root *os.Root, manifest *Manifest, domain string) error {
+	records := path.Join(BackupDir, domain)
+	data := path.Join(records, "email", "data")
+	marker := path.Join(data, "imap", directImapMarker)
+	// num_emails is the mailboxes in that domain's passwd, which the
+	// lean archive carries because "email" was asked for.
+	count := 0
+	if file, err := root.Open(treePath(path.Join(records, "email", "passwd"), false)); err == nil {
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			if strings.TrimSpace(scanner.Text()) != "" {
+				count++
+			}
+		}
+		file.Close()
+	}
+	body := []byte("num_emails=" + strconv.Itoa(count) + "\n")
+	target := treePath(marker, false)
+	if err := root.MkdirAll(path.Dir(target), 0o700); err != nil {
+		return fmt.Errorf("dabackup: write %s: %w", marker, err)
+	}
+	if err := writeFileIn(root, target, body); err != nil {
+		return fmt.Errorf("dabackup: write %s: %w", marker, err)
+	}
+	// With that domain's other records; failing any, at the end of
+	// backup/, which is still before the account's own directories.
+	have := map[string]bool{}
+	last, lastRecord := -1, -1
+	for i, member := range manifest.Outer.Members {
+		clean := path.Clean(member.Name)
+		have[clean] = true
+		if clean == records || strings.HasPrefix(clean, records+"/") {
+			last = i
+		}
+		if first, _, _ := strings.Cut(clean, "/"); first == BackupDir && !member.Nested {
+			lastRecord = i
+		}
+	}
+	if last < 0 {
+		last = lastRecord
+	}
+	var added []Member
+	for _, dir := range []string{records, path.Join(records, "email"), data, path.Join(data, "imap")} {
+		if !have[dir] {
+			added = append(added, recordMember(manifest, dir+"/", tar.TypeDir, 0o700))
+		}
+	}
+	file := recordMember(manifest, marker, tar.TypeReg, 0o644)
+	file.Size, file.Body = int64(len(body)), target
+	if have[marker] {
+		for i, member := range manifest.Outer.Members {
+			if path.Clean(member.Name) == marker {
+				manifest.Outer.Members[i] = file
+			}
+		}
+		return nil
+	}
+	added = append(added, file)
+	members := append([]Member{}, manifest.Outer.Members[:last+1]...)
+	members = append(members, added...)
+	manifest.Outer.Members = append(members, manifest.Outer.Members[last+1:]...)
+	return nil
+}
+
+// writeFileIn writes one file under the tree, replacing what is there.
+func writeFileIn(root *os.Root, name string, body []byte) error {
+	file, err := root.OpenFile(name, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	_, err = file.Write(body)
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	return err
 }
 
 // sayItHoldsEverything rewrites backup_options.list in the tree, so the

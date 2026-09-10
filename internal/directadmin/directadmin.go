@@ -83,6 +83,9 @@ type Real struct {
 	// ones an administrator put in front of those. Empty means the
 	// installation's own.
 	ScriptsDir string
+	// VirtualDir is where DirectAdmin keeps each domain's mail records
+	// that are not the messages: /etc/virtual by default.
+	VirtualDir string
 	// ReadHomeInPlace asks this server for the shape ADR 0021 describes:
 	// a backup of everything except the account's own files, which restic
 	// reads from /home where they already are. It is asked for one server
@@ -115,6 +118,13 @@ func (r *Real) binary() string {
 		return r.BinaryPath
 	}
 	return defaultBinary
+}
+
+func (r *Real) virtualDir() string {
+	if r.VirtualDir != "" {
+		return r.VirtualDir
+	}
+	return "/etc/virtual"
 }
 
 func (r *Real) scriptsDir() string {
@@ -821,6 +831,45 @@ func (r *Real) exportWebmail(ctx context.Context, account, staging string) []str
 		if err := (dabackup.Layout{}).AddMetadataMember(staging, member); err != nil {
 			os.Remove(xml)
 			warnings = append(warnings, "the webmail data for "+domain+" is not in this backup: "+err.Error())
+		}
+		warnings = append(warnings, r.copyMailboxLimits(domain, staging)...)
+	}
+	return warnings
+}
+
+// copyMailboxLimits puts the per-mailbox send limits into the metadata
+// part at backup/<domain>/email/data/limit/<mailbox>, which is where
+// DirectAdmin's own backup files them under email_data and where its
+// restore reads them. The live ones are in /etc/virtual/<domain>/limit/.
+func (r *Real) copyMailboxLimits(domain, staging string) []string {
+	source := filepath.Join(r.virtualDir(), domain, "limit")
+	entries, err := os.ReadDir(source)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return []string{"the mailbox send limits for " + domain + " are not in this backup: " + err.Error()}
+	}
+	dir := filepath.Join(dabackup.MetadataPart(staging), dabackup.BackupDir, domain, "email", "data", "limit")
+	var warnings []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.Type().IsRegular() || strings.ContainsAny(name, "/\\") || strings.HasPrefix(name, ".") {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Join(source, name))
+		if err == nil {
+			err = os.MkdirAll(dir, 0o700)
+		}
+		if err == nil {
+			err = os.WriteFile(filepath.Join(dir, name), body, 0o600)
+		}
+		if err == nil {
+			err = (dabackup.Layout{}).AddMetadataMember(staging,
+				path.Join(dabackup.BackupDir, domain, "email", "data", "limit", name))
+		}
+		if err != nil {
+			warnings = append(warnings, "the send limit for "+name+"@"+domain+" is not in this backup: "+err.Error())
 		}
 	}
 	return warnings

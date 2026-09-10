@@ -499,3 +499,74 @@ func TestALinkedFileIsCarriedAsALink(t *testing.T) {
 		t.Errorf(".php/index.html is not a whole file in the nested archive: %v", header)
 	}
 }
+
+// DirectAdmin's restore reads the messages out of imap/ only when
+// backup/<domain>/email/data/imap/.direct_imap_backup says they are
+// there; its own backup writes that marker with email_data, which a lean
+// backup leaves out. A rebuilt archive without it restored an account on
+// 2026-09-11 with every message left behind, while DirectAdmin's own
+// archive of the same account put them back.
+func TestTheRebuiltArchiveSaysItsMailIsDirect(t *testing.T) {
+	dir := t.TempDir()
+	archive := writeLeanArchive(t, "gzv0908a", map[string]string{
+		path.Join(BackupDir, fixtureDomain, "email", "passwd"): "sales:x\nsupport:y\n",
+	})
+	if err := (Layout{}).UnpackLeanArchive(context.Background(), archive, "gzv0908a", dir); err != nil {
+		t.Fatal(err)
+	}
+	homeTree(t, dir)
+	rebuilt, err := (Layout{}).PackArchive(context.Background(), dir, "gzv0908a", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := path.Join(BackupDir, fixtureDomain, "email", "data", "imap", ".direct_imap_backup")
+	body, header := memberBody(t, rebuilt, marker)
+	if header == nil {
+		t.Fatalf("the rebuilt archive does not carry %s, so DirectAdmin's restore will leave the messages behind", marker)
+	}
+	if string(body) != "num_emails=2\n" {
+		t.Errorf("%s says %q, want the mailbox count as DirectAdmin writes it, %q", marker, body, "num_emails=2\n")
+	}
+	if header.Uname != "gzv0908a" || header.Mode != 0o644 {
+		t.Errorf("%s is %s mode %o, want the account's own like the rest of backup/, mode 644", marker, header.Uname, header.Mode)
+	}
+	// And it is with that domain's other records, before the account's
+	// own directories, where DirectAdmin's restore reads it in order.
+	outer, _ := members(t, rebuilt)
+	at, home := -1, -1
+	for i, name := range outer {
+		switch {
+		case path.Clean(name) == marker:
+			at = i
+		case isNestedHomeArchive(path.Clean(name), tar.TypeReg):
+			home = i
+		}
+	}
+	if at > home {
+		t.Errorf("%s is at %d, after the home archive at %d: %v", marker, at, home, outer)
+	}
+}
+
+// memberBody reads one regular member of the outer archive.
+func memberBody(t *testing.T, archive, name string) ([]byte, *tar.Header) {
+	t.Helper()
+	f, err := os.Open(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	tr := tar.NewReader(f)
+	for {
+		header, err := tr.Next()
+		if err != nil {
+			return nil, nil
+		}
+		if path.Clean(header.Name) == name {
+			body, err := io.ReadAll(tr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return body, header
+		}
+	}
+}

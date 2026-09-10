@@ -466,3 +466,53 @@ func TestALeanRunReservesOneCopyInTheNativeWorkspace(t *testing.T) {
 		t.Fatalf("a lean backup was refused the room for two copies of its dumps: %v", err)
 	}
 }
+
+// The per-mailbox send limits are filed under email_data as well, at
+// backup/<domain>/email/data/limit/<mailbox>, and DirectAdmin keeps the
+// live ones in /etc/virtual/<domain>/limit/. They are copied in from
+// there, so a restore puts the limits back with the mailboxes.
+func TestALeanBackupKeepsTheMailboxSendLimits(t *testing.T) {
+	r := nativeHost(t)
+	r.ReadHomeInPlace = true
+	r.ScriptsDir = filepath.Join(t.TempDir(), "scripts")
+	roundcubeScript(t, r.ScriptsDir, "backup_roundcube.php", echoingRoundcube)
+	r.VirtualDir = t.TempDir()
+	domainConf(t, r, "studio", "studio.example")
+	limits := filepath.Join(r.VirtualDir, "studio.example", "limit")
+	if err := os.MkdirAll(limits, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"sales": "1", "studio": "200"} {
+		if err := os.WriteFile(filepath.Join(limits, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	staging := privateStaging(t)
+	payload, err := r.Stage(t.Context(), panel.StageRequest{
+		Account: panel.AccountInfo{User: "studio"}, StagingDir: staging, Mode: pkgacct.ModeSplit,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := os.ReadFile(filepath.Join(dabackup.MetadataPart(staging), dabackup.ManifestFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{"sales": "1", "studio": "200"} {
+		member := "backup/studio.example/email/data/limit/" + name
+		body, err := os.ReadFile(filepath.Join(dabackup.MetadataPart(staging), filepath.FromSlash(member)))
+		if err != nil {
+			t.Errorf("no send limit for %s where DirectAdmin's restore looks for it: %v", name, err)
+			continue
+		}
+		if string(body) != want {
+			t.Errorf("%s: limit %q, want %q", name, body, want)
+		}
+		if !strings.Contains(string(manifest), member) {
+			t.Errorf("the manifest does not record %s, so the rebuilt archive will not carry it", member)
+		}
+	}
+	if len(payload.Warnings) != 0 {
+		t.Errorf("a backup whose limits were copied warns: %v", payload.Warnings)
+	}
+}

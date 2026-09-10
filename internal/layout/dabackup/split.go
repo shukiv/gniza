@@ -511,6 +511,9 @@ func (Layout) PackArchive(ctx context.Context, dir, account, outDir string) (str
 		if err := hydrate(dir, &manifest); err != nil {
 			return "", err
 		}
+		if err := sayItsMailIsDirect(root, &manifest); err != nil {
+			return "", err
+		}
 		if err := sayItHoldsEverything(root, &manifest); err != nil {
 			return "", err
 		}

@@ -206,6 +206,16 @@ func (r *Real) NativeExcludes(home string) []string {
 		// server-182-54-236-143.da.direct it was 12 GiB of a 20 GiB
 		// account.
 		"application_backups",
+		// And the file manager's own trash, which is files the customer
+		// deleted. It is not the account's data in the sense the rest of
+		// this list is not: nobody asked for it to be kept, and it is
+		// where a root-owned file is most likely to sit unnoticed --
+		// three of the four on pager on
+		// server-182-54-236-143.da.direct were in it, 1.3 GiB of a 20
+		// GiB account. A root-owned member stops DirectAdmin's restore
+		// at that point, so a file the customer threw away would stand
+		// between them and the files they kept.
+		".trash",
 	}
 	excludes := make([]string, 0, len(skipped))
 	for _, name := range skipped {

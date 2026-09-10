@@ -184,3 +184,21 @@ func TestTheAccountsApplicationBackupsAreLeftOut(t *testing.T) {
 			"backup of a backup is stored every night: %v", excludes)
 	}
 }
+
+// The file manager's trash is deleted files, and on the validation host
+// it was 1.3 GiB of a 20 GiB account -- three of whose four foreign-owned
+// files were in it. DirectAdmin's restore unpacks the home as the
+// account, so a root-owned member in the trash stops the restore of
+// everything after it: files the customer threw away, standing between
+// them and the files they kept.
+func TestTheFileManagersTrashIsLeftOut(t *testing.T) {
+	excludes := (&Real{}).NativeExcludes("/home/studio")
+	found := false
+	for _, exclude := range excludes {
+		found = found || exclude == "/home/studio/.trash"
+	}
+	if !found {
+		t.Errorf("the file manager's trash is backed up, so deleted files are "+
+			"stored and can stop a restore: %v", excludes)
+	}
+}

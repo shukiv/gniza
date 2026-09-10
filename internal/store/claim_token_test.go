@@ -50,7 +50,7 @@ func TestALateBackupReportCannotFinishTheNextAttempt(t *testing.T) {
 		[]store.TargetReport{
 			{RepositoryID: f.repoA.ID, Status: job.TargetFailed, Error: "connection reset"},
 			{RepositoryID: f.repoB.ID, Status: job.TargetFailed, Error: "connection reset"},
-		}, ""); !errors.Is(err, store.ErrNotFound) {
+		}, store.JobOutcome{}); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("the abandoned attempt reported and got %v, want ErrNotFound", err)
 	}
 	status, err := f.db.JobStatus(ctx, jobID)
@@ -66,7 +66,7 @@ func TestALateBackupReportCannotFinishTheNextAttempt(t *testing.T) {
 		[]store.TargetReport{
 			{RepositoryID: f.repoA.ID, Status: job.TargetSuccess, SnapshotID: "aaa"},
 			{RepositoryID: f.repoB.ID, Status: job.TargetSuccess, SnapshotID: "bbb"},
-		}, "")
+		}, store.JobOutcome{})
 	if err != nil {
 		t.Fatalf("the running attempt could not report: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestAReportWithoutATokenIsRefused(t *testing.T) {
 	}
 	for _, token := range []string{"", "not-a-token", "40dc1520"} {
 		if _, err := f.db.ApplyReport(ctx, f.serverID, jobID, token, nil,
-			"staging: need 8192 bytes free, have 512"); err == nil {
+			store.JobOutcome{StagingError: "staging: need 8192 bytes free, have 512"}); err == nil {
 			t.Errorf("token %q was accepted", token)
 		}
 	}

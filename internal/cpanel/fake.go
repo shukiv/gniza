@@ -51,6 +51,10 @@ type Fake struct {
 	// that needs a backup which stored everything and may still not
 	// restore in full.
 	Warnings []string
+	// Missing is what every staged payload reports it had to leave out,
+	// for a test that needs a backup with a hole in it without breaking
+	// a database to make one.
+	Missing []pkgacct.Omission
 	// PutBackHome and LoadedDatabases record what was written back into
 	// live accounts, for a test that needs to know a restore did more than
 	// leave a copy behind.
@@ -229,6 +233,7 @@ func (f *Fake) Stage(ctx context.Context, req panel.StageRequest) (pkgacct.Paylo
 		}
 	}
 	payload.Warnings = f.Warnings
+	payload.Missing = append(payload.Missing, f.Missing...)
 	return payload, nil
 }
 

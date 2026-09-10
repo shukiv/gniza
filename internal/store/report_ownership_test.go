@@ -36,7 +36,7 @@ func TestOneServerCannotReportOnAnothersWork(t *testing.T) {
 		// The intruder even knows the claim token, which is the strongest
 		// version of this: what refuses it is whose server it is.
 		if _, err := f.db.ApplyReport(ctx, intruder, jobID, claimed.ClaimToken, nil,
-			"staging: need 8192 bytes free, have 512"); err == nil {
+			store.JobOutcome{StagingError: "staging: need 8192 bytes free, have 512"}); err == nil {
 			t.Error("another server failed this server's backup")
 		}
 		status, err := f.db.JobStatus(ctx, jobID)
@@ -52,7 +52,7 @@ func TestOneServerCannotReportOnAnothersWork(t *testing.T) {
 			[]store.TargetReport{
 				{RepositoryID: f.repoA.ID, Status: job.TargetSuccess, SnapshotID: "40dc1520"},
 				{RepositoryID: f.repoB.ID, Status: job.TargetSuccess, SnapshotID: "40dc1521"},
-			}, ""); err != nil {
+			}, store.JobOutcome{}); err != nil {
 			t.Fatalf("the owning server could not report: %v", err)
 		}
 	})

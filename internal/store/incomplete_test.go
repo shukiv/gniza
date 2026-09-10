@@ -22,7 +22,7 @@ func TestIncompleteFleetReportsAreNotSuccessfulCopies(t *testing.T) {
 	status, err := f.db.ApplyReport(ctx, f.serverID, id, claimed.ClaimToken, []store.TargetReport{
 		{RepositoryID: f.repoA.ID, Status: job.TargetSuccess, SnapshotID: "aaaaaaaaaaaaaaaa", Incomplete: true},
 		{RepositoryID: f.repoB.ID, Status: job.TargetFailed},
-	}, "")
+	}, store.JobOutcome{})
 	if err != nil {
 		t.Fatal(err)
 	}

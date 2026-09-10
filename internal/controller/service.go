@@ -286,7 +286,12 @@ func (s *Service) Report(ctx context.Context, serverID string, report protocol.J
 		})
 	}
 
-	status, err := s.store.ApplyReport(ctx, serverID, report.JobID, report.ClaimToken, targets, report.StagingError)
+	status, err := s.store.ApplyReport(ctx, serverID, report.JobID, report.ClaimToken, targets,
+		store.JobOutcome{
+			StagingError: report.StagingError,
+			Missing:      report.Missing,
+			Warnings:     report.Warnings,
+		})
 	if err != nil {
 		return "", err
 	}
@@ -302,6 +307,17 @@ func (s *Service) Report(ctx context.Context, serverID string, report protocol.J
 	s.log.Log(ctx, level, "job reported",
 		"server_id", serverID, "job_id", report.JobID, "status", status,
 		"targets", len(report.Targets), "staging_error", report.StagingError)
+	// One line each, and at a level an operator watching for trouble
+	// will see: a job that stored everything but one database is not a
+	// failure, and the count alone does not say which database it was.
+	for _, omission := range report.Missing {
+		s.log.Warn("left out of the backup",
+			"server_id", serverID, "job_id", report.JobID, "what", omission)
+	}
+	for _, warning := range report.Warnings {
+		s.log.Warn("this backup may not restore in full",
+			"server_id", serverID, "job_id", report.JobID, "why", warning)
+	}
 	return status, nil
 }
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/shukiv/gniza/internal/agent"
 	"github.com/shukiv/gniza/internal/job"
+	"github.com/shukiv/gniza/internal/pkgacct"
 	"github.com/shukiv/gniza/internal/protocol"
 	"github.com/shukiv/gniza/internal/resticrun"
 	"github.com/shukiv/gniza/internal/store"
@@ -489,3 +490,44 @@ var (
 	_ = agent.ErrNoWork
 	_ = resticrun.ErrNoSummary
 )
+
+// TestWhatTheBackupCouldNotTakeReachesTheFleet is the fleet half of what
+// standalone mode has held since it was written. An agent reports what it
+// had to leave out and what it took but may not be able to put back; a
+// controller that accepts the report and drops both leaves the operator
+// with a job marked successful and no record of either.
+func TestWhatTheBackupCouldNotTakeReachesTheFleet(t *testing.T) {
+	h := newHarness(t)
+	ctx := h.ctx
+
+	if _, err := h.maintenance.ProvisionPending(ctx); err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+	h.provider.Missing = []pkgacct.Omission{
+		{What: "database customer1_shop", Why: "Lost connection to MySQL server (2013)"},
+	}
+	h.provider.Warnings = []string{
+		"1 file is owned by another account and will stop the restore, " +
+			"the first of them public_html/wp-config.php",
+	}
+
+	jobID, err := h.db.CreateJob(ctx, h.accountID, h.policyID)
+	if err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	report := runOneJob(t, h, jobID)
+	if len(report.Missing) != 1 || len(report.Warnings) != 1 {
+		t.Fatalf("the agent reported missing=%v warnings=%v", report.Missing, report.Warnings)
+	}
+
+	notes, err := h.db.JobNotes(ctx, jobID)
+	if err != nil {
+		t.Fatalf("read job notes: %v", err)
+	}
+	if len(notes.Missing) != 1 || !strings.Contains(notes.Missing[0], "customer1_shop") {
+		t.Errorf("what the backup left out is not on the job: %v", notes.Missing)
+	}
+	if len(notes.Warnings) != 1 || !strings.Contains(notes.Warnings[0], "wp-config.php") {
+		t.Errorf("what the backup may not restore is not on the job: %v", notes.Warnings)
+	}
+}

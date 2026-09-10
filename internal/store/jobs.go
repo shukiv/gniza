@@ -216,12 +216,31 @@ type TargetReport struct {
 	Error          string
 }
 
+// JobOutcome is what an agent says about the run as a whole, as opposed
+// to about one repository.
+type JobOutcome struct {
+	// StagingError describes a failure before any target was attempted,
+	// such as insufficient disk for pkgacct.
+	StagingError string
+	// Missing is what the payload could not include, one line each.
+	Missing []string
+	// Warnings is what it holds and a restore may not put back.
+	Warnings []string
+}
+
+// JobNotes is what a finished job recorded about its payload.
+type JobNotes struct {
+	Missing  []string
+	Warnings []string
+}
+
 // ApplyReport records target outcomes and rolls the job up.
 //
 // The rollup is computed here from the stored rows rather than taken from
 // the agent: a compromised or buggy agent must not be able to declare a
 // job successful.
-func (s *Store) ApplyReport(ctx context.Context, serverID, jobID, claimToken string, reports []TargetReport, stagingError string) (job.Status, error) {
+func (s *Store) ApplyReport(ctx context.Context, serverID, jobID, claimToken string, reports []TargetReport, outcome JobOutcome) (job.Status, error) {
+	stagingError := outcome.StagingError
 	var status job.Status
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
 		// Whose job this is, and whether that server is running it now.
@@ -270,13 +289,19 @@ func (s *Store) ApplyReport(ctx context.Context, serverID, jobID, claimToken str
 		}
 		status = job.Rollup(stored)
 
+		// The attempt that just reported replaces what an earlier one
+		// said rather than adding to it: a retry that found the database
+		// again must not leave the account still listed as missing it.
 		if _, err := tx.Exec(ctx, `
 			UPDATE backup_jobs SET
 			    status = $2::job_status,
 			    lease_expires_at = NULL,
 			    claim_token = NULL,
+			    missing = coalesce($4::text[], '{}'),
+			    warnings = coalesce($5::text[], '{}'),
 			    finished_at = CASE WHEN $3 THEN now() ELSE finished_at END
-			 WHERE id = $1`, jobID, string(status), status.Terminal()); err != nil {
+			 WHERE id = $1`, jobID, string(status), status.Terminal(),
+			outcome.Missing, outcome.Warnings); err != nil {
 			return fmt.Errorf("store: update job status: %w", err)
 		}
 		return nil
@@ -361,6 +386,22 @@ func (s *Store) JobStatus(ctx context.Context, jobID string) (job.Status, error)
 		return "", fmt.Errorf("store: read job status: %w", err)
 	}
 	return job.Status(status), nil
+}
+
+// JobNotes reads what a job recorded about its payload: what the backup
+// left out, and what it holds that a restore may not put back.
+func (s *Store) JobNotes(ctx context.Context, jobID string) (JobNotes, error) {
+	var notes JobNotes
+	err := s.pool.QueryRow(ctx,
+		`SELECT missing, warnings FROM backup_jobs WHERE id = $1`, jobID).
+		Scan(&notes.Missing, &notes.Warnings)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return notes, ErrNotFound
+	}
+	if err != nil {
+		return notes, fmt.Errorf("store: read job notes: %w", err)
+	}
+	return notes, nil
 }
 
 // JobTargets reads the recorded outcome of every target on a job.

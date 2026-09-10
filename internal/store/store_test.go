@@ -197,7 +197,7 @@ func TestJobLifecycle(t *testing.T) {
 			{RepositoryID: f.repoA.ID, Status: job.TargetSuccess,
 				SnapshotID: "40dc1520", BytesAdded: 1024, BytesProcessed: 4096, DurationSecs: 1.5},
 			{RepositoryID: f.repoB.ID, Status: job.TargetFailed, Error: "connection timeout"},
-		}, "")
+		}, store.JobOutcome{})
 	if err != nil {
 		t.Fatalf("ApplyReport: %v", err)
 	}
@@ -250,7 +250,7 @@ func TestClaimRetriesOnlyFailedTargets(t *testing.T) {
 		[]store.TargetReport{
 			{RepositoryID: f.repoA.ID, Status: job.TargetSuccess, SnapshotID: "aaa"},
 			{RepositoryID: f.repoB.ID, Status: job.TargetFailed, Error: "timeout"},
-		}, ""); err != nil {
+		}, store.JobOutcome{}); err != nil {
 		t.Fatalf("ApplyReport: %v", err)
 	}
 
@@ -290,7 +290,7 @@ func TestStagingErrorFailsEveryTarget(t *testing.T) {
 	}
 
 	status, err := f.db.ApplyReport(ctx, f.serverID, jobID, claimed.ClaimToken, nil,
-		"staging: need 8192 bytes free, have 512")
+		store.JobOutcome{StagingError: "staging: need 8192 bytes free, have 512"})
 	if err != nil {
 		t.Fatalf("ApplyReport: %v", err)
 	}
@@ -431,7 +431,7 @@ func TestOnlyOneRunningJobPerAccount(t *testing.T) {
 		[]store.TargetReport{
 			{RepositoryID: f.repoA.ID, Status: job.TargetSuccess, SnapshotID: "aaa"},
 			{RepositoryID: f.repoB.ID, Status: job.TargetSuccess, SnapshotID: "bbb"},
-		}, ""); err != nil {
+		}, store.JobOutcome{}); err != nil {
 		t.Fatalf("ApplyReport: %v", err)
 	}
 	if _, err := f.db.ClaimNextJob(ctx, f.serverID, time.Minute); err != nil {
@@ -532,7 +532,7 @@ func TestRestoreWaitsForARunningBackup(t *testing.T) {
 		[]store.TargetReport{
 			{RepositoryID: f.repoA.ID, Status: job.TargetSuccess, SnapshotID: "aaa"},
 			{RepositoryID: f.repoB.ID, Status: job.TargetSuccess, SnapshotID: "bbb"},
-		}, ""); err != nil {
+		}, store.JobOutcome{}); err != nil {
 		t.Fatalf("ApplyReport: %v", err)
 	}
 	if _, err := f.db.ClaimNextRestore(ctx, f.serverID, time.Minute); err != nil {

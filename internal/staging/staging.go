@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -28,6 +29,15 @@ type Manager struct {
 	// MaxConcurrent caps simultaneously staged accounts so several large
 	// accounts cannot collectively exhaust the volume.
 	MaxConcurrent int
+
+	// mu makes the space check and the directory that follows it one
+	// operation, so two accounts cannot each be told there is room.
+	mu sync.Mutex
+	// reserved is what each allocated directory said it would need,
+	// by path. Space committed to and not yet written is not free for
+	// the next account: two accounts each checked against the whole
+	// volume both passed and together needed more than it holds.
+	reserved map[string]uint64
 }
 
 // Dir is an allocated staging directory.
@@ -96,10 +106,16 @@ func (m *Manager) Allocate(key string, estimatedBytes uint64) (*Dir, error) {
 	if m.SafetyMarginRatio > 0 {
 		required = uint64(float64(estimatedBytes) * (1 + m.SafetyMarginRatio))
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	available, err := AvailableBytes(m.Root)
 	if err != nil {
 		return nil, err
 	}
+	// What another account has committed to and not yet written is not
+	// there for this one, however much the filesystem still says is free.
+	available -= min(available, m.outstanding())
 	if available < required {
 		return nil, &ErrInsufficientSpace{Required: required, Available: available}
 	}
@@ -126,7 +142,43 @@ func (m *Manager) Allocate(key string, estimatedBytes uint64) (*Dir, error) {
 		// half-written tree.
 		return nil, fmt.Errorf("staging: create %s: %w", path, err)
 	}
+	if m.reserved == nil {
+		m.reserved = map[string]uint64{}
+	}
+	m.reserved[path] = required
 	return &Dir{Path: path, Key: key}, nil
+}
+
+// outstanding is what allocated directories have committed to and have
+// not written yet. Called with mu held.
+//
+// A reservation shrinks as its directory fills: the bytes already on
+// disk are counted by the filesystem too, and counting them twice would
+// refuse work the volume has room for. A directory that has gone takes
+// its reservation with it.
+func (m *Manager) outstanding() uint64 {
+	var total uint64
+	for path, required := range m.reserved {
+		written, err := treeBytes(path)
+		if err != nil {
+			// Removed, renamed, or unreadable. None of those is a reason
+			// to hold space for it.
+			delete(m.reserved, path)
+			continue
+		}
+		if required > written {
+			total += required - written
+		}
+	}
+	return total
+}
+
+// forget drops a directory's reservation: what it holds is on the disk
+// now, or gone from it.
+func (m *Manager) forget(path string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.reserved, path)
 }
 
 // List returns every staging directory, in progress or retained.
@@ -242,6 +294,9 @@ func (m *Manager) Retain(dir *Dir) (*Dir, error) {
 	if err := os.Rename(dir.Path, target); err != nil {
 		return nil, fmt.Errorf("staging: retain %s: %w", dir.Path, err)
 	}
+	// Finished output rather than work in progress: what it holds is
+	// written, and the filesystem counts it from here on.
+	m.forget(dir.Path)
 	return &Dir{Path: target, Key: dir.Key, Retained: true}, nil
 }
 
@@ -321,6 +376,7 @@ func (m *Manager) Release(dir *Dir) error {
 	if err := os.RemoveAll(dir.Path); err != nil {
 		return fmt.Errorf("staging: remove %s: %w", dir.Path, err)
 	}
+	m.forget(dir.Path)
 	return nil
 }
 

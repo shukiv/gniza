@@ -341,3 +341,54 @@ func TestKeysAllowTheSystemNameAndNothingDangerous(t *testing.T) {
 		}
 	}
 }
+
+// With MaxConcurrent above one, two accounts stage at the same time, and
+// each was checked against the whole free volume as though it were the
+// only one: two accounts estimated at 30 GiB each both passed on a disk
+// with 53 GiB free, and together they needed more than it holds. What a
+// directory has committed to and not yet written has to count against
+// the next request.
+func TestASecondAccountIsCheckedAgainstWhatTheFirstReserved(t *testing.T) {
+	root := t.TempDir()
+	free, err := AvailableBytes(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := &Manager{Root: root, MaxConcurrent: 4}
+
+	// Three fifths each: one fits on its own, two do not fit together.
+	tooBigTogether := free / 5 * 3
+	first, err := manager.Allocate("first", tooBigTogether)
+	if err != nil {
+		t.Fatalf("the first account could not be staged on an empty volume: %v", err)
+	}
+	var full *ErrInsufficientSpace
+	if _, err := manager.Allocate("second", tooBigTogether); !errors.As(err, &full) {
+		t.Errorf("two accounts needing more than the volume holds were both staged: %v", err)
+	}
+
+	// What the first one gave back is free again.
+	if err := manager.Release(first); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Allocate("second", tooBigTogether); err != nil {
+		t.Errorf("the space the first account gave back was not offered to the second: %v", err)
+	}
+}
+
+// And the reservation is not a second concurrency limit: accounts that
+// do fit together still stage together.
+func TestAccountsThatFitTogetherStageTogether(t *testing.T) {
+	root := t.TempDir()
+	free, err := AvailableBytes(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := &Manager{Root: root, MaxConcurrent: 4}
+	small := free / 8
+	for _, key := range []string{"one", "two", "three"} {
+		if _, err := manager.Allocate(key, small); err != nil {
+			t.Fatalf("staging %s: %v", key, err)
+		}
+	}
+}

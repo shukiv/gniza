@@ -324,3 +324,56 @@ Two things follow:
   is where the restore looks. A domain whose export fails is a warning
   on the backup, not a refusal: the files, the records, the messages and
   the databases are all there, and the page says what is not.
+
+## The drill — 2026-09-11
+
+Run on `182.54.236.10` against the disposable account `gzv0908a`, with
+the `_aware` fields above: a lean backup, a rebuild left on the server,
+and DirectAdmin's own restore applied over the live account. Four things
+were seeded first and then changed in place rather than deleted -- a
+database row, a file in `domains/` and one in the home directory, a
+Roundcube contact, and a message, which was moved into a side folder of
+its Maildir -- so that what came back could be told from what was
+already there.
+
+The rebuilt archive was right: `backup/` with `roundcube.xml` in it,
+`home.tar.zst`, `domains/`, `imap/` with the message under
+`Maildir/new/`, and `backup_options.list` naming the full set.
+DirectAdmin's restore reported `Account gzv0908a has been restored`, and
+put back the database row, both files and the contact. It left every
+message behind.
+
+DirectAdmin's own archive of the same account, taken and restored the
+same way with the message moved aside in between, put the message back.
+The two archives differ in eleven members, all of them filed under
+`email_data`, and one of them is what the restore reads before it reads
+`imap/`:
+
+    backup/<domain>/email/data/imap/.direct_imap_backup
+
+Its body is `num_emails=<mailboxes>`. The binary carries the string
+`direct_imap_backup extraction command`, and without the file `imap/` is
+not extracted, however much is in it. The repack writes one now for
+every domain whose messages the archive carries, with that domain's
+other records, owned like the rest of `backup/`; because it is written
+at repack time rather than backup time, the snapshots already taken in
+this shape restore their mail as well. The same applied restore of the
+same snapshot, run again from the new build, brought the message back
+with the other three.
+
+The other members are the per-mailbox send limits,
+`backup/<domain>/email/data/limit/<mailbox>`, which the provider now
+copies in from `/etc/virtual/<domain>/limit/` at backup time beside the
+webmail export; `backup/email_data/webmail/`, an empty directory; and
+`backup/apache_owned_files.list`, empty on this account and not yet
+understood.
+
+Two things the drill did not settle. DirectAdmin's `restore_roundcube.php`
+adds the archived contacts to the mailbox's address book rather than
+replacing it, so a restore over a live account leaves the changed
+contact beside the restored one: a property of DirectAdmin's restore,
+not of the archive. And the restore was of a 300 KB account; what a
+20 GB one needs in scratch is the subject of `cprest-rzd`.
+
+The flag has now been run on two servers. It stays until the release
+that carries this is on both of them.

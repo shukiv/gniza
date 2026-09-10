@@ -347,15 +347,10 @@ func planGroups(plan resticrun.ForgetPlan) []nodestore.RetentionGroup {
 
 // recordRetention updates one repository's retention state.
 func (e *Engine) recordRetention(repositoryID string, update func(*nodestore.RetentionState)) error {
-	stored, err := e.store.Repository(repositoryID)
-	if err != nil {
-		return err
-	}
-	update(&stored.Retention)
-	if _, err := e.store.PutRepository(stored); err != nil {
-		return err
-	}
-	return nil
+	_, err := e.store.ChangeRepository(repositoryID, func(repo *nodestore.Repository) {
+		update(&repo.Retention)
+	})
+	return err
 }
 
 // sweepRetention looks at one repository that is due, on the scheduler

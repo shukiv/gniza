@@ -299,13 +299,17 @@ func (s *Store) Repositories() ([]Repository, error) {
 
 // MarkRepositoryInitialised records that "restic init" succeeded.
 func (s *Store) MarkRepositoryInitialised(id string) error {
-	repo, err := s.Repository(id)
-	if err != nil {
-		return err
-	}
-	now := time.Now().UTC()
-	repo.InitialisedAt = &now
-	return s.put(bucketRepositories, id, repo)
+	_, err := s.ChangeRepository(id, func(repo *Repository) {
+		now := time.Now().UTC()
+		repo.InitialisedAt = &now
+	})
+	return err
+}
+
+// ChangeRepository alters one repository in place, reading and writing it
+// inside one transaction so a concurrent writer's change is not lost.
+func (s *Store) ChangeRepository(id string, apply func(*Repository)) (Repository, error) {
+	return change(s, bucketRepositories, id, apply)
 }
 
 // --- policies ---
@@ -355,13 +359,11 @@ func (s *Store) DeletePolicy(id string) error { return s.delete(bucketPolicies, 
 // SetPolicyLastRun records a firing, so a restart neither skips a window
 // nor replays past ones.
 func (s *Store) SetPolicyLastRun(id string, at time.Time) error {
-	policy, err := s.Policy(id)
-	if err != nil {
-		return err
-	}
 	at = at.UTC()
-	policy.LastRunAt = &at
-	return s.put(bucketPolicies, id, policy)
+	_, err := change(s, bucketPolicies, id, func(policy *Policy) {
+		policy.LastRunAt = &at
+	})
+	return err
 }
 
 // --- notification channels ---
@@ -463,28 +465,22 @@ func (s *Store) PutJobs(jobs []Job) ([]Job, error) {
 // arriving late must not reopen it, and a percentage beside a finished
 // restore would be read as one still running.
 func (s *Store) SetRestoreProgress(id string, progress RestoreProgress) error {
-	stored, err := s.Restore(id)
-	if err != nil {
-		return err
-	}
-	if stored.Status.Terminal() {
-		return nil
-	}
-	stored.Progress = &progress
-	_, err = s.PutRestore(stored)
+	_, err := change(s, bucketRestores, id, func(stored *Restore) {
+		if stored.Status.Terminal() {
+			return
+		}
+		stored.Progress = &progress
+	})
 	return err
 }
 
 func (s *Store) SetJobProgress(id string, progress JobProgress) error {
-	stored, err := s.Job(id)
-	if err != nil {
-		return err
-	}
-	if stored.Status.Terminal() {
-		return nil
-	}
-	stored.Progress = &progress
-	_, err = s.PutJob(stored)
+	_, err := change(s, bucketJobs, id, func(stored *Job) {
+		if stored.Status.Terminal() {
+			return
+		}
+		stored.Progress = &progress
+	})
 	return err
 }
 

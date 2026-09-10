@@ -619,3 +619,65 @@ func TestForgettingAnAccountLeavesNothingOfIt(t *testing.T) {
 		t.Errorf("kept %d jobs and %d restores", len(jobs), len(restores))
 	}
 }
+
+// Two writers to one record is normal here: the scheduler records a
+// firing on its tick while the operator saves an edit from the page.
+// Both read the policy, change their own field and write the whole
+// record back, so whichever writes second writes the other's change
+// away -- a disable that vanishes while the page says the schedule was
+// updated, or a LastRunAt that reverts and queues every account on the
+// policy for a second backup tonight.
+func TestARecordedFiringDoesNotUndoAnEdit(t *testing.T) {
+	store := newStore(t)
+	policy, err := store.PutPolicy(nodestore.Policy{Name: "nightly", Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stop, firing, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var firingErr error
+	go func() {
+		defer close(done)
+		first := true
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			if err := store.SetPolicyLastRun(policy.ID, time.Now()); err != nil {
+				firingErr = err
+				return
+			}
+			if first {
+				close(firing)
+				first = false
+			}
+		}
+	}()
+
+	<-firing
+	time.Sleep(5 * time.Millisecond)
+	edited := policy
+	edited.Enabled = false
+	if _, err := store.PutPolicy(edited); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(5 * time.Millisecond)
+	close(stop)
+	<-done
+	if firingErr != nil {
+		t.Fatal(firingErr)
+	}
+
+	after, err := store.Policy(policy.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Enabled {
+		t.Error("the schedule was disabled, and a recorded firing turned it back on")
+	}
+	if after.LastRunAt == nil {
+		t.Error("the firing was not recorded")
+	}
+}

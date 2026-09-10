@@ -96,6 +96,40 @@ func (s *Store) put(bucket []byte, id string, value any) error {
 	})
 }
 
+// change applies one change to one record inside a single transaction.
+//
+// A read in one transaction followed by a write in a later one is a lost
+// update: two writers each read the record, each alter their own field,
+// and whichever writes second writes the other's change away. The
+// scheduler, the queue and the pages run as concurrent goroutines over
+// one store, so two writers at one record is ordinary rather than rare.
+// A schedule disabled from the page came back on when the scheduler
+// recorded a firing it had read before the edit.
+func change[T any](s *Store, bucket []byte, id string, apply func(*T)) (T, error) {
+	var record T
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(bucket)
+		raw := b.Get([]byte(id))
+		if raw == nil {
+			return ErrNotFound
+		}
+		if err := json.Unmarshal(raw, &record); err != nil {
+			return fmt.Errorf("nodestore: decode %s/%s: %w", bucket, id, err)
+		}
+		apply(&record)
+		encoded, err := json.Marshal(record)
+		if err != nil {
+			return fmt.Errorf("nodestore: encode %s: %w", bucket, err)
+		}
+		return b.Put([]byte(id), encoded)
+	})
+	if err != nil {
+		var nothing T
+		return nothing, err
+	}
+	return record, nil
+}
+
 // get reads one JSON document.
 func (s *Store) get(bucket []byte, id string, target any) error {
 	return s.db.View(func(tx *bolt.Tx) error {

@@ -216,32 +216,40 @@ func (e *Engine) ApproveRetention(repositoryID string) error {
 		return err
 	}
 	// A schedule edited between reading the plan and pressing approve
-	// would otherwise be approved sight unseen. Refuse now rather than
-	// store an approval that the next run has to reject anyway.
-	if keeps != stored.Retention.PlannedKeeps {
+	// would otherwise be approved sight unseen. Refuse rather than store
+	// an approval that the next run has to reject anyway -- and decided
+	// inside the transaction that writes it, where a plan the sweep
+	// recorded a moment ago is the plan being approved.
+	now := time.Now().UTC()
+	var planned nodestore.Retention
+	refused := false
+	if _, err := e.store.ChangeRepository(repositoryID, func(repo *nodestore.Repository) {
+		if keeps != repo.Retention.PlannedKeeps {
+			refused, planned = true, repo.Retention.PlannedKeeps
+			return
+		}
+		repo.RetentionApprovedAt = &now
+		repo.RetentionApprovedKeeps = keeps
+	}); err != nil {
+		return err
+	}
+	if refused {
 		return fmt.Errorf(
 			"node: the schedules changed while this plan was on screen (they now keep "+
 				"%s, and the plan was taken with %s), so plan it again and approve "+
 				"what it says",
-			describeKeeps(keeps), describeKeeps(stored.Retention.PlannedKeeps))
+			describeKeeps(keeps), describeKeeps(planned))
 	}
-	now := time.Now().UTC()
-	stored.RetentionApprovedAt = &now
-	stored.RetentionApprovedKeeps = keeps
-	_, err = e.store.PutRepository(stored)
-	return err
+	return nil
 }
 
 // WithdrawRetention stops retention deleting anything from a repository
 // again until it is approved afresh.
 func (e *Engine) WithdrawRetention(repositoryID string) error {
-	stored, err := e.store.Repository(repositoryID)
-	if err != nil {
-		return err
-	}
-	stored.RetentionApprovedAt = nil
-	stored.RetentionApprovedKeeps = nodestore.Retention{}
-	_, err = e.store.PutRepository(stored)
+	_, err := e.store.ChangeRepository(repositoryID, func(repo *nodestore.Repository) {
+		repo.RetentionApprovedAt = nil
+		repo.RetentionApprovedKeeps = nodestore.Retention{}
+	})
 	return err
 }
 

@@ -334,3 +334,82 @@ func TestARepositoryThatCannotBeOpenedStopsBeingTriedEveryTick(t *testing.T) {
 			"so the sweep tries it on every tick and reaches nothing else")
 	}
 }
+
+// Withdrawing an approval is the one control that stops retention
+// deleting anything, and the sweep writes to the same record on its own
+// tick. Both read the repository, change their own field and write the
+// whole record back, so a sweep that read the record before the
+// withdrawal puts the approval back when it records what it found -- and
+// the next apply deletes snapshots under an approval nobody holds.
+func TestAWithdrawnApprovalIsNotPutBackByTheSweep(t *testing.T) {
+	root := t.TempDir()
+	store, err := nodestore.Open(filepath.Join(root, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	settings := nodestore.DefaultSettings()
+	settings.StagingRoot = filepath.Join(root, "staging")
+	settings.ResticCache = filepath.Join(root, "cache")
+	settings.ConfigDir = filepath.Join(root, "config")
+	if err := store.SaveSettings(settings); err != nil {
+		t.Fatal(err)
+	}
+	engine := newEngine(t, store, root)
+
+	keeps := nodestore.Retention{KeepDaily: 7}
+	approved := time.Now().UTC()
+	repo, err := store.PutRepository(nodestore.Repository{
+		Path: "repo", DestinationID: "gone",
+		RetentionApprovedAt: &approved, RetentionApprovedKeeps: keeps,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PutPolicy(nodestore.Policy{
+		Name: "Nightly", ScheduleCron: "0 2 * * *", Enabled: true,
+		RepositoryIDs: []string{repo.ID}, Retention: keeps,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The destination is gone, so every plan fails and records why --
+	// which is a write to the same record the withdrawal writes to.
+	stop, swept, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(done)
+		first := true
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			_, _ = engine.PlanRetention(context.Background(), repo.ID)
+			if first {
+				close(swept)
+				first = false
+			}
+		}
+	}()
+
+	<-swept
+	time.Sleep(5 * time.Millisecond)
+	if err := engine.WithdrawRetention(repo.ID); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(5 * time.Millisecond)
+	close(stop)
+	<-done
+
+	after, err := store.Repository(repo.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.RetentionApprovedAt != nil {
+		t.Error("the approval was withdrawn and the sweep put it back")
+	}
+	if after.RetentionApprovedKeeps != (nodestore.Retention{}) {
+		t.Errorf("the approved keeps came back as %+v", after.RetentionApprovedKeeps)
+	}
+}

@@ -60,31 +60,41 @@ func TestStagingEstimateFollowsWhatIsActuallyStaged(t *testing.T) {
 	for _, tc := range []struct {
 		what     string
 		size     uint64
+		lean     uint64
 		mode     pkgacct.Mode
 		layout   panel.ArchiveLayout
 		provider any
 		want     uint64
 	}{
-		{"a monolithic backup stages the whole account", 10 * gigabyte, pkgacct.ModeMonolithic, cpmove.Layout{}, nil, 10 * gigabyte},
-		{"an unset mode is monolithic", 10 * gigabyte, "", cpmove.Layout{}, nil, 10 * gigabyte},
-		{"a split backup stages a fraction", 10 * gigabyte, pkgacct.ModeSplit, cpmove.Layout{}, nil, 2 * gigabyte},
-		{"a small split account still gets room to work", 100 << 20, pkgacct.ModeSplit, cpmove.Layout{}, nil, 512 << 20},
-		{"an account of no known size gets the floor", 0, pkgacct.ModeSplit, cpmove.Layout{}, nil, 512 << 20},
+		{"a monolithic backup stages the whole account", 10 * gigabyte, 0, pkgacct.ModeMonolithic, cpmove.Layout{}, nil, 10 * gigabyte},
+		{"an unset mode is monolithic", 10 * gigabyte, 0, "", cpmove.Layout{}, nil, 10 * gigabyte},
+		{"a split backup stages a fraction", 10 * gigabyte, 0, pkgacct.ModeSplit, cpmove.Layout{}, nil, 2 * gigabyte},
+		{"a small split account still gets room to work", 100 << 20, 0, pkgacct.ModeSplit, cpmove.Layout{}, nil, 512 << 20},
+		{"an account of no known size gets the floor", 0, 0, pkgacct.ModeSplit, cpmove.Layout{}, nil, 512 << 20},
 		// A panel that will not produce the parts stages the whole
 		// account and then takes it apart, so it is on the disk twice at
 		// the peak rather than a fifth of it being there at all.
 		{"a split backup of an archive panel stages the account twice",
-			10 * gigabyte, pkgacct.ModeSplit, dabackup.Layout{}, nil, 20 * gigabyte},
+			10 * gigabyte, 0, pkgacct.ModeSplit, dabackup.Layout{}, nil, 20 * gigabyte},
 		{"and a small one still gets room to work",
-			100 << 20, pkgacct.ModeSplit, dabackup.Layout{}, nil, 512 << 20},
+			100 << 20, 0, pkgacct.ModeSplit, dabackup.Layout{}, nil, 512 << 20},
 		// Until the same panel is found to produce an archive without
 		// the account's own files in it, at which point staging holds
 		// what it holds on cPanel and reserving the account twice
 		// refuses backups that would have fitted easily.
-		{"an archive panel that reads the home directory in place stages a fraction",
-			10 * gigabyte, pkgacct.ModeSplit, dabackup.Layout{}, inPlace{}, 2 * gigabyte},
+		// It stages what such a panel writes, which is not a share of
+		// the account: the archive without the account's own files in
+		// it, and that archive taken apart beside it. An account whose
+		// bulk is mail needs more than a fifth of itself; one whose bulk
+		// is files on disk needs far less.
+		{"an archive panel that reads the home directory in place stages what it writes",
+			10 * gigabyte, 4 * gigabyte, pkgacct.ModeSplit, dabackup.Layout{}, inPlace{}, 8 * gigabyte},
+		{"a mostly-web account staging its mail and dumps",
+			10 * gigabyte, gigabyte, pkgacct.ModeSplit, dabackup.Layout{}, inPlace{}, 2 * gigabyte},
+		{"an account with nothing but its records still gets room to work",
+			10 * gigabyte, 0, pkgacct.ModeSplit, dabackup.Layout{}, inPlace{}, 512 << 20},
 	} {
-		if got := stagingEstimate(tc.size, tc.mode, tc.layout, tc.provider); got != tc.want {
+		if got := stagingEstimate(tc.size, tc.lean, tc.mode, tc.layout, tc.provider); got != tc.want {
 			t.Errorf("%s: estimate = %d, want %d", tc.what, got, tc.want)
 		}
 	}

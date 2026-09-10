@@ -583,3 +583,43 @@ func TestASweepLeavesAWorkspaceThatIsInUse(t *testing.T) {
 		t.Errorf("a workspace in use was removed: %v", err)
 	}
 }
+
+// The staging preflight for a backup that reads the home in place needs
+// what that backup writes, which is the mail and the database dumps and
+// nothing else under the home. Measured in the same walk that measures
+// the account, because a second walk of a 19.7 GiB home costs what this
+// exists to save.
+func TestAccountAlsoMeasuresWhatALeanBackupWrites(t *testing.T) {
+	r := fakeHost(t, "studio")
+	r.MysqlPath = filepath.Join(t.TempDir(), "mysql")
+	script := "#!/bin/sh\ncase \"$*\" in\n*information_schema.tables*) printf '1024\\n';;\n*) printf 'studio_wp\\n';;\nesac\n"
+	if err := os.WriteFile(r.MysqlPath, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(r.HomeRoot, "studio")
+	if err := os.MkdirAll(filepath.Join(home, "imap", "studio.example", "sales", "Maildir", "cur"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "imap", "studio.example", "sales", "Maildir", "cur", "1"), []byte("message"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Under the home and not in a lean archive: restic reads it in place.
+	if err := os.WriteFile(filepath.Join(home, "domains", "big"), make([]byte, 5000), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Nor is a sibling whose name begins with the mail directory's.
+	if err := os.WriteFile(filepath.Join(home, "imap-old"), make([]byte, 900), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	info, err := r.Account(t.Context(), "studio")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.SizeBytes != 6931 {
+		t.Errorf("the account measures %d bytes, want 6931", info.SizeBytes)
+	}
+	// The message and the databases, not the 5000 bytes under domains/.
+	if info.LeanBytes != 1031 {
+		t.Errorf("a lean backup is reserved %d bytes, want 1031", info.LeanBytes)
+	}
+}

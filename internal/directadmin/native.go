@@ -497,6 +497,11 @@ func (r *Real) stageNative(ctx context.Context, account, staging string, reserve
 	return archive, nil
 }
 
+// leanStagingFloor is what a lean archive costs before its mail and its
+// dumps: the account's records. 153,600 bytes on the fixture ADR 0021
+// measured, and a margin for a server whose records are larger.
+const leanStagingFloor = 64 << 20
+
 func nativeSpace(dir string, size, copies uint64) error {
 	const reserve = 1 << 30
 	if size > (^uint64(0)-reserve)/copies {

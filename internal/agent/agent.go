@@ -391,7 +391,7 @@ func (a *Agent) RunJob(ctx context.Context, assignment protocol.JobAssignment) p
 	if assignment.SizeEstimate > size {
 		size = assignment.SizeEstimate
 	}
-	estimate := stagingEstimate(size, pkgacct.Mode(assignment.PayloadMode), a.provider.Layout(), a.provider)
+	estimate := stagingEstimate(size, account.LeanBytes, pkgacct.Mode(assignment.PayloadMode), a.provider.Layout(), a.provider)
 	if system {
 		// Configuration files and an EasyApache profile: megabytes, and
 		// the same every night.
@@ -582,15 +582,28 @@ const (
 // and taken apart there, so at the peak the account is on that disk
 // twice -- once compressed and once not -- and a fifth of it is the
 // estimate that lets a run fill the disk instead of being refused.
-func stagingEstimate(size uint64, mode pkgacct.Mode, layout panel.ArchiveLayout, provider any) uint64 {
+func stagingEstimate(size, lean uint64, mode pkgacct.Mode, layout panel.ArchiveLayout, provider any) uint64 {
 	if mode != pkgacct.ModeSplit {
 		// One archive of the whole account, written into staging.
 		return size
 	}
 	share := uint64(float64(size) * splitStagingShare)
 	inPlace, asked := provider.(panel.InPlaceReader)
-	if _, packs := layout.(panel.ArchivePacker); packs && !(asked && inPlace.ReadsHomeInPlace()) {
-		share = 2 * size
+	if _, packs := layout.(panel.ArchivePacker); packs {
+		if asked && inPlace.ReadsHomeInPlace() {
+			// The archive such a panel writes without the account's own
+			// files in it, and that archive taken apart beside it. Both
+			// are what the panel writes, not a share of the account:
+			// an account whose bulk is mail needs more than a fifth of
+			// itself, and one whose bulk is files on disk needs far
+			// less. See ADR 0021.
+			if lean > ^uint64(0)/2 {
+				return ^uint64(0)
+			}
+			share = 2 * lean
+		} else {
+			share = 2 * size
+		}
 	}
 	if share < splitStagingFloor {
 		return splitStagingFloor

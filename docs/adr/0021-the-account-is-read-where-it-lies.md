@@ -76,6 +76,19 @@ the same setting: if it does, the `imap/` a rebuild hands it would be
 ignored and the messages would not come back. An eighth of one night is
 the cheaper side of that question until someone answers it.
 
+## The global switches are not this
+
+`directadmin.conf` has `skip_hometargz_in_backups`,
+`skip_domains_in_backups`, `skip_imap_in_backups` and
+`skip_databases_in_backups`, all `0` by default, and they leave the same
+things out of an archive that the selection above leaves out. They are
+not the same decision. They change every backup the server makes, its
+own included, and an administrator who set one would find the panel's
+own backups no longer carrying what they used to. The selection is per
+run and per account, posted as `what=select` on the task line; nothing
+in `directadmin.conf` changes and the server's own backups are
+untouched. Gniza uses the selection and does not set the switches.
+
 ## Decision
 
 1. A DirectAdmin backup asks for every option except `domain`, through
@@ -181,17 +194,53 @@ measured; either way a DirectAdmin restore wants a group pass after it.
 - `stagingEstimate` can no longer key on the layout being an
   `ArchivePacker`, because the same layout now packs or does not
   depending on what the server was found to support.
-- The staging estimate is the whole account's size, which is more than
-  a backup in this shape writes. What is left in the archive is the
-  messages and the database dumps, and nothing has measured either;
-  DirectAdmin's own accounting does not answer it, because `user.usage`
-  records `email_quota` as what the mailboxes were allotted rather than
-  what they hold -- 157,260,176 against 14 MiB of messages on the
-  validation host. Reserving too much refuses a backup on a full disk;
-  reserving too little fills one. The drill measures a real archive
-  against the account it came from, and the estimate follows.
+- The staging estimate is what the panel writes in this shape -- the
+  messages and the database dumps -- rather than the whole account's
+  size. It was the account's size until the measurement below, which is
+  what that paragraph was waiting for. DirectAdmin's own accounting does
+  not answer it, because `user.usage` records `email_quota` as what the
+  mailboxes were allotted rather than what they hold -- 157,260,176
+  against 14 MiB of messages on the validation host. So `Account`
+  measures the mail in the same walk that measures the home, and adds
+  the database sizes it already asks `information_schema` for.
 - Gniza reads a home directory DirectAdmin's own archive would have
   filtered. It skips what DirectAdmin skips — `backups/`,
   `user_backups/`, `admin_backups/` — and, unlike DirectAdmin, it also
   skips the caches that are regenerated on their own: CloudLinux's
   `.cagefs` was 3.2 GiB of one 10.8 GiB account on the validation host.
+
+## The measurement — 2026-09-10
+
+Run on `server-182-54-236-143.da.direct` against the live account
+`pager`, which is 19.7 GiB with 12 GiB of application backups and 6.1
+GiB of `domains/` in its home. One lean backup through
+`taskq --run=`, 26 seconds:
+
+| | bytes |
+| --- | --- |
+| the account, from `user.usage` | 19,707.5 MiB |
+| the lean archive | 310,915,651 (296.5 MiB) |
+| its members, uncompressed | 1,281,932,189 |
+| of those, `imap/` | 732,924,695 |
+| of those, `backup/*.sql` | 546,542,870 |
+
+Nothing else was in it: 6,253 members under `imap/` and 318 under
+`backup/`, and no `domains/`, no `home.tar.*`, no `trash`. The `trash`
+option is in the selection and contributed nothing, because the file
+manager's `.trash` is in the home directory and the home directory is
+what the selection leaves out. That account's `.trash` is 1.3 GiB.
+
+Two numbers the estimate can be built from, both already known before a
+backup runs:
+
+- The mail on disk, `/home/pager/imap`, is 733,507,893 bytes against the
+  732,924,695 the archive carried -- 0.08% apart.
+- `information_schema` reports 756,011,257 for the account's tables
+  against 546,542,870 bytes of dumps: the dumps are 0.72 of it, because
+  a dump carries no indexes.
+
+So `LeanBytes` is the mail measured where it lies plus the database
+sizes, which is 1,489,519,150 for this account: 16% over what the
+archive actually held uncompressed, and 4.8 times what it held
+compressed. Reserving the account instead demanded 39 GiB on a disk with
+22 GiB free, and refused the backup.

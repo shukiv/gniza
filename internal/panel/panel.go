@@ -74,6 +74,15 @@ type AccountInfo struct {
 	// SizeBytes drives the staging space preflight. Zero means it has not
 	// been measured, not that the account is empty.
 	SizeBytes uint64
+	// LeanBytes is what the panel has to write when the home directory is
+	// read where it lies: on DirectAdmin the mail and the database dumps,
+	// which is all a backup that leaves out "domain" still carries. It
+	// drives the same preflight for that shape, where reserving the whole
+	// account refuses backups a disk had room for. Zero is honest -- an
+	// account with no mail and no databases writes nothing but its
+	// records -- so a caller adds its own floor rather than reading zero
+	// as unmeasured.
+	LeanBytes uint64
 	// PrimaryDomain is shown in listings where it is known.
 	PrimaryDomain string
 	// Missing says the panel knows about this account but its home

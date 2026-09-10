@@ -274,7 +274,11 @@ func (r *Real) Account(ctx context.Context, user string) (panel.AccountInfo, err
 	}
 	info.Databases = databases
 	if !info.Missing {
-		if err := filepath.Walk(info.HomeDir, func(_ string, entry os.FileInfo, err error) error {
+		// The mail is measured in the same walk rather than a second one:
+		// on a 19.7 GiB home that walk is the expensive part, and a
+		// backup that reads the home in place needs both numbers.
+		mail := filepath.Join(info.HomeDir, dabackup.MailDir) + string(os.PathSeparator)
+		if err := filepath.Walk(info.HomeDir, func(path string, entry os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -283,6 +287,9 @@ func (r *Real) Account(ctx context.Context, user string) (panel.AccountInfo, err
 			}
 			if entry.Mode().IsRegular() {
 				info.SizeBytes += uint64(entry.Size())
+				if strings.HasPrefix(path, mail) {
+					info.LeanBytes += uint64(entry.Size())
+				}
 			}
 			return nil
 		}); err != nil {
@@ -309,6 +316,10 @@ func (r *Real) Account(ctx context.Context, user string) (panel.AccountInfo, err
 		return info, fmt.Errorf("directadmin: account size overflow")
 	}
 	info.SizeBytes += dbBytes
+	// The dumps a lean archive carries are written from these tables. On
+	// the validation host the dumps came to 546,542,870 bytes against the
+	// 756,011,257 information_schema reports, so this is the safe side.
+	info.LeanBytes += dbBytes
 	return info, nil
 }
 
@@ -579,19 +590,29 @@ func (r *Real) stageInPlace(ctx context.Context, req panel.StageRequest) (pkgacc
 		return pkgacct.Payload{}, "", fmt.Errorf(
 			"directadmin: %s is not a home directory to read: %w", home, err)
 	}
-	// The room reserved is the room a whole account needs, which is more
-	// than this archive will take: what is left in it is the messages and
-	// the database dumps, and nothing here has measured either. Reserving
-	// too much refuses a backup on a full disk; reserving too little
-	// fills one. Until the restore drill has measured a real lean archive
-	// against the account it came from, this reserves too much on
-	// purpose. See ADR 0021.
+	// The room reserved is the room this archive needs, not the room the
+	// account needs. What is left in it is the messages and the database
+	// dumps; the account's own files are not written anywhere, and
+	// reserving them refuses backups the disk had room for. On the
+	// validation host a 19.7 GiB account produced a 296.5 MiB archive of
+	// 1.19 GiB of members -- 732,924,695 bytes of mail and 546,542,870 of
+	// dumps -- and reserving the account demanded 39 GiB on a disk with
+	// 22 GiB free. See ADR 0021.
 	//
-	// DirectAdmin's own accounting does not answer it either: user.usage
-	// records email_quota as what the mailboxes were allotted, not what
-	// they hold -- 157,260,176 against 14 MiB of messages on the
-	// validation host.
-	archive, err := r.stageNative(ctx, account, req.StagingDir, req.Account.SizeBytes, true)
+	// LeanBytes is those two measured uncompressed, so it is already
+	// about four times what the archive takes. leanStagingFloor covers
+	// the records, which are small and never zero: an account with no
+	// mail and no databases measures zero honestly.
+	//
+	// DirectAdmin's own accounting does not answer it: user.usage records
+	// email_quota as what the mailboxes were allotted, not what they hold
+	// -- 157,260,176 against 14 MiB of messages on the validation host.
+	reserve := req.Account.LeanBytes
+	if reserve > ^uint64(0)-leanStagingFloor {
+		return pkgacct.Payload{}, "", fmt.Errorf("directadmin: staging estimate overflow")
+	}
+	reserve += leanStagingFloor
+	archive, err := r.stageNative(ctx, account, req.StagingDir, reserve, true)
 	if err != nil {
 		return pkgacct.Payload{}, "", err
 	}

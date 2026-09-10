@@ -263,3 +263,22 @@ func TestReadingTheHomeDirectoryInPlaceWaitsToBeAskedFor(t *testing.T) {
 		t.Error("the server reports that it reads home directories in place")
 	}
 }
+
+// A backup that reads the home directory in place never writes the home
+// directory anywhere. Reserving room for it refuses backups that would
+// have fitted: on the validation host a 19.7 GiB account produced a
+// 296.5 MiB lean archive, and reserving the account refused it on a disk
+// with 22 GiB free. See ADR 0021.
+func TestABackupThatReadsTheHomeInPlaceReservesWhatItWrites(t *testing.T) {
+	r := nativeHost(t)
+	r.ReadHomeInPlace = true
+	staging := privateStaging(t)
+
+	// An account too large for any disk, whose lean archive is not.
+	if _, err := r.Stage(t.Context(), panel.StageRequest{
+		Account:    panel.AccountInfo{User: "studio", SizeBytes: ^uint64(0), LeanBytes: 4096},
+		StagingDir: staging, Mode: pkgacct.ModeSplit,
+	}); err != nil {
+		t.Fatalf("a lean backup was refused the room for a whole account: %v", err)
+	}
+}

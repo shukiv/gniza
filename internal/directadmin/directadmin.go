@@ -555,10 +555,20 @@ func (r *Real) stageSplit(ctx context.Context, req panel.StageRequest) (pkgacct.
 	return payload, payload.Verify()
 }
 
-// ReadsHomeInPlace says whether a backup on this server has come back
-// without the account's own files in it. Until one has, the answer is no
-// and the room reserved is the room the old shape needed.
-func (r *Real) ReadsHomeInPlace() bool { return r.leanBackups.Load() == 1 }
+// ReadsHomeInPlace says whether the next backup on this server will read
+// the account's home directory where it lies.
+//
+// It answers what Stage will do, not only what Stage has already done.
+// The two must agree: this is what the staging estimate is built from,
+// and an estimate for a shape the run will not take reserves room for an
+// account that is never written. A server asked for this shape takes it
+// until a run finds that its DirectAdmin ignores the selection -- which
+// is exactly the condition Stage tests -- and an agent that has just
+// started has found nothing yet. The first account of the night is as
+// likely to be the largest as the smallest, and reserving the whole of
+// it refuses the backup before the run that would have settled the
+// question.
+func (r *Real) ReadsHomeInPlace() bool { return r.ReadHomeInPlace && r.leanBackups.Load() >= 0 }
 
 // errSelectionIgnored is a DirectAdmin that produced a whole-account
 // archive for a backup that asked for less than one.

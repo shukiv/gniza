@@ -282,3 +282,34 @@ func TestABackupThatReadsTheHomeInPlaceReservesWhatItWrites(t *testing.T) {
 		t.Fatalf("a lean backup was refused the room for a whole account: %v", err)
 	}
 }
+
+// The estimate has to predict the path Stage will take, or a large
+// account is refused the room for a shape it was never going to use.
+// Stage reads the home in place until a run finds this server ignores
+// the selection, and so does this: an agent that has just started knows
+// nothing, and the first account of the night is as likely to be the
+// largest as the smallest.
+func TestTheEstimateAgreesWithThePathAStageWillTake(t *testing.T) {
+	r := nativeHost(t)
+	if r.ReadsHomeInPlace() {
+		t.Error("a server that was not asked for this shape reports it reads the home in place")
+	}
+	r.ReadHomeInPlace = true
+	if !r.ReadsHomeInPlace() {
+		t.Error("a server asked for this shape, before any backup has run, is estimated for the old one")
+	}
+	if _, err := r.Stage(t.Context(), panel.StageRequest{
+		Account: panel.AccountInfo{User: "studio"}, StagingDir: privateStaging(t), Mode: pkgacct.ModeSplit,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !r.ReadsHomeInPlace() {
+		t.Error("a server whose backup came back without the account's files reports otherwise")
+	}
+	// And a server found to ignore the selection is estimated for the
+	// shape it does produce, which is the whole account on disk.
+	r.leanBackups.Store(-1)
+	if r.ReadsHomeInPlace() {
+		t.Error("a server that ignores the selection is estimated for a shape it will not produce")
+	}
+}

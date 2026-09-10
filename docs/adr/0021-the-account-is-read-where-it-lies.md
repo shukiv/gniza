@@ -193,7 +193,14 @@ measured; either way a DirectAdmin restore wants a group pass after it.
   staging to `/home/<user>` does not split a group.
 - `stagingEstimate` can no longer key on the layout being an
   `ArchivePacker`, because the same layout now packs or does not
-  depending on what the server was found to support.
+  depending on what the server was found to support. It asks the
+  provider what the next backup will do, which is not the same question
+  as what the last one did: a server asked for this shape is taken to
+  honour the selection until a run finds it does not. Asking the
+  narrower question reserved the whole account on every agent restart,
+  and the first account of the night is as likely to be the largest as
+  the smallest -- a large one would be refused before the run that would
+  have settled the question.
 - The staging estimate is what the panel writes in this shape -- the
   messages and the database dumps -- rather than the whole account's
   size. It was the account's size until the measurement below, which is

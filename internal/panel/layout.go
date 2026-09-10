@@ -151,13 +151,15 @@ type ArchivePacker interface {
 	HomePartDir() string
 }
 
-// InPlaceReader is a provider that packs an archive but has been found to
-// produce one without the account's own files in it, so the home
-// directory is read where it lies after all.
+// InPlaceReader is a provider that packs an archive but will produce one
+// without the account's own files in it, so the home directory is read
+// where it lies after all.
 //
 // It is asked rather than assumed because the same panel does one or the
 // other depending on what the server it is running on turned out to
-// honour, and the answer is learned from a real backup. See ADR 0021.
+// honour. The answer is what the next backup will do, which is not the
+// same as what the last one did: a server is taken to honour the
+// selection until a run finds it does not. See ADR 0021.
 type InPlaceReader interface {
 	ReadsHomeInPlace() bool
 }

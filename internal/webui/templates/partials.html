@@ -2,55 +2,53 @@
 
 {{define "accountstate"}}
   {{$state := .State}}
-  {{if eq $state "working"}}<span class="cpr-pill cpr-warn"
-      title="A backup of this account is running now."><span class="cpr-spin"></span>Working</span>
-  {{else if eq $state "protected"}}<span class="cpr-pill cpr-ok"
-      title="The most recent backup of this account finished with no errors, and the schedule has produced one since it was due. It does not say the backup has been test-restored — a rehearsal does that."><span class="cpr-dot"></span>Last run succeeded</span>
-  {{else if eq $state "out-of-date"}}<span class="cpr-pill cpr-warn"
-      title="The last backup of this account succeeded, but the schedule has missed at least two runs since. What is stored is older than this account is meant to be kept to."><span class="cpr-dot"></span>Out of date</span>
-  {{else if eq $state "unscheduled"}}<span class="cpr-pill cpr-warn"
-      title="This account has a good backup, but no enabled schedule covers it, so nothing will ever take another. What is stored now is all there will ever be."><span class="cpr-dot"></span>Not scheduled</span>
-  {{else if eq $state "partial"}}<span class="cpr-pill cpr-warn"
-      title="The last backup completed, but restic could not read every file. Open the report to see which ones and whether they matter."><span class="cpr-dot"></span>Partial</span>
-  {{else if eq $state "copy-gap"}}<span class="cpr-pill cpr-warn"
-      title="At least one destination promised by an enabled schedule has no recent successful copy for this account."><span class="cpr-dot"></span>Copy gap</span>
-  {{else if eq $state "failed"}}<span class="cpr-pill cpr-bad"
-      title="The last backup of this account failed. Whatever was stored before it is still there, but nothing newer was taken."><span class="cpr-dot"></span>Last run failed</span>
-  {{else}}<span class="cpr-pill cpr-bad"
-      title="This account has never been backed up successfully. Nothing of it is stored anywhere."><span class="cpr-dot"></span>No backup</span>{{end}}
-  {{with .Why}}<div class="cpr-sublabel">{{.}}</div>{{end}}
+  {{if eq $state "working"}}<span class="cpr:pill cpr:badge-warning"
+      title="A backup of this account is running now."><span class="cpr:loading cpr:loading-spinner cpr:loading-xs"></span>Working</span>
+  {{else if eq $state "protected"}}<span class="cpr:pill cpr:badge-success"
+      title="The most recent backup of this account finished with no errors, and the schedule has produced one since it was due. It does not say the backup has been test-restored — a rehearsal does that."><span class="cpr:dot"></span>Last run succeeded</span>
+  {{else if eq $state "out-of-date"}}<span class="cpr:pill cpr:badge-warning"
+      title="The last backup of this account succeeded, but the schedule has missed at least two runs since. What is stored is older than this account is meant to be kept to."><span class="cpr:dot"></span>Out of date</span>
+  {{else if eq $state "unscheduled"}}<span class="cpr:pill cpr:badge-warning"
+      title="This account has a good backup, but no enabled schedule covers it, so nothing will ever take another. What is stored now is all there will ever be."><span class="cpr:dot"></span>Not scheduled</span>
+  {{else if eq $state "partial"}}<span class="cpr:pill cpr:badge-warning"
+      title="The last backup completed, but restic could not read every file. Open the report to see which ones and whether they matter."><span class="cpr:dot"></span>Partial</span>
+  {{else if eq $state "copy-gap"}}<span class="cpr:pill cpr:badge-warning"
+      title="At least one destination promised by an enabled schedule has no recent successful copy for this account."><span class="cpr:dot"></span>Copy gap</span>
+  {{else if eq $state "failed"}}<span class="cpr:pill cpr:badge-error"
+      title="The last backup of this account failed. Whatever was stored before it is still there, but nothing newer was taken."><span class="cpr:dot"></span>Last run failed</span>
+  {{else}}<span class="cpr:pill cpr:badge-error"
+      title="This account has never been backed up successfully. Nothing of it is stored anywhere."><span class="cpr:dot"></span>No backup</span>{{end}}
+  {{with .Why}}<div class="cpr:sublabel">{{.}}</div>{{end}}
 {{end}}
 
 {{define "runstate"}}
   {{$s := printf "%s" .}}
-  {{if eq $s "success"}}<span class="cpr-pill cpr-ok"><span class="cpr-dot"></span>Success</span>
-  {{else if eq $s "partial_success"}}<span class="cpr-pill cpr-warn"><span class="cpr-dot"></span>Partial</span>
-  {{else if eq $s "failed"}}<span class="cpr-pill cpr-bad"><span class="cpr-dot"></span>Failed</span>
-  {{else if eq $s "running"}}<span class="cpr-pill cpr-warn"><span class="cpr-spin"></span>Running</span>
-  {{else}}<span class="cpr-pill cpr-idle"><span class="cpr-dot"></span>{{$s}}</span>{{end}}
+  {{if eq $s "success"}}<span class="cpr:pill cpr:badge-success"><span class="cpr:dot"></span>Success</span>
+  {{else if eq $s "partial_success"}}<span class="cpr:pill cpr:badge-warning"><span class="cpr:dot"></span>Partial</span>
+  {{else if eq $s "failed"}}<span class="cpr:pill cpr:badge-error"><span class="cpr:dot"></span>Failed</span>
+  {{else if eq $s "running"}}<span class="cpr:pill cpr:badge-warning"><span class="cpr:loading cpr:loading-spinner cpr:loading-xs"></span>Running</span>
+  {{else}}<span class="cpr:pill cpr:badge-ghost"><span class="cpr:dot"></span>{{$s}}</span>{{end}}
 {{end}}
 
 {{define "deststate"}}
-  {{if eq .Status "ok"}}<span class="cpr-pill cpr-ok"><span class="cpr-dot"></span>Reachable</span>
-    {{if .LastCheckedAt}}<div class="cpr-sublabel">checked {{ago .LastCheckedAt}}</div>{{end}}
-  {{else if eq .Status "error"}}<span class="cpr-pill cpr-bad"><span class="cpr-dot"></span>Unreachable</span>
-    <div class="cpr-sublabel">{{.LastCheckError}}</div>
-  {{else}}<span class="cpr-pill cpr-idle"><span class="cpr-dot"></span>Not checked</span>{{end}}
+  {{if eq .Status "ok"}}<span class="cpr:pill cpr:badge-success"><span class="cpr:dot"></span>Reachable</span>
+    {{if .LastCheckedAt}}<div class="cpr:sublabel">checked {{ago .LastCheckedAt}}</div>{{end}}
+  {{else if eq .Status "error"}}<span class="cpr:pill cpr:badge-error"><span class="cpr:dot"></span>Unreachable</span>
+    <div class="cpr:sublabel">{{.LastCheckError}}</div>
+  {{else}}<span class="cpr:pill cpr:badge-ghost"><span class="cpr:dot"></span>Not checked</span>{{end}}
 {{end}}
 
 {{/* The severity colour for a row, from a run status. */}}
-{{define "runstripe"}}{{$s := printf "%s" .}}{{if eq $s "success"}}cpr-s-ok{{else if eq $s "failed"}}cpr-s-bad{{else}}cpr-s-warn{{end}}{{end}}
+{{define "runstripe"}}{{$s := printf "%s" .}}{{if eq $s "success"}}cpr:stripe-ok{{else if eq $s "failed"}}cpr:stripe-bad{{else}}cpr:stripe-warn{{end}}{{end}}
 
 {{/* How far a running job has got. Nothing is shown for a job that has
      finished: a percentage then says nothing, and restic reports no
      progress at all until it has scanned what it is about to read. */}}
 {{define "jobprogress"}}
   {{with .Progress}}
-  <div class="cpr-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100"
-       aria-valuenow="{{printf "%.0f" .Percent}}" aria-label="backup progress">
-    <i style="{{barwidth .Percent}}"></i>
-  </div>
-  <div class="cpr-sublabel">{{percent .Percent}}{{if .TotalBytes}} · {{bytes .BytesDone}} of {{bytes .TotalBytes}}{{end}}</div>
+  <progress class="cpr:progress cpr:progress-primary cpr:block cpr:w-30 cpr:h-1 cpr:mt-1.5"
+            value="{{printf "%.0f" .Percent}}" max="100" aria-label="backup progress"></progress>
+  <div class="cpr:sublabel">{{percent .Percent}}{{if .TotalBytes}} · {{bytes .BytesDone}} of {{bytes .TotalBytes}}{{end}}</div>
   {{end}}
 {{end}}
 
@@ -66,30 +64,27 @@
      for the same reason the tabs above are links. */}}
 {{define "runningnow"}}
   {{range .Now}}
-  <div class="cpr-runline">
-    <span class="cpr-spin" aria-hidden="true"></span>{{.Label}}
+  <div class="cpr:runline">
+    <span class="cpr:loading cpr:loading-spinner cpr:loading-xs" aria-hidden="true"></span>{{.Label}}
   </div>
   {{if .Known}}
-  <div class="cpr-progress cpr-progress-wide" role="progressbar"
-       aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{printf "%.0f" .Percent}}"
-       aria-label="{{.Doing}} {{.Account}}">
-    <i style="{{barwidth .Percent}}"></i>
-  </div>
+  <progress class="cpr:progress cpr:progress-primary cpr:block cpr:w-90 cpr:max-w-full cpr:h-1 cpr:mt-1.5 cpr:ml-5"
+            value="{{printf "%.0f" .Percent}}" max="100" aria-label="{{.Doing}} {{.Account}}"></progress>
   {{end}}
   {{end}}
   {{if .Folded}}
-  <details class="cpr-queue" data-fold="cpr-queue">
-    <summary>
-      <span class="cpr-wait" aria-hidden="true"></span>{{.QueueSummary}}
+  <details class="cpr:mt-1" data-fold="cpr-queue">
+    <summary class="cpr:fold">
+      <span class="cpr:wait" aria-hidden="true"></span>{{.QueueSummary}}
     </summary>
-    <ul class="cpr-queue-list">
-      {{range .Queue}}<li>{{.Account}}</li>{{end}}
+    <ul class="cpr:mt-1 cpr:pl-5 cpr:columns-[16ch] cpr:gap-x-3 cpr:max-h-56 cpr:overflow-y-auto cpr:font-normal">
+      {{range .Queue}}<li class="cpr:break-inside-avoid cpr:break-words">{{.Account}}</li>{{end}}
     </ul>
   </details>
   {{else}}
   {{range .Queue}}
-  <div class="cpr-runline">
-    <span class="cpr-wait" aria-hidden="true"></span>{{.Label}}
+  <div class="cpr:runline cpr:mt-1">
+    <span class="cpr:wait" aria-hidden="true"></span>{{.Label}}
   </div>
   {{end}}
   {{end}}
@@ -101,9 +96,9 @@
      they need lives under a different heading. Links, not a scripted tab
      widget: each view is server-rendered and survives a reload. */}}
 {{define "restoretabs"}}
-<nav class="cpr-tabs" aria-label="Restore views">
-  <a href="?p=restore" {{if eq . "account"}}aria-current="page"{{end}}>Restore account(s)</a>
-  <a href="?p=restore&amp;tab=server" {{if eq . "server"}}aria-current="page"{{end}}>Disaster recovery</a>
+<nav class="cpr:tabs cpr:tabs-border cpr:mb-4" aria-label="Restore views">
+  <a class="cpr:tab {{if eq . "account"}}cpr:tab-active{{end}}" href="?p=restore" {{if eq . "account"}}aria-current="page"{{end}}>Restore account(s)</a>
+  <a class="cpr:tab {{if eq . "server"}}cpr:tab-active{{end}}" href="?p=restore&amp;tab=server" {{if eq . "server"}}aria-current="page"{{end}}>Disaster recovery</a>
 </nav>
 {{end}}
 
@@ -113,27 +108,27 @@
      again, not a scripted widget: every tab is a page that survives a
      reload and works with scripting off. */}}
 {{define "settingstabs"}}
-<nav class="cpr-tabs" aria-label="Settings">
-  <a href="?p=settings" {{if eq . "backups"}}aria-current="page"{{end}}>Backups</a>
-  <a href="?p=settings&amp;tab=alerts" {{if eq . "alerts"}}aria-current="page"{{end}}>Alerts</a>
-  <a href="?p=settings&amp;tab=storage" {{if eq . "storage"}}aria-current="page"{{end}}>Storage</a>
-  <a href="?p=settings&amp;tab=version" {{if eq . "version"}}aria-current="page"{{end}}>Version</a>
+<nav class="cpr:tabs cpr:tabs-border cpr:mb-4" aria-label="Settings">
+  <a class="cpr:tab {{if eq . "backups"}}cpr:tab-active{{end}}" href="?p=settings" {{if eq . "backups"}}aria-current="page"{{end}}>Backups</a>
+  <a class="cpr:tab {{if eq . "alerts"}}cpr:tab-active{{end}}" href="?p=settings&amp;tab=alerts" {{if eq . "alerts"}}aria-current="page"{{end}}>Alerts</a>
+  <a class="cpr:tab {{if eq . "storage"}}cpr:tab-active{{end}}" href="?p=settings&amp;tab=storage" {{if eq . "storage"}}aria-current="page"{{end}}>Storage</a>
+  <a class="cpr:tab {{if eq . "version"}}cpr:tab-active{{end}}" href="?p=settings&amp;tab=version" {{if eq . "version"}}aria-current="page"{{end}}>Version</a>
 </nav>
 {{end}}
 
 {{/* The logs, split by the question being asked. Counts sit in the label so
      an operator can see there is something under a tab without opening it. */}}
 {{define "logtabs"}}
-<nav class="cpr-tabs" aria-label="Logs">
-  <a href="?p=logs" {{if eq .Tab "backups"}}aria-current="page"{{end}}>Backups
-    <span class="cpr-tabcount">{{index .Counts "backups"}}</span></a>
-  <a href="?p=logs&amp;tab=system" {{if eq .Tab "system"}}aria-current="page"{{end}}>System backups
-    <span class="cpr-tabcount">{{index .Counts "system"}}</span></a>
-  <a href="?p=logs&amp;tab=restores" {{if eq .Tab "restores"}}aria-current="page"{{end}}>Restores
-    <span class="cpr-tabcount">{{index .Counts "restores"}}</span></a>
-  <a href="?p=logs&amp;tab=lifecycle" {{if eq .Tab "lifecycle"}}aria-current="page"{{end}}>Account events
-    <span class="cpr-tabcount">{{index .Counts "lifecycle"}}</span></a>
-  <a href="?p=logs&amp;tab=service" {{if eq .Tab "service"}}aria-current="page"{{end}}>Service log</a>
+<nav class="cpr:tabs cpr:tabs-border cpr:mb-4" aria-label="Logs">
+  <a class="cpr:tab {{if eq .Tab "backups"}}cpr:tab-active{{end}}" href="?p=logs" {{if eq .Tab "backups"}}aria-current="page"{{end}}>Backups
+    <span class="cpr:badge cpr:badge-ghost cpr:badge-xs cpr:ml-1.5 cpr:tabular-nums">{{index .Counts "backups"}}</span></a>
+  <a class="cpr:tab {{if eq .Tab "system"}}cpr:tab-active{{end}}" href="?p=logs&amp;tab=system" {{if eq .Tab "system"}}aria-current="page"{{end}}>System backups
+    <span class="cpr:badge cpr:badge-ghost cpr:badge-xs cpr:ml-1.5 cpr:tabular-nums">{{index .Counts "system"}}</span></a>
+  <a class="cpr:tab {{if eq .Tab "restores"}}cpr:tab-active{{end}}" href="?p=logs&amp;tab=restores" {{if eq .Tab "restores"}}aria-current="page"{{end}}>Restores
+    <span class="cpr:badge cpr:badge-ghost cpr:badge-xs cpr:ml-1.5 cpr:tabular-nums">{{index .Counts "restores"}}</span></a>
+  <a class="cpr:tab {{if eq .Tab "lifecycle"}}cpr:tab-active{{end}}" href="?p=logs&amp;tab=lifecycle" {{if eq .Tab "lifecycle"}}aria-current="page"{{end}}>Account events
+    <span class="cpr:badge cpr:badge-ghost cpr:badge-xs cpr:ml-1.5 cpr:tabular-nums">{{index .Counts "lifecycle"}}</span></a>
+  <a class="cpr:tab {{if eq .Tab "service"}}cpr:tab-active{{end}}" href="?p=logs&amp;tab=service" {{if eq .Tab "service"}}aria-current="page"{{end}}>Service log</a>
 </nav>
 {{end}}
 
@@ -141,45 +136,45 @@
      are the same work on different subjects, so they share this. */}}
 {{define "jobtable"}}
 {{$dest := .Destination}}
-<div class="cpr-card">
+<div class="cpr:panel">
   {{if .Rows}}
-  <div class="cpr-tablewrap"><table data-sortable>
-    <thead><tr><th>When</th><th>Account</th><th>Result</th><th data-nosort>Copies</th><th>Stored</th><th class="cpr-right" data-nosort>&nbsp;</th></tr></thead>
+  <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-sortable>
+    <thead><tr><th>When</th><th>Account</th><th>Result</th><th data-nosort>Copies</th><th>Stored</th><th class="cpr:text-right" data-nosort>&nbsp;</th></tr></thead>
     <tbody data-live="{{.Live}}">
     {{range .Rows}}
-    <tr class="cpr-state {{template "runstripe" .Status}}" {{if not .Status.Terminal}}data-running="1"{{end}}>
-      <td style="white-space:nowrap" data-sort="{{unix .QueuedAt}}">{{stamp .QueuedAt}}</td>
-      <td class="cpr-acct">{{.Account}}</td>
+    <tr class="{{template "runstripe" .Status}}" {{if not .Status.Terminal}}data-running="1"{{end}}>
+      <td class="cpr:whitespace-nowrap" data-sort="{{unix .QueuedAt}}">{{stamp .QueuedAt}}</td>
+      <td class="cpr:font-semibold">{{.Account}}</td>
       <td data-sort="{{.Status}}">{{template "runstate" .Status}}{{template "jobprogress" .}}</td>
       <td>
         {{range .Targets}}
           {{$name := index $dest .RepositoryID}}
           <div>{{if $name}}{{$name}}{{else}}{{short .RepositoryID}}{{end}}
-            {{if eq (printf "%s" .Status) "failed"}}<span class="cpr-pill cpr-bad"><span class="cpr-dot"></span>failed</span>{{end}}
-            {{if .Incomplete}}<span class="cpr-pill cpr-warn"><span class="cpr-dot"></span>some files unreadable</span>{{end}}
-            {{if .Error}}<div class="cpr-sublabel">{{.Error}}</div>{{end}}
+            {{if eq (printf "%s" .Status) "failed"}}<span class="cpr:pill cpr:badge-error"><span class="cpr:dot"></span>failed</span>{{end}}
+            {{if .Incomplete}}<span class="cpr:pill cpr:badge-warning"><span class="cpr:dot"></span>some files unreadable</span>{{end}}
+            {{if .Error}}<div class="cpr:sublabel">{{.Error}}</div>{{end}}
           </div>
         {{end}}
-        {{if .StagingErr}}<div class="cpr-sublabel">{{.StagingErr}}</div>{{end}}
+        {{if .StagingErr}}<div class="cpr:sublabel">{{.StagingErr}}</div>{{end}}
         {{range .Missing}}
-        <div><span class="cpr-pill cpr-warn"><span class="cpr-dot"></span>not backed up</span>
-          <span class="cpr-sublabel">{{.}}</span></div>
+        <div><span class="cpr:pill cpr:badge-warning"><span class="cpr:dot"></span>not backed up</span>
+          <span class="cpr:sublabel">{{.}}</span></div>
         {{end}}
         {{range .Warnings}}
-        <div><span class="cpr-pill cpr-warn"><span class="cpr-dot"></span>may not restore in full</span>
-          <span class="cpr-sublabel">{{.}}</span></div>
+        <div><span class="cpr:pill cpr:badge-warning"><span class="cpr:dot"></span>may not restore in full</span>
+          <span class="cpr:sublabel">{{.}}</span></div>
         {{end}}
       </td>
-      <td class="cpr-num" data-sort="{{addedBytes .Targets}}">
+      <td class="cpr:tabular-nums" data-sort="{{addedBytes .Targets}}">
         {{range .Targets}}{{if eq (printf "%s" .Status) "success"}}
         <div>{{bytes .BytesAdded}} new of {{bytes .BytesProcessed}}</div>
         {{end}}{{end}}
       </td>
-      <td class="cpr-right">
+      <td class="cpr:text-right">
         {{$reportable := false}}
         {{range .Targets}}{{if or .Detail .SnapshotID}}{{$reportable = true}}{{end}}{{end}}
-        {{if $reportable}}<div class="cpr-actions">
-          <button type="button" class="cpr-btn cpr-quiet" data-dialog="report-{{.ID}}">Report</button>
+        {{if $reportable}}<div class="cpr:flex cpr:justify-end cpr:gap-2">
+          <button type="button" class="cpr:btn cpr:btn-sm cpr:btn-ghost" data-dialog="report-{{.ID}}">Report</button>
         </div>{{end}}
       </td>
     </tr>
@@ -191,38 +186,40 @@
   {{$reportable := false}}
   {{range .Targets}}{{if or .Detail .SnapshotID}}{{$reportable = true}}{{end}}{{end}}
   {{if $reportable}}
-  <dialog id="report-{{.ID}}" class="cpr-modal" aria-label="What restic reported for {{.Account}}">
-    <div class="cpr-modal-head">
-      <h2 style="margin:0">What restic reported for {{.Account}}</h2>
-      <button type="button" class="cpr-btn cpr-quiet" data-dialog-close aria-label="Close">✕</button>
-    </div>
-    <div class="cpr-modal-body">
-      {{range .Targets}}
-      {{$name := index $dest .RepositoryID}}
-      <h3 class="cpr-statlabel" style="margin-top:var(--s4)">{{if $name}}{{$name}}{{else}}{{short .RepositoryID}}{{end}}</h3>
-      {{if .SnapshotID}}<p class="cpr-hint">Snapshot <span class="cpr-mono">{{short .SnapshotID}}</span>
-        · took {{printf "%.0f" .DurationSecs}}s{{if .BytesAdded}} · {{bytes .BytesAdded}} new of {{bytes .BytesProcessed}}{{end}}</p>{{end}}
-      {{if .Detail}}<pre class="cpr-log">{{.Detail}}</pre>
-      {{else}}<p class="cpr-hint">restic reported nothing beyond the summary.</p>{{end}}
-      {{if .Incomplete}}
-      <p class="cpr-hint">Files that vanish or cannot be read mid-backup are normal on a
-      live server — sessions, sockets, caches. What matters is whether anything above
-      is a file the site actually needs.</p>
-      {{end}}
-      {{end}}
-    </div>
-    <div class="cpr-modal-foot">
-      <button type="button" class="cpr-btn" data-dialog-close>Close</button>
+  <dialog id="report-{{.ID}}" class="cpr:modal" aria-label="What restic reported for {{.Account}}">
+    <div class="cpr:modal-box cpr:w-[min(820px,92vw)] cpr:max-w-none cpr:p-0">
+      <div class="cpr:flex cpr:items-center cpr:justify-between cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
+        <h2 class="cpr:text-sm cpr:font-semibold">What restic reported for {{.Account}}</h2>
+        <button type="button" class="cpr:btn cpr:btn-sm cpr:btn-ghost cpr:btn-square" data-dialog-close aria-label="Close">✕</button>
+      </div>
+      <div class="cpr:p-4 cpr:overflow-auto cpr:max-h-[60vh]">
+        {{range .Targets}}
+        {{$name := index $dest .RepositoryID}}
+        <h3 class="cpr:k cpr:mt-4 cpr:mb-1">{{if $name}}{{$name}}{{else}}{{short .RepositoryID}}{{end}}</h3>
+        {{if .SnapshotID}}<p class="cpr:hint">Snapshot <span class="cpr:mono">{{short .SnapshotID}}</span>
+          · took {{printf "%.0f" .DurationSecs}}s{{if .BytesAdded}} · {{bytes .BytesAdded}} new of {{bytes .BytesProcessed}}{{end}}</p>{{end}}
+        {{if .Detail}}<pre class="cpr:log cpr:max-h-none">{{.Detail}}</pre>
+        {{else}}<p class="cpr:hint">restic reported nothing beyond the summary.</p>{{end}}
+        {{if .Incomplete}}
+        <p class="cpr:hint">Files that vanish or cannot be read mid-backup are normal on a
+        live server — sessions, sockets, caches. What matters is whether anything above
+        is a file the site actually needs.</p>
+        {{end}}
+        {{end}}
+      </div>
+      <div class="cpr:flex cpr:justify-end cpr:gap-2 cpr:px-4 cpr:py-3 cpr:border-t cpr:border-base-300 cpr:bg-base-200">
+        <button type="button" class="cpr:btn cpr:btn-sm" data-dialog-close>Close</button>
+      </div>
     </div>
   </dialog>
   {{end}}
   {{end}}
 
-  <div class="cpr-pad" style="border-top:1px solid var(--line)">
-    <p class="cpr-hint" style="margin:0">"Stored" is what the backup actually cost in storage. On an
+  <div class="cpr:pad cpr:border-t cpr:border-base-300">
+    <p class="cpr:hint cpr:mt-0">"Stored" is what the backup actually cost in storage. On an
     unchanged account it should be a small fraction of what was read.</p>
   </div>
-  {{else}}<div class="cpr-empty"><p>{{.Empty}}</p></div>{{end}}
+  {{else}}<div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p>{{.Empty}}</p></div>{{end}}
 </div>
 {{end}}
 
@@ -236,29 +233,29 @@
      unreachable tonight has not become empty. */}}
 {{define "repocensus"}}
 {{if .Known}}
-  <div class="cpr-sublabel">{{.Snapshots}} cop{{if eq .Snapshots 1}}y{{else}}ies{{end}}, {{bytes .SizeBytes}}{{with .MeasuredAt}} · measured {{ago .}}{{end}}</div>
-  {{with .LastError}}<div class="cpr-sublabel cpr-warntext">could not be measured since: {{.}}</div>{{end}}
+  <div class="cpr:sublabel">{{.Snapshots}} cop{{if eq .Snapshots 1}}y{{else}}ies{{end}}, {{bytes .SizeBytes}}{{with .MeasuredAt}} · measured {{ago .}}{{end}}</div>
+  {{with .LastError}}<div class="cpr:sublabel cpr:text-warning">could not be measured since: {{.}}</div>{{end}}
 {{else if .LastError}}
-  <div class="cpr-sublabel cpr-warntext">could not be measured: {{.LastError}}</div>
+  <div class="cpr:sublabel cpr:text-warning">could not be measured: {{.LastError}}</div>
 {{end}}
 {{end}}
 
 {{define "destspace"}}
 {{if .Known}}
-  <div class="cpr-mono cpr-num cpr-space">{{bytes .FreeBytes}} free</div>
-  <div class="cpr-meter cpr-meter-slim" title="{{.UsedPercent}}% of {{bytes .TotalBytes}} used">
-    <i class="{{if ge .UsedPercent 90}}cpr-none{{else if ge .UsedPercent 75}}cpr-stale{{else}}cpr-ok{{end}}"
+  <div class="cpr:mono cpr:tabular-nums cpr:whitespace-nowrap">{{bytes .FreeBytes}} free</div>
+  <div class="cpr:flex cpr:h-1.5 cpr:max-w-44 cpr:my-1 cpr:rounded-full cpr:overflow-hidden cpr:bg-base-300" title="{{.UsedPercent}}% of {{bytes .TotalBytes}} used">
+    <i class="cpr:block {{if ge .UsedPercent 90}}cpr:bg-error{{else if ge .UsedPercent 75}}cpr:bg-warning{{else}}cpr:bg-success{{end}}"
        style="width:{{.UsedPercent}}%"></i>
   </div>
-  <div class="cpr-sublabel cpr-space">{{.UsedPercent}}% of {{bytes .TotalBytes}} used{{with .MeasuredAt}} · {{ago .}}{{end}}</div>
+  <div class="cpr:sublabel cpr:whitespace-nowrap">{{.UsedPercent}}% of {{bytes .TotalBytes}} used{{with .MeasuredAt}} · {{ago .}}{{end}}</div>
 {{else if .Unsupported}}
-  <span class="cpr-muted">—</span>
-  <div class="cpr-sublabel" title="An S3 bucket has no size, and a restic REST server does not report the disk underneath it.">this kind does not report space</div>
+  <span class="cpr:text-base-content/70">—</span>
+  <div class="cpr:sublabel" title="An S3 bucket has no size, and a restic REST server does not report the disk underneath it.">this kind does not report space</div>
 {{else if .Error}}
-  <span class="cpr-muted">—</span>
-  <div class="cpr-sublabel cpr-warntext">{{.Error}}</div>
+  <span class="cpr:text-base-content/70">—</span>
+  <div class="cpr:sublabel cpr:text-warning">{{.Error}}</div>
 {{else}}
-  <span class="cpr-muted">—</span>
-  <div class="cpr-sublabel">not measured yet</div>
+  <span class="cpr:text-base-content/70">—</span>
+  <div class="cpr:sublabel">not measured yet</div>
 {{end}}
 {{end}}

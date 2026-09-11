@@ -1,29 +1,29 @@
 {{define "content"}}
 {{$data := .Data}}
 <div>
-  <h1>{{$data.Title}}</h1>
-  <p class="cpr-sub">Read what this replaces before it runs. Nothing has happened yet.</p>
+  <h1 class="cpr:page-title">{{$data.Title}}</h1>
+  <p class="cpr:page-sub">Read what this replaces before it runs. Nothing has happened yet.</p>
 </div>
 
-<div class="cpr-card"><div class="cpr-pad">
-  <div class="cpr-banner cpr-bad"><div class="cpr-body">
+<div class="cpr:panel"><div class="cpr:pad">
+  <div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm cpr:items-start"><div class="cpr:min-w-0">
     <strong>{{$data.Title}}</strong>
-    <p style="margin:var(--s2) 0 0">{{$data.Warning}}</p>
+    <p class="cpr:mt-2">{{$data.Warning}}</p>
     {{if $data.Detail}}
-    <ul class="cpr-confirm-list">
+    <ul class="cpr:mt-3 cpr:pl-6 cpr:list-disc cpr:text-sm cpr:space-y-1">
       {{range $data.Detail}}<li>{{.}}</li>{{end}}
     </ul>
     {{end}}
 
-    <form method="post" action="{{$data.Action}}" style="margin-top:var(--s3)">
+    <form method="post" action="{{$data.Action}}" class="cpr:mt-3">
       <input type="hidden" name="csrf" value="{{$.CSRF}}">
       {{range $data.Fields}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">
       {{end}}
-      <label class="cpr-check"><input type="checkbox" name="confirm" value="1" required>
+      <label class="cpr:check"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:checkbox-error" name="confirm" value="1" required>
         {{$data.Tick}}</label>
-      <div class="cpr-actions" style="margin-top:var(--s3)">
-        <button class="cpr-btn cpr-danger" type="submit">{{$data.Button}}</button>
-        <a class="cpr-btn cpr-quiet" href="{{$data.Cancel}}">Cancel</a>
+      <div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2 cpr:mt-3">
+        <button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline" type="submit">{{$data.Button}}</button>
+        <a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="{{$data.Cancel}}">Cancel</a>
       </div>
     </form>
   </div></div>

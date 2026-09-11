@@ -19,11 +19,11 @@ func TestFooterShowsRunningVersionNotAvailableUpdate(t *testing.T) {
 	}
 	for _, route := range []string{"/", "/settings?tab=version", "/restore", "/report"} {
 		_, page := get(t, client, route)
-		footer := regexp.MustCompile(`(?s)<p class="cpr-rail-version">(.*?)</p>`).FindStringSubmatch(page)
+		footer := regexp.MustCompile(`(?s)<p class="[^"]*" data-rail-version>(.*?)</p>`).FindStringSubmatch(page)
 		if len(footer) != 2 || !strings.Contains(footer[1], "Version") || !strings.Contains(footer[1], agent.Version) || strings.Contains(footer[1], "v9.9.9") {
 			t.Fatalf("%s: footer does not show the running build", route)
 		}
-		if strings.Index(page, `class="cpr-rail-version"`) > strings.Index(page, "</aside>") {
+		if strings.Index(page, `data-rail-version>`) > strings.Index(page, "</aside>") {
 			t.Fatalf("%s: version is outside the sidebar", route)
 		}
 	}
@@ -32,7 +32,7 @@ func TestFooterShowsRunningVersionNotAvailableUpdate(t *testing.T) {
 func TestReportDialogStaysInsidePluginStyleScope(t *testing.T) {
 	client, _, _ := newUI(t)
 	_, page := get(t, client, "/settings?tab=version")
-	start := strings.Index(page, `<div class="gniza">`)
+	start := strings.Index(page, `<div class="gniza `)
 	dialog := strings.Index(page, `<dialog id="report-problem"`)
 	if start < 0 || dialog <= start {
 		t.Fatal("missing plugin wrapper or report dialog")
@@ -49,7 +49,7 @@ func TestReportDialogStaysInsidePluginStyleScope(t *testing.T) {
 		t.Fatal("report dialog is not closed")
 	}
 	markup := page[dialog : dialog+end]
-	for _, want := range []string{`class="cpr-sheet cpr-report-dialog"`, `aria-labelledby="report-problem-title"`, `aria-describedby="report-problem-intro"`, `name="csrf"`, `action="?p=report/send"`, `maxlength="20000"`, "Show me the report", "Open full page"} {
+	for _, want := range []string{`class="cpr:modal" data-report-dialog`, `aria-labelledby="report-problem-title"`, `aria-describedby="report-problem-intro"`, `name="csrf"`, `action="?p=report/send"`, `maxlength="20000"`, "Show me the report", "Open full page"} {
 		if !strings.Contains(markup, want) {
 			t.Errorf("report dialog missing %q", want)
 		}

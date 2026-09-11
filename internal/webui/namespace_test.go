@@ -11,11 +11,18 @@ import (
 // inside WHM's page. A plugin that borrows one of those names inherits
 // its styling, which is how every row in the account table came to have a
 // grey box behind its buttons. Every class we render therefore carries the
-// cpr- prefix, and this test is what keeps a new one from slipping in.
-const classPrefix = "cpr-"
+// cpr: prefix — Tailwind's, so daisyUI's .btn is our .cpr:btn — and this
+// test is what keeps a new one from slipping in (ADR 0009, ADR 0023).
+const classPrefix = "cpr:"
 
 // wrapperClass scopes our own stylesheet and is deliberately unprefixed.
 const wrapperClass = "gniza"
+
+// daisyUI's theme switch: a rule on :root that only matches when the page
+// holds an <input class="theme-controller">, which no host panel does. It
+// is emitted whether or not the component is used, and it targets nothing
+// of ours.
+const daisyThemeController = "theme-controller"
 
 var (
 	classAttr   = regexp.MustCompile(`class="([^"]*)"`)
@@ -58,8 +65,14 @@ func TestStylesheetOnlyTargetsNamespacedClasses(t *testing.T) {
 	// reads as a class to anything scanning selectors.
 	stylesheet := cssComment.ReplaceAllString(string(body), " ")
 	for _, m := range cssSelector.FindAllStringSubmatch(stylesheet, -1) {
-		for _, name := range classNames(m[1]) {
-			if name == wrapperClass || strings.HasPrefix(name, classPrefix) {
+		selector := strings.TrimSpace(m[1])
+		if i := strings.LastIndex(selector, "@"); i >= 0 {
+			// An at-rule — @layer daisyui.l1, @media, @keyframes — is not
+			// a selector, and its dotted layer names are not classes.
+			selector = selector[:i]
+		}
+		for _, name := range classNames(selector) {
+			if name == wrapperClass || name == daisyThemeController || strings.HasPrefix(name, classPrefix) {
 				continue
 			}
 			t.Errorf("selector %q targets class %q, which is not namespaced",
@@ -69,7 +82,10 @@ func TestStylesheetOnlyTargetsNamespacedClasses(t *testing.T) {
 }
 
 // classNames pulls the class names out of a selector, skipping decimals so
-// that a value like 0.5rem is not mistaken for a class.
+// that a value like 0.5rem is not mistaken for a class. A backslash escapes
+// the byte after it — the compiled stylesheet writes .cpr:btn as .cpr\:btn
+// and .cpr:w-[30px] as .cpr\:w-\[30px\] — and the escaped byte is part of
+// the name, unescaped.
 func classNames(selector string) []string {
 	var names []string
 	for i := 0; i < len(selector); i++ {
@@ -83,10 +99,20 @@ func classNames(selector string) []string {
 		if j >= len(selector) || !isNameStart(selector[j]) {
 			continue
 		}
-		for j < len(selector) && isWordByte(selector[j]) {
+		var name []byte
+		for j < len(selector) {
+			if selector[j] == '\\' && j+1 < len(selector) {
+				name = append(name, selector[j+1])
+				j += 2
+				continue
+			}
+			if !isWordByte(selector[j]) {
+				break
+			}
+			name = append(name, selector[j])
 			j++
 		}
-		names = append(names, selector[i+1:j])
+		names = append(names, string(name))
 		i = j - 1
 	}
 	return names

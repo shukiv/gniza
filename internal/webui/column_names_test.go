@@ -31,7 +31,7 @@ func TestANoteUnderATableNamesAColumnTheTableHas(t *testing.T) {
 	}
 
 	// A quoted word in a hint is this file's way of naming a column.
-	quoted := regexp.MustCompile(`<p class="cpr-hint"[^>]*>[^<]*&#34;([A-Z][a-z]+)&#34;|"([A-Z][a-z]+)" is what`)
+	quoted := regexp.MustCompile(`<p class="cpr:hint[^>]*>[^<]*&#34;([A-Z][a-z]+)&#34;|"([A-Z][a-z]+)" is what`)
 	found := false
 	for _, match := range quoted.FindAllStringSubmatch(page, -1) {
 		name := match[1]

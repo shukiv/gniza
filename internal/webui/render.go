@@ -351,18 +351,6 @@ func templateFuncs() template.FuncMap {
 			}
 			return ""
 		},
-		// barwidth is the CSS for a progress bar's filled part. It is
-		// built here rather than interpolated in the template so the
-		// value is a number this program produced, not markup.
-		"barwidth": func(percent float64) template.CSS {
-			switch {
-			case percent < 0:
-				percent = 0
-			case percent > 100:
-				percent = 100
-			}
-			return template.CSS(fmt.Sprintf("width:%.1f%%", percent))
-		},
 		// pkgacctMeaning explains a probed flag in terms of what it does
 		// to a backup. The names are cPanel's and read as though Gniza
 		// were leaving something out; it is the opposite.

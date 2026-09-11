@@ -1,119 +1,113 @@
 {{define "content"}}
 {{$d := .Data}}
 <div>
-  <h1>Accounts</h1>
-  <p class="cpr-sub">Back up, verify or recover any account on this server.</p>
+  <h1 class="cpr:page-title">Accounts</h1>
+  <p class="cpr:page-sub">Back up, verify or recover any account on this server.</p>
 </div>
 
-{{range $d.Warnings}}<div class="cpr-warnbox">{{.}}</div>{{end}}
+{{range $d.Warnings}}<div class="cpr:border-l-4 cpr:border-warning cpr:pl-3 cpr:my-3 cpr:text-sm">{{.}}</div>{{end}}
 
 {{if $d.Accounts}}
-<div class="cpr-row cpr-spread">
-  <div class="cpr-row">
-    <div class="cpr-search">
-      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor"
-           stroke-width="2" aria-hidden="true" style="color:var(--faint)">
-        <circle cx="9" cy="9" r="6"/><path d="M14 14l4 4"/>
-      </svg>
-      <input type="text" id="filter" placeholder="Filter accounts" aria-label="Filter accounts"
-             autocomplete="off" data-filter="#accounts">
-    </div>
-    <div class="cpr-chips" data-filter-state="#accounts">
-      <button type="button" class="cpr-chip" aria-pressed="true" data-state="">All {{len $d.Accounts}}</button>
-      <button type="button" class="cpr-chip" aria-pressed="false" data-state="ok">Succeeded {{$d.Protected}}</button>
-      <button type="button" class="cpr-chip" aria-pressed="false" data-state="bad">Never {{$d.Unprotected}}</button>
+<div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:justify-between cpr:gap-3">
+  <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3">
+    <input type="search" class="cpr:input cpr:input-sm cpr:w-56" id="filter" placeholder="Filter accounts" aria-label="Filter accounts"
+           autocomplete="off" data-filter="#accounts">
+    <div class="cpr:flex cpr:flex-wrap cpr:gap-2" data-filter-state="#accounts">
+      <button type="button" class="cpr:chip" aria-pressed="true" data-state="">All {{len $d.Accounts}}</button>
+      <button type="button" class="cpr:chip" aria-pressed="false" data-state="ok">Succeeded {{$d.Protected}}</button>
+      <button type="button" class="cpr:chip" aria-pressed="false" data-state="bad">Never {{$d.Unprotected}}</button>
     </div>
   </div>
   {{with $d.RunAll}}
-  <form method="post" action="?p=schedule/run" class="cpr-inline">
+  <form method="post" action="?p=schedule/run" class="cpr:inline-block cpr:align-middle">
     <input type="hidden" name="csrf" value="{{$.CSRF}}">
     <input type="hidden" name="id" value="{{.ID}}">
-    <button class="cpr-btn cpr-primary" title="Run {{.Name}} for every account">Back up all</button>
+    <button class="cpr:btn cpr:btn-sm cpr:btn-primary" title="Run {{.Name}} for every account">Back up all</button>
   </form>
   {{end}}
 </div>
 
-<div class="cpr-card">
-  <div class="cpr-tablewrap">
-    <table id="accounts" data-sortable>
+<div class="cpr:panel">
+  <div class="cpr:overflow-x-auto" data-tablewrap>
+    <table id="accounts" class="cpr:table cpr:table-sm" data-sortable>
       <thead>
-        <tr><th>Account</th><th>Size</th><th>Last backup</th><th data-nosort>Backups</th><th>State</th><th class="cpr-right" data-nosort>&nbsp;</th></tr>
+        <tr><th>Account</th><th>Size</th><th>Last backup</th><th data-nosort>Backups</th><th>State</th><th class="cpr:text-right" data-nosort>&nbsp;</th></tr>
       </thead>
       <tbody data-live="accounts">
         {{range $d.Accounts}}
-        <tr class="cpr-state {{.Stripe}}" data-name="{{.User}} {{.PrimaryDomain}}" data-state="{{.Filter}}" {{if .Running}}data-running="1"{{end}}>
-          <td class="cpr-acct"><a class="cpr-link" href="?p=account&amp;user={{.User}}">{{.User}}</a>
-            {{if .PrimaryDomain}}<div class="cpr-sublabel">{{.PrimaryDomain}}</div>{{end}}
-            {{if .Missing}}<div class="cpr-sublabel cpr-warntext"
+        <tr class="{{.Stripe}}" data-name="{{.User}} {{.PrimaryDomain}}" data-state="{{.Filter}}" {{if .Running}}data-running="1"{{end}}>
+          <td class="cpr:font-semibold"><a class="cpr:link cpr:link-primary cpr:link-hover cpr:block" href="?p=account&amp;user={{.User}}">{{.User}}</a>
+            {{if .PrimaryDomain}}<div class="cpr:sublabel">{{.PrimaryDomain}}</div>{{end}}
+            {{if .Missing}}<div class="cpr:sublabel cpr:text-warning"
               title="{{$.Panel}} lists this account, but nothing is at its home directory. Its backup will fail until that is sorted out — which is better than it quietly not being backed up at all.">
               home directory missing</div>{{end}}</td>
-          <td class="cpr-mono cpr-num" data-sort="{{.SizeBytes}}">{{if .SizeBytes}}{{bytes .SizeBytes}}{{else}}<span class="cpr-muted">—</span>{{end}}</td>
-          <td data-sort="{{unixPtr .LastBackup}}">{{if .LastBackup}}{{ago .LastBackup}}{{else}}<span class="cpr-mono">never</span>{{end}}</td>
+          <td class="cpr:mono cpr:tabular-nums" data-sort="{{.SizeBytes}}">{{if .SizeBytes}}{{bytes .SizeBytes}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
+          <td class="cpr:whitespace-nowrap" data-sort="{{unixPtr .LastBackup}}">{{if .LastBackup}}{{ago .LastBackup}}{{else}}<span class="cpr:mono">never</span>{{end}}</td>
           <td>
             {{if .Record}}<span title="Backups of this account that have finished, and how many of those worked.">{{.Record}}</span>
-            {{if .Failures}}<div class="cpr-sublabel">{{.Failures}} failed</div>{{end}}
-            {{else}}<span class="cpr-muted">—</span>{{end}}
-            {{if or .Stored .Took}}<div class="cpr-sublabel"
+            {{if .Failures}}<div class="cpr:sublabel">{{.Failures}} failed</div>{{end}}
+            {{else}}<span class="cpr:text-base-content/70">—</span>{{end}}
+            {{if or .Stored .Took}}<div class="cpr:sublabel"
               title="What the last backup added to the destination after deduplication, and how long the whole run took — staging the account included.">
               {{if .Stored}}{{bytes .Stored}} stored{{end}}{{if and .Stored .Took}} · {{end}}{{if .Took}}took {{took .Took}}{{end}}</div>{{end}}
-            {{if .Copies}}<div class="cpr-sublabel"
+            {{if .Copies}}<div class="cpr:sublabel"
               title="Backups of this account written to each destination, counted from this server's records. Retention prunes older snapshots in the repository, so open the account to see what is actually there now.">
               {{range $i, $copy := .Copies}}{{if $i}} · {{end}}{{$copy.Written}} to {{$copy.Destination}}{{end}}</div>{{end}}
-            {{if .FreshCopies}}<div class="cpr-sublabel" title="Scheduled destinations with a successful copy inside their required freshness window.">
+            {{if .FreshCopies}}<div class="cpr:sublabel" title="Scheduled destinations with a successful copy inside their required freshness window.">
               current: {{range $i, $name := .FreshCopies}}{{if $i}}, {{end}}{{$name}}{{end}}</div>{{end}}
-            {{if .MissingCopies}}<div class="cpr-sublabel cpr-warntext" title="Scheduled destinations with no successful copy inside their required freshness window.">
+            {{if .MissingCopies}}<div class="cpr:sublabel cpr:text-warning" title="Scheduled destinations with no successful copy inside their required freshness window.">
               missing recent copy: {{range $i, $name := .MissingCopies}}{{if $i}}, {{end}}{{$name}}{{end}}</div>{{end}}
-            {{if .Verified}}<div class="cpr-sublabel"
+            {{if .Verified}}<div class="cpr:sublabel"
               title="A rehearsal rebuilt this account's backup and checked what came out. It is the only thing that shows a backup restores.">
               {{if .VerifiedOK}}verified {{ago .Verified}}
-              {{else if .VerifiedSkipped}}<span class="cpr-warntext">rehearsed {{ago .Verified}} without
+              {{else if .VerifiedSkipped}}<span class="cpr:text-warning">rehearsed {{ago .Verified}} without
               {{range $i, $part := .VerifiedSkipped}}{{if $i}}, {{end}}{{$part}}</span>{{end}} — the rest of
               the account is not proved{{else}}rehearsal failed {{ago .Verified}}{{end}}</div>{{end}}
           </td>
           <td>{{template "accountstate" .}}{{template "jobprogress" .}}
-            {{with .RemovalSafety}}<div class="cpr-sublabel" title="{{.Detail}}">
-              {{if .Allowed}}<span class="cpr-pill cpr-ok"><span class="cpr-dot"></span>Safe to terminate</span>
-              {{else}}<span class="cpr-pill cpr-bad"><span class="cpr-dot"></span>Termination blocked</span>{{end}}
+            {{with .RemovalSafety}}<div class="cpr:sublabel" title="{{.Detail}}">
+              {{if .Allowed}}<span class="cpr:pill cpr:badge-success"><span class="cpr:dot"></span>Safe to terminate</span>
+              {{else}}<span class="cpr:pill cpr:badge-error"><span class="cpr:dot"></span>Termination blocked</span>{{end}}
             </div>{{end}}
           </td>
-          <td class="cpr-right"><div class="cpr-actions">
-            {{if .NeedsRemovalPreparation}}<form method="post" action="?p=accounts/prepare-removal" class="cpr-inline">
+          <td class="cpr:text-right"><div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-1.5 cpr:max-w-48 cpr:ml-auto">
+            {{if .NeedsRemovalPreparation}}<form method="post" action="?p=accounts/prepare-removal" class="cpr:inline-block cpr:align-middle">
               <input type="hidden" name="csrf" value="{{$.CSRF}}">
               <input type="hidden" name="account" value="{{.User}}">
-              <button class="cpr-btn cpr-primary" title="Queue the smallest set of full-account schedules needed before {{$.Panel}} may terminate this account." {{if .Running}}disabled{{end}}>Prepare removal</button>
+              <button class="cpr:btn cpr:btn-xs cpr:whitespace-nowrap cpr:btn-primary" title="Queue the smallest set of full-account schedules needed before {{$.Panel}} may terminate this account." {{if .Running}}disabled{{end}}>Prepare removal</button>
             </form>{{end}}
-            {{if .RepairPolicyID}}<form method="post" action="?p=accounts/repair" class="cpr-inline">
+            {{if .RepairPolicyID}}<form method="post" action="?p=accounts/repair" class="cpr:inline-block cpr:align-middle">
               <input type="hidden" name="csrf" value="{{$.CSRF}}">
               <input type="hidden" name="account" value="{{.User}}">
               <input type="hidden" name="policy" value="{{.RepairPolicyID}}">
-              <button class="cpr-btn cpr-primary" title="Run {{.RepairPolicyName}} now to repair the most missing scheduled copies." {{if .Running}}disabled{{end}}>Repair copies</button>
+              <button class="cpr:btn cpr:btn-xs cpr:whitespace-nowrap cpr:btn-primary" title="Run {{.RepairPolicyName}} now to repair the most missing scheduled copies." {{if .Running}}disabled{{end}}>Repair copies</button>
             </form>{{end}}
-            <form method="post" action="?p=accounts/backup" class="cpr-inline">
+            <form method="post" action="?p=accounts/backup" class="cpr:inline-block cpr:align-middle">
               <input type="hidden" name="csrf" value="{{$.CSRF}}">
               <input type="hidden" name="account" value="{{.User}}">
-              <button class="cpr-btn" {{if .Running}}disabled{{end}}>Back up</button>
+              <button class="cpr:btn cpr:btn-xs cpr:whitespace-nowrap" {{if .Running}}disabled{{end}}>Back up</button>
             </form>
-            <form method="post" action="?p=accounts/download" class="cpr-inline">
+            <form method="post" action="?p=accounts/download" class="cpr:inline-block cpr:align-middle">
               <input type="hidden" name="csrf" value="{{$.CSRF}}">
               <input type="hidden" name="account" value="{{.User}}">
-              <button class="cpr-btn" {{if or .Running (not .LastBackup)}}disabled{{end}}>Download</button>
+              <button class="cpr:btn cpr:btn-xs cpr:whitespace-nowrap" {{if or .Running (not .LastBackup)}}disabled{{end}}>Download</button>
             </form>
-            <a class="cpr-btn cpr-quiet" href="?p=account&amp;user={{.User}}">Open</a>
+            <a class="cpr:btn cpr:btn-xs cpr:whitespace-nowrap cpr:btn-ghost" href="?p=account&amp;user={{.User}}">Open</a>
           </div></td>
         </tr>
         {{end}}
       </tbody>
     </table>
   </div>
-  <div class="cpr-pad" style="border-top:1px solid var(--line); color:var(--muted); font-size:13px">
+  <div class="cpr:pad cpr:border-t cpr:border-base-300 cpr:text-[13px] cpr:text-base-content/70">
     <span data-count-for="#accounts">{{len $d.Accounts}}</span> account{{if ne (len $d.Accounts) 1}}s{{end}}
     · hover a state to see what it means
   </div>
 </div>
 {{else}}
-<div class="cpr-card"><div class="cpr-empty">
-  <p><b>No {{$.Panel}} accounts found on this server.</b><br>
-    Gniza reads them from <span class="cpr-mono">/var/cpanel/users</span>.</p>
+<div class="cpr:panel"><div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70">
+  <p class="cpr:mb-4"><b>No {{$.Panel}} accounts found on this server.</b><br>
+    Gniza reads them from <span class="cpr:mono">/var/cpanel/users</span>.</p>
 </div></div>
 {{end}}
 {{end}}

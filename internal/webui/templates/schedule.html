@@ -1,36 +1,36 @@
 {{define "content"}}
 {{$data := .Data}}
 <div>
-  <h1>Schedules</h1>
-  <p class="cpr-sub">When backups run, and how long they are kept.</p>
+  <h1 class="cpr:page-title">Schedules</h1>
+  <p class="cpr:page-sub">When backups run, and how long they are kept.</p>
 </div>
-<div class="cpr-card">
+<div class="cpr:panel">
   {{if $data.Policies}}
-  <div class="cpr-tablewrap"><table>
-    <thead><tr><th>Name</th><th>Runs</th><th>Covers</th><th>Keeps</th><th>Last fired</th><th class="cpr-right">&nbsp;</th></tr></thead>
+  <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
+    <thead><tr><th>Name</th><th>Runs</th><th>Covers</th><th>Keeps</th><th>Last fired</th><th class="cpr:text-right">&nbsp;</th></tr></thead>
     <tbody>
     {{range $data.Policies}}
-    <tr class="cpr-state {{.Stripe}}">
-      <td class="cpr-acct">{{.Name}}
-        {{if not .Enabled}}<div class="cpr-sublabel">paused</div>{{end}}</td>
-      <td>{{if .When}}{{.When}}<div class="cpr-sublabel cpr-mono">{{.ScheduleCron}}</div>
-        {{else}}<span class="cpr-mono">{{.ScheduleCron}}</span>{{end}}</td>
-      <td>{{.Covers}}{{if .CoversDetail}}<div class="cpr-sublabel">{{.CoversDetail}}</div>{{end}}</td>
+    <tr class="{{.Stripe}}">
+      <td class="cpr:font-semibold">{{.Name}}
+        {{if not .Enabled}}<div class="cpr:sublabel">paused</div>{{end}}</td>
+      <td>{{if .When}}{{.When}}<div class="cpr:sublabel cpr:mono">{{.ScheduleCron}}</div>
+        {{else}}<span class="cpr:mono">{{.ScheduleCron}}</span>{{end}}</td>
+      <td>{{.Covers}}{{if .CoversDetail}}<div class="cpr:sublabel">{{.CoversDetail}}</div>{{end}}</td>
       <td>{{.Retention.KeepDaily}} daily · {{.Retention.KeepWeekly}} weekly · {{.Retention.KeepMonthly}} monthly</td>
       <td>{{if .LastRunAt}}{{ago .LastRunAt}}{{else}}never{{end}}
-        {{if .NextIn}}<div class="cpr-sublabel">{{.NextIn}}</div>{{end}}</td>
-      <td class="cpr-right"><div class="cpr-actions">
-        <form method="post" action="?p=schedule/run" class="cpr-inline">
+        {{if .NextIn}}<div class="cpr:sublabel">{{.NextIn}}</div>{{end}}</td>
+      <td class="cpr:text-right"><div class="cpr:flex cpr:justify-end cpr:gap-2">
+        <form method="post" action="?p=schedule/run" class="cpr:inline-block cpr:align-middle">
           <input type="hidden" name="csrf" value="{{$.CSRF}}">
           <input type="hidden" name="id" value="{{.ID}}">
-          <button class="cpr-btn cpr-primary">Run now</button>
+          <button class="cpr:btn cpr:btn-sm cpr:btn-primary">Run now</button>
         </form>
-        <a class="cpr-btn cpr-quiet" href="?p=schedule&amp;edit={{.ID}}">Edit</a>
-        <form method="post" action="?p=schedule/delete" class="cpr-inline"
+        <a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=schedule&amp;edit={{.ID}}">Edit</a>
+        <form method="post" action="?p=schedule/delete" class="cpr:inline-block cpr:align-middle"
               data-confirm="Delete this schedule? Backups already taken are kept.">
           <input type="hidden" name="csrf" value="{{$.CSRF}}">
           <input type="hidden" name="id" value="{{.ID}}">
-          <button class="cpr-btn cpr-danger">Delete</button>
+          <button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline">Delete</button>
         </form>
       </div></td>
     </tr>
@@ -38,108 +38,108 @@
     </tbody>
   </table></div>
   {{else}}
-  <div class="cpr-empty"><p><b>No schedule yet.</b><br>Nothing is backed up automatically until you add one.</p></div>
+  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p><b>No schedule yet.</b><br>Nothing is backed up automatically until you add one.</p></div>
   {{end}}
 </div>
 
-<div class="cpr-card">
-  <div class="cpr-pad" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">{{if $data.Editing}}Edit “{{$data.Editing.Name}}”{{else}}Add a schedule{{end}}</h2>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">{{if $data.Editing}}Edit “{{$data.Editing.Name}}”{{else}}Add a schedule{{end}}</h2>
   </div>
-  <div class="cpr-pad">
+  <div class="cpr:pad">
   {{if not $data.Destinations}}
-  <p class="cpr-hint">Add a destination first — a schedule has to have somewhere to write.</p>
+  <p class="cpr:hint cpr:mt-0">Add a destination first — a schedule has to have somewhere to write.</p>
   {{else}}
   <form method="post" action="?p=schedule/save" data-scope-toggle>
     <input type="hidden" name="csrf" value="{{.CSRF}}">
     {{with $data.Editing}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
-    <div class="cpr-grid2">
+    <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2">
       <div>
-        <label for="name">Name</label>
-        <input type="text" id="name" name="name" placeholder="Nightly" required
+        <label class="cpr:field-label" for="name">Name</label>
+        <input type="text" class="cpr:input cpr:w-full" id="name" name="name" placeholder="Nightly" required
                value="{{with $data.Editing}}{{.Name}}{{end}}">
       </div>
       <div>
-        <label for="cron">When (cron)</label>
-        <input type="text" id="cron" name="cron" required
+        <label class="cpr:field-label" for="cron">When (cron)</label>
+        <input type="text" class="cpr:input cpr:w-full" id="cron" name="cron" required
                value="{{if $data.Editing}}{{$data.Editing.ScheduleCron}}{{else}}0 2 * * *{{end}}">
-        <small class="cpr-help">Five fields, server local time. <span class="cpr-mono">0 2 * * *</span> is 02:00 every day.</small>
+        <small class="cpr:help">Five fields, server local time. <span class="cpr:mono">0 2 * * *</span> is 02:00 every day.</small>
       </div>
     </div>
 
-    <label>Send backups to</label>
+    <label class="cpr:field-label cpr:mt-4">Send backups to</label>
     {{range $data.Destinations}}
       {{if .Repository.ID}}
-      <label class="cpr-check"><input type="checkbox" name="repository" value="{{.Repository.ID}}"
+      <label class="cpr:check"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="repository" value="{{.Repository.ID}}"
              {{if $data.Editing}}{{if index $data.Selected .Repository.ID}}checked{{end}}{{else}}checked{{end}}>
-        <span>{{.Name}} <span class="cpr-muted cpr-mono">{{.Endpoint}}</span></span></label>
+        <span>{{.Name}} <span class="cpr:text-base-content/70 cpr:mono">{{.Endpoint}}</span></span></label>
       {{end}}
     {{end}}
-    <small class="cpr-help">Pick more than one and each backup is uploaded to each of them.
+    <small class="cpr:help">Pick more than one and each backup is uploaded to each of them.
     If one is unreachable the others still succeed.</small>
 
-    <label>Which accounts</label>
+    <label class="cpr:field-label cpr:mt-4">Which accounts</label>
     {{$selectedScope := false}}{{with $data.Editing}}{{if not .AllAccounts}}{{$selectedScope = true}}{{end}}{{end}}
-    <label class="cpr-check"><input type="radio" name="scope" value="all" {{if not $selectedScope}}checked{{end}}>
-      <span>Every account on this server <small class="cpr-help">Accounts added later are included automatically.</small></span></label>
-    <label class="cpr-check"><input type="radio" name="scope" value="selected" {{if $selectedScope}}checked{{end}}>
+    <label class="cpr:check"><input type="radio" class="cpr:radio cpr:radio-sm cpr:mt-0.5" name="scope" value="all" {{if not $selectedScope}}checked{{end}}>
+      <span>Every account on this server <small class="cpr:help">Accounts added later are included automatically.</small></span></label>
+    <label class="cpr:check"><input type="radio" class="cpr:radio cpr:radio-sm cpr:mt-0.5" name="scope" value="selected" {{if $selectedScope}}checked{{end}}>
       <span>Only the ones I choose</span></label>
     <div data-account-picker hidden>
       {{range $data.Accounts}}
-      <label class="cpr-check"><input type="checkbox" name="account" value="{{.User}}"
+      <label class="cpr:check"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="account" value="{{.User}}"
              {{if $data.Chosen}}{{if index $data.Chosen .User}}checked{{end}}{{end}}><span>{{.User}}</span></label>
       {{end}}
     </div>
 
-    <div class="cpr-grid2">
+    <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
       <div>
-        <label for="keep_daily">Keep daily</label>
-        <input type="number" id="keep_daily" name="keep_daily" min="0"
+        <label class="cpr:field-label" for="keep_daily">Keep daily</label>
+        <input type="number" class="cpr:input cpr:w-full" id="keep_daily" name="keep_daily" min="0"
                value="{{if $data.Editing}}{{$data.Editing.Retention.KeepDaily}}{{else}}7{{end}}">
       </div>
       <div>
-        <label for="keep_weekly">Keep weekly</label>
-        <input type="number" id="keep_weekly" name="keep_weekly" min="0"
+        <label class="cpr:field-label" for="keep_weekly">Keep weekly</label>
+        <input type="number" class="cpr:input cpr:w-full" id="keep_weekly" name="keep_weekly" min="0"
                value="{{if $data.Editing}}{{$data.Editing.Retention.KeepWeekly}}{{else}}4{{end}}">
       </div>
       <div>
-        <label for="keep_monthly">Keep monthly</label>
-        <input type="number" id="keep_monthly" name="keep_monthly" min="0"
+        <label class="cpr:field-label" for="keep_monthly">Keep monthly</label>
+        <input type="number" class="cpr:input cpr:w-full" id="keep_monthly" name="keep_monthly" min="0"
                value="{{if $data.Editing}}{{$data.Editing.Retention.KeepMonthly}}{{else}}6{{end}}">
       </div>
       <div>
-        <label for="mode">Payload</label>
+        <label class="cpr:field-label" for="mode">Payload</label>
         {{$mode := "split"}}{{with $data.Editing}}{{$mode = .PayloadMode}}{{end}}
-        <select id="mode" name="mode">
+        <select class="cpr:select cpr:w-full" id="mode" name="mode">
           <option value="split" {{if eq $mode "split"}}selected{{end}}>Split (recommended)</option>
           <option value="monolithic" {{if eq $mode "monolithic"}}selected{{end}}>Single archive</option>
         </select>
-        <small class="cpr-help">Split stores the home directory and each database separately,
+        <small class="cpr:help">Split stores the home directory and each database separately,
         so an unchanged account costs almost nothing to back up again.</small>
       </div>
     </div>
 
-    <h2 style="margin-top:var(--s5)">What the backup contains</h2>
+    <h2 class="cpr:section-title cpr:mt-6">What the backup contains</h2>
     {{$edit := $data.Editing}}
     {{if $.Cpanel}}
-    <label class="cpr-check">
-      <input type="checkbox" name="skip_homedir" value="1" {{with $edit}}{{if .SkipHomedir}}checked{{end}}{{end}}>
+    <label class="cpr:check">
+      <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="skip_homedir" value="1" {{with $edit}}{{if .SkipHomedir}}checked{{end}}{{end}}>
       <span>Leave out the home directory
-      <small class="cpr-help">Every site's files and every mailbox live there. Only for an
+      <small class="cpr:help">Every site's files and every mailbox live there. Only for an
       account whose files are backed up by something else.</small></span></label>
-    <label class="cpr-check">
-      <input type="checkbox" name="skip_databases" value="1" {{with $edit}}{{if .SkipDatabases}}checked{{end}}{{end}}>
+    <label class="cpr:check">
+      <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="skip_databases" value="1" {{with $edit}}{{if .SkipDatabases}}checked{{end}}{{end}}>
       <span>Leave out databases</span></label>
-    <label class="cpr-check">
-      <input type="checkbox" name="skip_email" value="1" {{with $edit}}{{if .SkipEmail}}checked{{end}}{{end}}>
+    <label class="cpr:check">
+      <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="skip_email" value="1" {{with $edit}}{{if .SkipEmail}}checked{{end}}{{end}}>
       <span>Leave out email
-      <small class="cpr-help">Skips <span class="cpr-mono">~/mail</span> and
-      <span class="cpr-mono">~/etc</span>, where the mailbox names and their password
+      <small class="cpr:help">Skips <span class="cpr:mono">~/mail</span> and
+      <span class="cpr:mono">~/etc</span>, where the mailbox names and their password
       hashes are, and tells pkgacct to leave the addresses, forwarders and filters out
       of its archive. On a server too old for the split archive, cPanel packs the whole
-      home directory itself and <span class="cpr-mono">~/etc</span> stays in the backup;
+      home directory itself and <span class="cpr:mono">~/etc</span> stays in the backup;
       the service log warns for every such run.</small></span></label>
-    <p class="cpr-note">The account's settings, DNS, SSL certificates and cron jobs always
+    <p class="cpr:text-xs cpr:text-base-content/60 cpr:mt-4">The account's settings, DNS, SSL certificates and cron jobs always
     travel. They are one archive that cPanel's own restore reads, and pkgacct has no switch
     that takes pieces out of it.</p>
     {{else}}
@@ -147,69 +147,69 @@
          own backup, and a schedule that asked for one would fail every
          night. The controls are not offered rather than offered and
          refused. */}}
-    <p class="cpr-note">{{$.Panel}} backs up a whole account or none of it: the home directory,
+    <p class="cpr:text-xs cpr:text-base-content/60 cpr:mt-4">{{$.Panel}} backs up a whole account or none of it: the home directory,
     the databases, the mail and the account's own settings all travel, and there is no switch
     that takes a part out. What Gniza chooses is how the backup is stored, not what is in it.</p>
     {{end}}
 
-    <label class="cpr-check">
-      <input type="checkbox" name="include_system" value="1" {{with $edit}}{{if .IncludeSystem}}checked{{end}}{{end}}>
+    <label class="cpr:check">
+      <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="include_system" value="1" {{with $edit}}{{if .IncludeSystem}}checked{{end}}{{end}}>
       <span>Also back up the server's own settings
-      <small class="cpr-help">EasyApache's profile, the tweak settings, packages, feature lists,
+      <small class="cpr:help">EasyApache's profile, the tweak settings, packages, feature lists,
       resellers, the mail and DNS configuration, DNSSEC signing keys, the system users and
       root's cron. A replacement server needs these before the accounts restored onto it mean
       anything. It is small and changes rarely.
       <br>It is not a copy of the machine: {{$.Panel}} itself, anything installed outside it, and
       each account's own data are not in here — the accounts travel in their own backups, and
-      Gniza's key in <span class="cpr-mono">/etc/gniza</span> is deliberately left out, because
+      Gniza's key in <span class="cpr:mono">/etc/gniza</span> is deliberately left out, because
       a backup holding the key to itself protects nothing.</small></span></label>
 
-    <h2 style="margin-top:var(--s5)">Directories and files to exclude</h2>
-    <label for="excludes">One path or pattern per line</label>
-    <textarea id="excludes" name="excludes" rows="4" data-excludes
+    <h2 class="cpr:section-title cpr:mt-6">Directories and files to exclude</h2>
+    <label class="cpr:field-label cpr:mt-3" for="excludes">One path or pattern per line</label>
+    <textarea class="cpr:textarea cpr:w-full cpr:font-mono cpr:text-xs" id="excludes" name="excludes" rows="4" data-excludes
               placeholder="/home/*/public_html/wp-content/cache">{{with $edit}}{{join .Excludes "\n"}}{{end}}</textarea>
-    <small class="cpr-help">restic's exclude patterns. A cache directory backed up nightly costs
+    <small class="cpr:help">restic's exclude patterns. A cache directory backed up nightly costs
     storage every night and is of no use in a restore.</small>
-    <div class="cpr-row" style="margin-top:var(--s2)">
-      <span class="cpr-hint" style="margin:0">Add the usual ones:</span>
+    <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:mt-2">
+      <span class="cpr:hint cpr:mt-0">Add the usual ones:</span>
       {{range $name, $paths := $data.ExcludePresets}}
       {{/* A real newline, because the script splits on one. Writing the
            entity here joins the patterns with its six characters
            instead: the escaper turns the ampersand into &amp;, and the
            operator gets one line with "&#10;" in it. */}}
-      <button type="button" class="cpr-btn" data-exclude-preset="{{join $paths "\n"}}">{{$name}}</button>
+      <button type="button" class="cpr:btn cpr:btn-sm" data-exclude-preset="{{join $paths "\n"}}">{{$name}}</button>
       {{end}}
     </div>
 
-    <h2 style="margin-top:var(--s5)">When it goes wrong</h2>
-    <label class="cpr-check">
-      <input type="checkbox" name="retry_failed" value="1" {{with $edit}}{{if .RetryFailed}}checked{{end}}{{end}}>
+    <h2 class="cpr:section-title cpr:mt-6">When it goes wrong</h2>
+    <label class="cpr:check">
+      <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="retry_failed" value="1" {{with $edit}}{{if .RetryFailed}}checked{{end}}{{end}}>
       <span>Retry a destination that failed
-      <small class="cpr-help">One more attempt while the account is still staged, so a retry
+      <small class="cpr:help">One more attempt while the account is still staged, so a retry
       costs an upload rather than {{if $.Cpanel}}another pkgacct run{{else}}reading the whole
       account again{{end}}.</small></span></label>
 
-    <div class="cpr-grid2">
+    <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
       <div>
-        <label for="alert_no_backup_days">Warn if an account has no backup for</label>
-        <input type="number" id="alert_no_backup_days" name="alert_no_backup_days" min="0"
+        <label class="cpr:field-label" for="alert_no_backup_days">Warn if an account has no backup for</label>
+        <input type="number" class="cpr:input cpr:w-full" id="alert_no_backup_days" name="alert_no_backup_days" min="0"
                value="{{with $edit}}{{.AlertNoBackupDays}}{{end}}" placeholder="two runs">
-        <small class="cpr-help">Days. Empty follows this schedule: two runs missed.</small>
+        <small class="cpr:help">Days. Empty follows this schedule: two runs missed.</small>
       </div>
       <div>
-        <label for="alert_run_hours">Warn if a run takes longer than</label>
-        <input type="number" id="alert_run_hours" name="alert_run_hours" min="0"
+        <label class="cpr:field-label" for="alert_run_hours">Warn if a run takes longer than</label>
+        <input type="number" class="cpr:input cpr:w-full" id="alert_run_hours" name="alert_run_hours" min="0"
                value="{{with $edit}}{{.AlertRunHours}}{{end}}" placeholder="6">
-        <small class="cpr-help">Hours. A run still going after this is stuck more often than slow.</small>
+        <small class="cpr:help">Hours. A run still going after this is stuck more often than slow.</small>
       </div>
     </div>
 
     {{$enabled := true}}{{with $data.Editing}}{{$enabled = .Enabled}}{{end}}
-    <label class="cpr-check" style="margin-top:var(--s5)"><input type="checkbox" name="enabled" value="1" {{if $enabled}}checked{{end}}><span>Enabled</span></label>
+    <label class="cpr:check cpr:mt-6"><input type="checkbox" class="cpr:toggle cpr:toggle-sm cpr:toggle-success" name="enabled" value="1" {{if $enabled}}checked{{end}}><span>Enabled</span></label>
 
-    <div class="cpr-row" style="margin-top:var(--s4)">
-      <button class="cpr-btn cpr-primary" type="submit">{{if $data.Editing}}Save changes{{else}}Save schedule{{end}}</button>
-      {{if $data.Editing}}<a class="cpr-btn cpr-quiet" href="?p=schedule">Cancel</a>{{end}}
+    <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:mt-4">
+      <button class="cpr:btn cpr:btn-sm cpr:btn-primary" type="submit">{{if $data.Editing}}Save changes{{else}}Save schedule{{end}}</button>
+      {{if $data.Editing}}<a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=schedule">Cancel</a>{{end}}
     </div>
   </form>
   {{end}}

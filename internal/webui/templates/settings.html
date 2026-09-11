@@ -2,57 +2,57 @@
 {{$data := .Data}}
 {{$tab := $data.Tab}}
 <div>
-  <h1>Settings</h1>
-  <p class="cpr-sub">How this server takes its backups.</p>
+  <h1 class="cpr:page-title">Settings</h1>
+  <p class="cpr:page-sub">How this server takes its backups.</p>
 </div>
 {{template "settingstabs" $tab}}
 {{if eq $tab "backups"}}
-<div class="cpr-card">
-  <div class="cpr-pad" style="border-bottom:1px solid var(--line)"><h2 style="margin:0">How backups run</h2></div>
-  <div class="cpr-pad">
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:border-b cpr:border-base-300"><h2 class="cpr:section-title">How backups run</h2></div>
+  <div class="cpr:pad">
   <form method="post" action="?p=settings/save">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
-    <div class="cpr-grid2">
+    <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2">
       <div>
-        <label for="hostname">This server's name</label>
-        <input type="text" id="hostname" name="hostname" value="{{$data.Settings.Hostname}}">
-        <small class="cpr-help">Recorded on every backup, so you can tell whose it is.</small>
+        <label class="cpr:field-label" for="hostname">This server's name</label>
+        <input type="text" class="cpr:input cpr:w-full" id="hostname" name="hostname" value="{{$data.Settings.Hostname}}">
+        <small class="cpr:help">Recorded on every backup, so you can tell whose it is.</small>
       </div>
       <div>
-        <label for="max_concurrent">Accounts backed up at once</label>
-        <input type="number" id="max_concurrent" name="max_concurrent"
+        <label class="cpr:field-label" for="max_concurrent">Accounts backed up at once</label>
+        <input type="number" class="cpr:input cpr:w-full" id="max_concurrent" name="max_concurrent"
                value="{{$data.Settings.MaxConcurrent}}" min="1">
-        <small class="cpr-help">Each one needs staging space of about its own size.</small>
+        <small class="cpr:help">Each one needs staging space of about its own size.</small>
       </div>
       <div>
-        <label for="restic">restic binary</label>
-        <input type="text" id="restic" name="restic" value="{{$data.Settings.ResticBinary}}">
+        <label class="cpr:field-label" for="restic">restic binary</label>
+        <input type="text" class="cpr:input cpr:w-full" id="restic" name="restic" value="{{$data.Settings.ResticBinary}}">
       </div>
       <div>
-        <label for="restic_cacert">Extra CA bundle for restic</label>
-        <input type="text" id="restic_cacert" name="restic_cacert" value="{{$data.Settings.ResticCACert}}">
-        <small class="cpr-help">Only for a backup server with a private certificate authority.</small>
+        <label class="cpr:field-label" for="restic_cacert">Extra CA bundle for restic</label>
+        <input type="text" class="cpr:input cpr:w-full" id="restic_cacert" name="restic_cacert" value="{{$data.Settings.ResticCACert}}">
+        <small class="cpr:help">Only for a backup server with a private certificate authority.</small>
       </div>
       <div>
-        <label for="keep_output_days">Keep restored files for</label>
-        <input type="number" id="keep_output_days" name="keep_output_days"
+        <label class="cpr:field-label" for="keep_output_days">Keep restored files for</label>
+        <input type="number" class="cpr:input cpr:w-full" id="keep_output_days" name="keep_output_days"
                value="{{$data.KeepDays}}" min="-1">
-        <small class="cpr-help">Days. A restore leaves its files here to be collected;
+        <small class="cpr:help">Days. A restore leaves its files here to be collected;
         after this they are swept. −1 keeps them until you delete them.</small>
       </div>
       <div>
-        <label for="log_level">Log level</label>
-        <select id="log_level" name="log_level">
+        <label class="cpr:field-label" for="log_level">Log level</label>
+        <select class="cpr:select cpr:w-full" id="log_level" name="log_level">
           {{range $data.LogLevels}}<option value="{{.}}" {{if eq . $data.Settings.LogLevel}}selected{{end}}>{{.}}</option>{{end}}
         </select>
-        <small class="cpr-help">How much the service writes to its own log, readable under
-        <a class="cpr-link" href="?p=logs&amp;tab=service">Logs → Service log</a>. Takes effect at
+        <small class="cpr:help">How much the service writes to its own log, readable under
+        <a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=logs&amp;tab=service">Logs → Service log</a>. Takes effect at
         once, without a restart: <b>debug</b> is for watching something that is going wrong now,
         and is worth turning back down afterwards.</small>
       </div>
       <div>
-        <label for="deleted_account_days">Keep a deleted account's backups for</label>
-        <select id="deleted_account_days" name="deleted_account_days">
+        <label class="cpr:field-label" for="deleted_account_days">Keep a deleted account's backups for</label>
+        <select class="cpr:select cpr:w-full" id="deleted_account_days" name="deleted_account_days">
           <option value="-1" {{if eq $data.DeletedPreset "-1"}}selected{{end}}>Until I remove them</option>
           <option value="30" {{if eq $data.DeletedPreset "30"}}selected{{end}}>30 days</option>
           <option value="90" {{if eq $data.DeletedPreset "90"}}selected{{end}}>90 days</option>
@@ -60,47 +60,47 @@
           <option value="365" {{if eq $data.DeletedPreset "365"}}selected{{end}}>A year</option>
           <option value="custom" {{if eq $data.DeletedPreset "custom"}}selected{{end}}>Some other number of days…</option>
         </select>
-        <input type="number" name="deleted_account_days_custom" min="1"
+        <input type="number" class="cpr:input cpr:w-full cpr:mt-2" name="deleted_account_days_custom" min="1"
                aria-label="Days to keep a deleted account's backups"
                value="{{$data.DeletedDays}}">
-        <small class="cpr-help">When a {{$.Panel}} account has been gone this long, its backups are
+        <small class="cpr:help">When a {{$.Panel}} account has been gone this long, its backups are
         removed from every destination and its history here goes with them. Nothing else ever
         removes them: retention thins a series but never empties it. The number beside the list
         is used when you choose “some other number of days”.</small>
       </div>
       <div>
-        <label class="cpr-check">
-          <input type="checkbox" name="protect_account_removal" value="1"
+        <label class="cpr:check">
+          <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="protect_account_removal" value="1"
                  {{if $data.Settings.ProtectAccountRemoval}}checked{{end}}>
           <span>Block unsafe {{$.Panel}} account termination
-          <small class="cpr-help">Refuse removal unless every destination promised by a full-account
+          <small class="cpr:help">Refuse removal unless every destination promised by a full-account
           schedule has a recent, successful and complete copy. A partial backup does not count;
           after first enabling this, let the schedule complete a new backup.</small></span>
         </label>
       </div>
       <div>
-        <label class="cpr-check">
-          <input type="checkbox" name="backup_on_suspension" value="1"
+        <label class="cpr:check">
+          <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="backup_on_suspension" value="1"
                  {{if $data.Settings.BackupOnSuspension}}checked{{end}}>
           <span>Preserve accounts when {{$.Panel}} suspends them
-          <small class="cpr-help">Immediately queue the smallest set of full-account schedules
+          <small class="cpr:help">Immediately queue the smallest set of full-account schedules
           needed to reach every promised destination. The hook queues work and returns; it does
           not wait for the backup to finish.</small></span>
         </label>
       </div>
       <div>
-        <label class="cpr-check">
-          <input type="checkbox" name="update_check" value="1"
+        <label class="cpr:check">
+          <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="update_check" value="1"
                  {{if not $data.Settings.NoUpdateCheck}}checked{{end}}>
           <span>Check for new versions
-          <small class="cpr-help">Ask GitHub once a day whether a newer Gniza has been
+          <small class="cpr:help">Ask GitHub once a day whether a newer Gniza has been
           released, and say so at the top of every page. It reads a version number and installs
           nothing. This server runs {{$data.Version}}{{with $data.LastChecked}}; last asked {{.}}{{end}}{{with $data.CheckError}} — the last ask failed: {{.}}{{end}}.</small></span>
         </label>
       </div>
     </div>
-    <div class="cpr-row" style="margin-top:var(--s4)">
-      <button class="cpr-btn cpr-primary" type="submit">Save</button>
+    <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:mt-4">
+      <button class="cpr:btn cpr:btn-sm cpr:btn-primary" type="submit">Save</button>
     </div>
   </form>
   </div>
@@ -113,97 +113,97 @@
      setting -- it happens when it is pressed. */}}
 {{$update := $data.Update}}
 {{if eq $tab "version"}}
-<div class="cpr-card">
-  <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
     <div>
-      <h2 style="margin:0">This copy of Gniza</h2>
-      <p class="cpr-hint" style="margin:var(--s1) 0 0" data-live="gniza-version">Version
+      <h2 class="cpr:section-title">This copy of Gniza</h2>
+      <p class="cpr:hint cpr:mt-1" data-live="gniza-version">Version
       {{$update.Running}}{{with $update.Checked}} — asked about newer ones {{.}}{{end}}.</p>
     </div>
     <form method="post" action="?p=settings/update/check">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
-      <button class="cpr-btn cpr-quiet" type="submit">Check now</button>
+      <button class="cpr:btn cpr:btn-sm cpr:btn-ghost" type="submit">Check now</button>
     </form>
   </div>
-  <div class="cpr-pad" data-live="upgrade">
+  <div class="cpr:pad" data-live="upgrade">
     {{if $update.Installing}}
-    <div class="cpr-banner cpr-warn" role="status" data-running="1"><div class="cpr-body">
+    <div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:text-sm" role="status" data-running="1"><div>
       <b>{{$update.Stage}}.</b>
-      <span class="cpr-hint" style="display:block; margin-top:var(--s1)">This page keeps itself
+      <span class="cpr:hint cpr:block cpr:mt-1">This page keeps itself
       current, including over the restart. Nothing else on this server is stopped.</span>
     </div></div>
     {{else if $update.Failed}}
-    <div class="cpr-banner cpr-bad"><div class="cpr-body">
+    <div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm"><div class="cpr:min-w-0">
       <b>{{$update.Upgrade.Version}} was not installed.</b> {{$update.Upgrade.Error}}
       This server still runs {{$update.Running}} and nothing was changed.
-      {{with $update.Upgrade.Log}}<div class="cpr-log" style="margin-top:var(--s2)">{{.}}</div>{{end}}
-      <form method="post" action="?p=settings/update/dismiss" style="margin-top:var(--s2)">
+      {{with $update.Upgrade.Log}}<div class="cpr:log cpr:mt-2">{{.}}</div>{{end}}
+      <form method="post" action="?p=settings/update/dismiss" class="cpr:mt-2">
         <input type="hidden" name="csrf" value="{{$.CSRF}}">
-        <button class="cpr-btn cpr-quiet" type="submit">Clear this</button>
+        <button class="cpr:btn cpr:btn-sm cpr:btn-ghost" type="submit">Clear this</button>
       </form>
     </div></div>
     {{else if $update.Installed}}
-    <div class="cpr-banner cpr-ok"><div class="cpr-body">
+    <div class="cpr:alert cpr:alert-soft cpr:alert-success cpr:text-sm"><div>
       <b>{{$update.Upgrade.Version}} is installed.</b> It was {{$update.Upgrade.From}} before.
-      <form method="post" action="?p=settings/update/dismiss" style="margin-top:var(--s2)">
+      <form method="post" action="?p=settings/update/dismiss" class="cpr:mt-2">
         <input type="hidden" name="csrf" value="{{$.CSRF}}">
-        <button class="cpr-btn cpr-quiet" type="submit">Clear this</button>
+        <button class="cpr:btn cpr:btn-sm cpr:btn-ghost" type="submit">Clear this</button>
       </form>
     </div></div>
     {{end}}
 
     {{if $update.Newer}}
-    <div class="cpr-spread" style="gap:var(--s4); align-items:flex-start">
+    <div class="cpr:flex cpr:flex-wrap cpr:items-start cpr:justify-between cpr:gap-4">
       <div>
         {{if $update.Dist}}
         <b>Build {{$update.Latest}} is on the dist branch.</b>
-        <p class="cpr-hint" style="margin:var(--s1) 0 0">Built{{with $update.BuiltAt}} {{.}}{{end}},
+        <p class="cpr:hint cpr:mt-1">Built{{with $update.BuiltAt}} {{.}}{{end}},
         and signed with the same release key as a published release. Installing downloads it,
         checks that signature, and restarts the service. Destinations, schedules, backups and
         history stay as they are.{{with $update.ReleaseURL}}
-        <a href="{{.}}" target="_blank" rel="noopener noreferrer">The branch</a>.{{end}}</p>
+        <a class="cpr:link cpr:link-primary cpr:link-hover" href="{{.}}" target="_blank" rel="noopener noreferrer">The branch</a>.{{end}}</p>
         {{else}}
         <b>Gniza {{$update.Latest}} has been released.</b>
-        <p class="cpr-hint" style="margin:var(--s1) 0 0">Installing downloads it, checks that the
+        <p class="cpr:hint cpr:mt-1">Installing downloads it, checks that the
         release key signed it, and restarts the service. Destinations, schedules, backups and
         history stay as they are.{{with $update.ReleaseURL}}
-        <a href="{{.}}" target="_blank" rel="noopener noreferrer">What changed</a>.{{end}}</p>
+        <a class="cpr:link cpr:link-primary cpr:link-hover" href="{{.}}" target="_blank" rel="noopener noreferrer">What changed</a>.{{end}}</p>
         {{end}}
       </div>
       <form method="post" action="?p=settings/update/install">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="version" value="{{$update.Latest}}">
-        <button class="cpr-btn cpr-primary" type="submit"
+        <button class="cpr:btn cpr:btn-sm cpr:btn-primary" type="submit"
                 {{if $update.Installing}}disabled{{end}}>Install {{$update.Latest}}</button>
       </form>
     </div>
     {{else if not $update.Installing}}
     {{if and $update.Unreleased (not $update.Dist)}}
-    <p class="cpr-hint" style="margin:0">This copy did not come from a published
+    <p class="cpr:hint cpr:mt-0">This copy did not come from a published
     release{{with $update.Latest}}; the newest one is {{.}}{{end}}. A build that is not a
     published version is never replaced from here, because whoever put it on this server is
     the only one who knows what is in it. To go back to published releases, install one over
     it:
-    <span class="cpr-mono">curl -fsSL
+    <span class="cpr:mono">curl -fsSL
     https://github.com/shukiv/gniza/releases/latest/download/get.sh | sh</span>
     {{with $data.CheckError}} The last ask failed: {{.}}{{end}}</p>
     {{else}}
-    <p class="cpr-hint" style="margin:0">Nothing newer has been published{{if $update.Dist}} on the
+    <p class="cpr:hint cpr:mt-0">Nothing newer has been published{{if $update.Dist}} on the
     dist branch{{end}}.{{with $data.CheckError}} The last ask failed: {{.}}{{end}}</p>
     {{end}}
     {{end}}
 
-    <form method="post" action="?p=settings/update/channel" style="margin-top:var(--s4)">
+    <form method="post" action="?p=settings/update/channel" class="cpr:mt-4">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
-      <label for="update_channel">Where updates come from</label>
-      <div class="cpr-row">
-        <select id="update_channel" name="update_channel">
+      <label class="cpr:field-label" for="update_channel">Where updates come from</label>
+      <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3">
+        <select class="cpr:select cpr:w-auto cpr:max-w-full" id="update_channel" name="update_channel">
           <option value="releases" {{if not $update.Dist}}selected{{end}}>Published releases</option>
           <option value="dist" {{if $update.Dist}}selected{{end}}>The dist branch — every build, as it is made</option>
         </select>
-        <button class="cpr-btn cpr-quiet" type="submit">Save</button>
+        <button class="cpr:btn cpr:btn-sm cpr:btn-ghost" type="submit">Save</button>
       </div>
-      <small class="cpr-help">Releases are versions somebody decided to publish. The dist branch is
+      <small class="cpr:help">Releases are versions somebody decided to publish. The dist branch is
       whatever has just been built, signed with the same key and checked the same way — for a server
       that follows the work rather than the releases.</small>
     </form>
@@ -214,55 +214,55 @@
 {{/* Nobody reads a page for a server that is working, which is exactly when
      it stops. This is how the server speaks first. */}}
 {{if eq $tab "alerts"}}
-<div class="cpr-card">
-  <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
     <div>
-      <h2 style="margin:0">Where problems are reported</h2>
-      <p class="cpr-hint" style="margin:var(--s1) 0 0">A backup that fails quietly is the same
+      <h2 class="cpr:section-title">Where problems are reported</h2>
+      <p class="cpr:hint cpr:mt-1">A backup that fails quietly is the same
       as no backup at all.</p>
     </div>
-    <a class="cpr-btn cpr-primary" href="?p=settings&amp;addchannel=1"
+    <a class="cpr:btn cpr:btn-sm cpr:btn-primary" href="?p=settings&amp;addchannel=1"
        data-dialog="add-channel">Add a channel</a>
   </div>
   {{if $data.Channels}}
-  <div class="cpr-tablewrap"><table>
-    <thead><tr><th>Channel</th><th>Sends</th><th>Last sent</th><th class="cpr-right">&nbsp;</th></tr></thead>
+  <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
+    <thead><tr><th>Channel</th><th>Sends</th><th>Last sent</th><th class="cpr:text-right">&nbsp;</th></tr></thead>
     <tbody>
       {{range $data.Channels}}
       <tr>
         <td>
-          <span class="cpr-acct">{{.Name}}</span>
-          <div class="cpr-sublabel">{{kindTitle .Kind}}{{with channelWhere .}} — <span class="cpr-mono">{{.}}</span>{{end}}</div>
+          <span class="cpr:font-semibold">{{.Name}}</span>
+          <div class="cpr:sublabel">{{kindTitle .Kind}}{{with channelWhere .}} — <span class="cpr:mono">{{.}}</span>{{end}}</div>
         </td>
         <td>
           {{if .Events}}
             {{range $i, $e := .Events}}{{if $i}}<br>{{end}}{{eventTitle $e}}{{end}}
           {{else}}
             Anything that has gone wrong
-            <div class="cpr-sublabel">Failures, overdue accounts, stuck runs, unreachable destinations.</div>
+            <div class="cpr:sublabel">Failures, overdue accounts, stuck runs, unreachable destinations.</div>
           {{end}}
         </td>
         <td>
-          {{if not .Enabled}}<span class="cpr-pill">Off</span>
-          {{else if .LastError}}<span class="cpr-pill cpr-bad">Not working</span>
-            <div class="cpr-sublabel">{{.LastError}}</div>
-          {{else if .LastSent}}{{stamp .LastSent}}<div class="cpr-sublabel">{{ago .LastSent}}</div>
-          {{else}}<span class="cpr-hint">Nothing sent yet</span>{{end}}
+          {{if not .Enabled}}<span class="cpr:pill cpr:badge-ghost">Off</span>
+          {{else if .LastError}}<span class="cpr:pill cpr:badge-error">Not working</span>
+            <div class="cpr:sublabel">{{.LastError}}</div>
+          {{else if .LastSent}}{{stamp .LastSent}}<div class="cpr:sublabel">{{ago .LastSent}}</div>
+          {{else}}<span class="cpr:hint cpr:mt-0">Nothing sent yet</span>{{end}}
         </td>
-        <td class="cpr-right"><div class="cpr-actions">
-          <form method="post" action="?p=settings/channels/test" class="cpr-inline">
+        <td class="cpr:text-right"><div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
+          <form method="post" action="?p=settings/channels/test" class="cpr:inline-block cpr:align-middle">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="id" value="{{.ID}}">
-            <button class="cpr-btn">Send a test</button>
+            <button class="cpr:btn cpr:btn-sm">Send a test</button>
           </form>
-          <a class="cpr-btn" href="?p=settings&amp;channel={{.ID}}"
+          <a class="cpr:btn cpr:btn-sm" href="?p=settings&amp;channel={{.ID}}"
              data-dialog="add-channel" data-dialog-fetch
              data-dialog-title="Edit &ldquo;{{.Name}}&rdquo;">Edit</a>
-          <form method="post" action="?p=settings/channels/delete" class="cpr-inline"
+          <form method="post" action="?p=settings/channels/delete" class="cpr:inline-block cpr:align-middle"
                 data-confirm="Remove this channel? Nothing will be sent there.">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="id" value="{{.ID}}">
-            <button class="cpr-btn cpr-danger">Remove</button>
+            <button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline">Remove</button>
           </form>
         </div></td>
       </tr>
@@ -270,159 +270,161 @@
     </tbody>
   </table></div>
   {{else}}
-  <div class="cpr-empty">
-    <p><b>Nothing is being told.</b><br>If a backup fails tonight, this page is the only place
+  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70">
+    <p class="cpr:mb-4"><b>Nothing is being told.</b><br>If a backup fails tonight, this page is the only place
     it will say so.</p>
-    <a class="cpr-btn cpr-primary" href="?p=settings&amp;addchannel=1"
+    <a class="cpr:btn cpr:btn-sm cpr:btn-primary" href="?p=settings&amp;addchannel=1"
        data-dialog="add-channel">Add a channel</a>
   </div>
   {{end}}
 </div>
 
 {{if $data.Editing}}
-<div class="cpr-card">
-  <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">Edit &ldquo;{{$data.Editing.Name}}&rdquo;</h2>
-    <a class="cpr-btn cpr-quiet" href="?p=settings">Cancel</a>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">Edit &ldquo;{{$data.Editing.Name}}&rdquo;</h2>
+    <a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=settings">Cancel</a>
   </div>
-  <div class="cpr-pad" data-drawer-content>{{template "channelform" .}}</div>
+  <div class="cpr:pad" data-drawer-content>{{template "channelform" .}}</div>
 </div>
 {{else if $data.Adding}}
-<div class="cpr-card">
-  <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">Add a channel</h2>
-    <a class="cpr-btn cpr-quiet" href="?p=settings">Cancel</a>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">Add a channel</h2>
+    <a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=settings">Cancel</a>
   </div>
-  <div class="cpr-pad" data-drawer-content>{{template "channelform" .}}</div>
+  <div class="cpr:pad" data-drawer-content>{{template "channelform" .}}</div>
 </div>
 {{else}}
-<dialog id="add-channel" class="cpr-sheet" aria-label="Add a channel">
-  <div class="cpr-sheet-head">
-    <h2 style="margin:0" data-drawer-title>Add a channel</h2>
-    <button type="button" class="cpr-btn cpr-quiet" data-dialog-close aria-label="Close">&#10005;</button>
-  </div>
-  <div class="cpr-sheet-body" data-drawer-body>
-    {{template "channelform" .}}
+<dialog id="add-channel" class="cpr:modal cpr:modal-end" data-sheet aria-label="Add a channel">
+  <div class="cpr:modal-box cpr:sheet">
+    <div class="cpr:flex cpr:items-center cpr:justify-between cpr:gap-3 cpr:px-6 cpr:py-4 cpr:border-b cpr:border-base-300 cpr:shrink-0">
+      <h2 class="cpr:text-lg cpr:font-semibold" data-drawer-title>Add a channel</h2>
+      <button type="button" class="cpr:btn cpr:btn-sm cpr:btn-ghost cpr:btn-square" data-dialog-close aria-label="Close">&#10005;</button>
+    </div>
+    <div class="cpr:p-6 cpr:overflow-auto cpr:grow" data-drawer-body>
+      {{template "channelform" .}}
+    </div>
   </div>
 </dialog>
 {{end}}
 {{end}}
 
 {{if eq $tab "storage"}}
-<div class="cpr-card">
-  <div class="cpr-pad" style="border-bottom:1px solid var(--line)"><h2 style="margin:0">Staging</h2></div>
-  <div class="cpr-pad">
-  <p><span class="cpr-mono">{{$data.Settings.StagingRoot}}</span> — {{bytes $data.StagingFree}} free</p>
-  <p class="cpr-hint">This is where an account is assembled before it is uploaded. It needs
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:border-b cpr:border-base-300"><h2 class="cpr:section-title">Staging</h2></div>
+  <div class="cpr:pad">
+  <p><span class="cpr:mono">{{$data.Settings.StagingRoot}}</span> — {{bytes $data.StagingFree}} free</p>
+  <p class="cpr:hint">This is where an account is assembled before it is uploaded. It needs
   roughly as much free space as the largest account being backed up. It is deliberately
   not editable here: the path is recorded inside every backup, and changing it would
   strand the retention rules that keep your old backups tidy.</p>
   </div>
 </div>
 
-<div class="cpr-card">
-  <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">Restored files waiting to be collected</h2>
-    <span class="cpr-hint" style="margin:0">{{bytes $data.OutputBytes}} in <span class="cpr-mono">{{$data.Settings.StagingRoot}}</span></span>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">Restored files waiting to be collected</h2>
+    <span class="cpr:hint cpr:mt-0">{{bytes $data.OutputBytes}} in <span class="cpr:mono">{{$data.Settings.StagingRoot}}</span></span>
   </div>
   {{if $data.Outputs}}
-  <div class="cpr-tablewrap"><table>
-    <thead><tr><th>What</th><th>Size</th><th>Produced</th><th class="cpr-right">&nbsp;</th></tr></thead>
+  <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
+    <thead><tr><th>What</th><th>Size</th><th>Produced</th><th class="cpr:text-right">&nbsp;</th></tr></thead>
     <tbody>
       {{range $data.Outputs}}
       <tr>
-        <td class="cpr-acct">{{.Key}}</td>
-        <td class="cpr-mono cpr-num">{{bytes .Bytes}}</td>
-        <td>{{stamp .At}}<div class="cpr-sublabel">{{ago .At}}</div></td>
-        <td class="cpr-right"><div class="cpr-actions">
-          <form method="post" action="?p=settings/output/delete" class="cpr-inline"
+        <td class="cpr:font-semibold">{{.Key}}</td>
+        <td class="cpr:mono cpr:tabular-nums">{{bytes .Bytes}}</td>
+        <td>{{stamp .At}}<div class="cpr:sublabel">{{ago .At}}</div></td>
+        <td class="cpr:text-right"><div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
+          <form method="post" action="?p=settings/output/delete" class="cpr:inline-block cpr:align-middle"
                 data-confirm="Delete these restored files? The backups they came from are untouched.">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="key" value="{{.Key}}">
-            <button class="cpr-btn cpr-danger">Delete</button>
+            <button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline">Delete</button>
           </form>
         </div></td>
       </tr>
       {{end}}
     </tbody>
   </table></div>
-  <div class="cpr-pad cpr-spread" style="border-top:1px solid var(--line)">
-    <p class="cpr-hint" style="margin:0">A restore leaves what it recovered here so you can
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-t cpr:border-base-300">
+    <p class="cpr:hint cpr:mt-0">A restore leaves what it recovered here so you can
     collect it. Deleting it here removes only the recovered copy.</p>
-    <form method="post" action="?p=settings/output/clear" class="cpr-inline"
+    <form method="post" action="?p=settings/output/clear" class="cpr:inline-block cpr:align-middle"
           data-confirm="Delete every restored file waiting here? The backups themselves are untouched.">
       <input type="hidden" name="csrf" value="{{$.CSRF}}">
-      <button class="cpr-btn cpr-danger">Delete all</button>
+      <button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline">Delete all</button>
     </form>
   </div>
   {{else}}
-  <div class="cpr-pad"><p class="cpr-hint">Nothing waiting. A restore leaves its files here
+  <div class="cpr:pad"><p class="cpr:hint cpr:mt-0">Nothing waiting. A restore leaves its files here
   until you collect them, or until they are swept.</p></div>
   {{end}}
 </div>
 {{end}}
 
 {{if eq $tab "backups"}}
-<div class="cpr-card">
-  <div class="cpr-pad" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">What a backup contains</h2>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">What a backup contains</h2>
   </div>
-  <div class="cpr-tablewrap"><table>
+  <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
     <thead><tr><th>Part of the account</th><th>How it is stored</th></tr></thead>
     <tbody>
       <tr>
-        <td class="cpr-acct">Home directory</td>
+        <td class="cpr:font-semibold">Home directory</td>
         <td>Backed up as files, in place — every site, every mailbox.
-          <div class="cpr-sublabel">So a night that changed one file stores one file.</div></td>
+          <div class="cpr:sublabel">So a night that changed one file stores one file.</div></td>
       </tr>
       <tr>
-        <td class="cpr-acct">Databases</td>
-        <td>One plain <span class="cpr-mono">.sql</span> dump per database.
-          <div class="cpr-sublabel">Dumped by Gniza, not packed inside {{$.Panel}}'s archive: plain
+        <td class="cpr:font-semibold">Databases</td>
+        <td>One plain <span class="cpr:mono">.sql</span> dump per database.
+          <div class="cpr:sublabel">Dumped by Gniza, not packed inside {{$.Panel}}'s archive: plain
           SQL deduplicates between nights, a compressed archive does not.</div></td>
       </tr>
       <tr>
-        <td class="cpr-acct">Settings, DNS, SSL, mail configuration</td>
+        <td class="cpr:font-semibold">Settings, DNS, SSL, mail configuration</td>
         <td>{{$.Panel}}'s own account archive, with the home directory and databases left out of it.
-          <div class="cpr-sublabel">{{if $.Cpanel}}The same <span class="cpr-mono">cpmove</span> format
+          <div class="cpr:sublabel">{{if $.Cpanel}}The same <span class="cpr:mono">cpmove</span> format
           restorepkg reads, so a whole-account restore is a rebuild of it.{{else}}The same archive
           {{$.Panel}}'s own restore reads, so a whole-account restore is a rebuild of it.{{end}}</div></td>
       </tr>
     </tbody>
   </table></div>
-  <div class="cpr-pad" style="border-top:1px solid var(--line)">
+  <div class="cpr:pad cpr:border-t cpr:border-base-300">
     {{if $data.Monolithic}}
-    <div class="cpr-banner cpr-warn"><div class="cpr-body">
+    <div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:text-sm"><div>
       {{$data.Monolithic}} schedule{{if ne $data.Monolithic 1}}s{{end}} use the single-archive
       payload, which stores a full copy of the account every night. Split is the default and
       costs a fraction of it.
     </div></div>
     {{else}}
-    <p class="cpr-hint" style="margin:0">The three rows above are the whole account as {{$.Panel}}
+    <p class="cpr:hint cpr:mt-0">The three rows above are the whole account as {{$.Panel}}
     packages it, and what differs between payload modes is how it is cut up rather than what is
     kept.{{if $.Cpanel}} One thing cPanel itself does not carry: two-factor authentication settings
-    are not in a <span class="cpr-mono">cpmove</span> archive, so an account restored onto a
+    are not in a <span class="cpr:mono">cpmove</span> archive, so an account restored onto a
     rebuilt server comes back with 2FA off and has to have it set up again.{{end}}</p>
     {{end}}
   </div>
 
   {{if $.Cpanel}}
   {{if $data.Settings.PkgacctFlags}}
-  <div class="cpr-pad" style="border-top:1px solid var(--line)">
+  <div class="cpr:pad cpr:border-t cpr:border-base-300">
     <details>
-      <summary>How Gniza gets pkgacct to do that</summary>
-      <p class="cpr-hint" style="margin-top:var(--s2)">Flag names have moved between cPanel
+      <summary class="cpr:cursor-pointer cpr:py-2 cpr:text-[13px] cpr:text-primary cpr:link-hover">How Gniza gets pkgacct to do that</summary>
+      <p class="cpr:hint">Flag names have moved between cPanel
       releases, so they are probed when the service starts rather than assumed. Each one asks
       pkgacct to leave a part out of <em>its</em> archive, because Gniza is storing that part
       itself, in a form restic can deduplicate.</p>
-      <div class="cpr-tablewrap" style="margin-top:var(--s3)"><table>
+      <div class="cpr:overflow-x-auto cpr:mt-3" data-tablewrap><table class="cpr:table cpr:table-sm">
         <thead><tr><th>Capability</th><th>Flag</th><th>What it means</th></tr></thead>
         <tbody>
         {{range $name, $flag := $data.Settings.PkgacctFlags}}
         <tr>
-          <td class="cpr-acct">{{$name}}</td>
-          <td class="cpr-mono">{{$flag}}</td>
-          <td style="font-size:13px; color:var(--muted)">{{pkgacctMeaning $name}}</td>
+          <td class="cpr:font-semibold">{{$name}}</td>
+          <td class="cpr:mono">{{$flag}}</td>
+          <td class="cpr:text-[13px] cpr:text-base-content/70">{{pkgacctMeaning $name}}</td>
         </tr>
         {{end}}
         </tbody>
@@ -430,15 +432,15 @@
     </details>
   </div>
   {{if not (index $data.Settings.PkgacctFlags "nocompress")}}
-  <div class="cpr-pad" style="border-top:1px solid var(--line)">
-    <div class="cpr-warnbox" style="margin:0">This cPanel version cannot produce an uncompressed
+  <div class="cpr:pad cpr:border-t cpr:border-base-300">
+    <div class="cpr:border-l-4 cpr:border-warning cpr:pl-3 cpr:text-sm">This cPanel version cannot produce an uncompressed
     archive. Single-archive backups will store a full copy every time. Use the split payload
     mode, which is the default.</div>
   </div>
   {{end}}
   {{else}}
-  <div class="cpr-pad" style="border-top:1px solid var(--line)">
-    <p class="cpr-hint" style="margin:0">pkgacct has not been probed yet. It is checked when the
+  <div class="cpr:pad cpr:border-t cpr:border-base-300">
+    <p class="cpr:hint cpr:mt-0">pkgacct has not been probed yet. It is checked when the
     service starts.</p>
   </div>
   {{end}}
@@ -451,21 +453,21 @@
      which is a strange thing to have to look up while standing in front of
      the interface it removes. */}}
 {{if eq $tab "version"}}
-<div class="cpr-danger-zone">
-  <h3>Remove Gniza from this server</h3>
-  <p>Stops the service and unregisters {{if $.Cpanel}}the WHM plugin, the cPanel hooks{{else}}the
+<div class="cpr:rounded-box cpr:border cpr:border-error/40 cpr:bg-error/10 cpr:px-6 cpr:py-4">
+  <h3 class="cpr:text-sm cpr:font-semibold cpr:text-error cpr:mb-1">Remove Gniza from this server</h3>
+  <p class="cpr:text-sm cpr:mb-3 cpr:max-w-[62ch]">Stops the service and unregisters {{if $.Cpanel}}the WHM plugin, the cPanel hooks{{else}}the
   {{$.Panel}} plugin{{end}} and the account tile.
   This page goes with it. Backups already on their destinations are not touched, and neither is
   anything on this server outside Gniza — but nothing here will take backups afterwards.</p>
-  <p><code class="cpr-mono">/etc/gniza/master.key</code> and
-  <code class="cpr-mono">/var/lib/gniza/state.db</code> stay, so reinstalling comes back with the
+  <p class="cpr:text-sm cpr:mb-3 cpr:max-w-[62ch]"><code class="cpr:mono">/etc/gniza/master.key</code> and
+  <code class="cpr:mono">/var/lib/gniza/state.db</code> stay, so reinstalling comes back with the
   same destinations, schedules and history.</p>
   <form method="post" action="?p=settings/uninstall">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
-    <button class="cpr-btn cpr-danger" type="submit">Remove Gniza…</button>
+    <button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline" type="submit">Remove Gniza…</button>
   </form>
-  <p class="cpr-hint" style="margin-top:var(--s3)">Or in a root shell:
-  <span class="cpr-mono">sh /usr/local/share/gniza/uninstall.sh</span></p>
+  <p class="cpr:hint cpr:mt-3">Or in a root shell:
+  <span class="cpr:mono">sh /usr/local/share/gniza/uninstall.sh</span></p>
 </div>
 {{end}}
 {{end}}
@@ -474,26 +476,26 @@
 {{$data := .Data}}
 {{$editing := $data.Editing}}
 {{with $data.FormError}}
-<div class="cpr-banner cpr-bad" style="margin-bottom:var(--s4)"><div class="cpr-body">{{.}}</div></div>
+<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm cpr:mb-4"><div>{{.}}</div></div>
 {{end}}
 <form method="post" action="?p=settings/channels/save">
   <input type="hidden" name="csrf" value="{{.CSRF}}">
   {{with $editing}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
-  <div class="cpr-grid2">
+  <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2">
     <div>
-      <label for="channel_name">Name</label>
-      <input type="text" id="channel_name" name="name" required
+      <label class="cpr:field-label" for="channel_name">Name</label>
+      <input type="text" class="cpr:input cpr:w-full" id="channel_name" name="name" required
              placeholder="On call, Ops channel, &hellip;" value="{{$data.Field "name"}}">
-      <small class="cpr-help">Yours, so you can tell two of them apart.</small>
+      <small class="cpr:help">Yours, so you can tell two of them apart.</small>
     </div>
     <div>
-      <label for="kind">How to reach you</label>
+      <label class="cpr:field-label" for="kind">How to reach you</label>
       {{if $editing}}
-      <input type="text" value="{{kindTitle $editing.Kind}}" disabled>
+      <input type="text" class="cpr:input cpr:w-full" value="{{kindTitle $editing.Kind}}" disabled>
       <input type="hidden" name="kind" value="{{$editing.Kind}}">
-      <small class="cpr-help">A channel's type cannot change. Remove it and add a new one instead.</small>
+      <small class="cpr:help">A channel's type cannot change. Remove it and add a new one instead.</small>
       {{else}}
-      <select id="kind" name="kind" data-type-toggle>
+      <select class="cpr:select cpr:w-full" id="kind" name="kind" data-type-toggle>
         {{range $data.Kinds}}
         <option value="{{.}}" {{if eq (printf "%s" .) $data.Kind}}selected{{end}}>{{.Title}}</option>
         {{end}}
@@ -503,121 +505,121 @@
   </div>
 
   <div data-for-type="smtp" {{if ne $data.Kind "smtp"}}hidden{{end}}>
-    <div class="cpr-grid2" style="margin-top:var(--s4)">
+    <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
       <div>
-        <label for="host">Mail server</label>
-        <input type="text" id="host" name="host" placeholder="smtp.example.com" value="{{$data.Field "host"}}">
+        <label class="cpr:field-label" for="host">Mail server</label>
+        <input type="text" class="cpr:input cpr:w-full" id="host" name="host" placeholder="smtp.example.com" value="{{$data.Field "host"}}">
       </div>
       <div>
-        <label for="port">Port</label>
-        <input type="text" id="port" name="port" placeholder="587" value="{{$data.Field "port"}}">
-        <small class="cpr-help">587 for STARTTLS, 465 for TLS, 25 for a local relay.</small>
+        <label class="cpr:field-label" for="port">Port</label>
+        <input type="text" class="cpr:input cpr:w-full" id="port" name="port" placeholder="587" value="{{$data.Field "port"}}">
+        <small class="cpr:help">587 for STARTTLS, 465 for TLS, 25 for a local relay.</small>
       </div>
       <div>
-        <label for="from">From</label>
-        <input type="text" id="from" name="from" placeholder="gniza@example.com" value="{{$data.Field "from"}}">
+        <label class="cpr:field-label" for="from">From</label>
+        <input type="text" class="cpr:input cpr:w-full" id="from" name="from" placeholder="gniza@example.com" value="{{$data.Field "from"}}">
       </div>
       <div>
-        <label for="to">To</label>
-        <input type="text" id="to" name="to" placeholder="ops@example.com" value="{{$data.Field "to"}}">
-        <small class="cpr-help">Several addresses, separated by commas, if more than one person
+        <label class="cpr:field-label" for="to">To</label>
+        <input type="text" class="cpr:input cpr:w-full" id="to" name="to" placeholder="ops@example.com" value="{{$data.Field "to"}}">
+        <small class="cpr:help">Several addresses, separated by commas, if more than one person
         should know.</small>
       </div>
       <div>
-        <label for="username">Username</label>
-        <input type="text" id="username" name="username" autocomplete="off" value="{{$data.Field "username"}}">
-        <small class="cpr-help">Leave both blank for a relay that does not ask.</small>
+        <label class="cpr:field-label" for="username">Username</label>
+        <input type="text" class="cpr:input cpr:w-full" id="username" name="username" autocomplete="off" value="{{$data.Field "username"}}">
+        <small class="cpr:help">Leave both blank for a relay that does not ask.</small>
       </div>
       <div>
-        <label for="password">Password</label>
-        <input type="password" id="password" name="password" autocomplete="new-password">
-        {{if $editing}}<small class="cpr-help">Blank leaves the stored one alone.</small>
-        {{else}}<small class="cpr-help">Sent only over an encrypted connection; Gniza will not
+        <label class="cpr:field-label" for="password">Password</label>
+        <input type="password" class="cpr:input cpr:w-full" id="password" name="password" autocomplete="new-password">
+        {{if $editing}}<small class="cpr:help">Blank leaves the stored one alone.</small>
+        {{else}}<small class="cpr:help">Sent only over an encrypted connection; Gniza will not
         hand it to a server that refuses one.</small>{{end}}
       </div>
     </div>
   </div>
 
   <div data-for-type="ntfy" {{if ne $data.Kind "ntfy"}}hidden{{end}}>
-    <div class="cpr-grid2" style="margin-top:var(--s4)">
+    <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
       <div>
-        <label for="topic">Topic</label>
-        <input type="text" id="topic" name="topic" placeholder="my-server-backups" value="{{$data.Field "topic"}}">
-        <small class="cpr-help">Anyone who knows a topic on the public server can read it.
+        <label class="cpr:field-label" for="topic">Topic</label>
+        <input type="text" class="cpr:input cpr:w-full" id="topic" name="topic" placeholder="my-server-backups" value="{{$data.Field "topic"}}">
+        <small class="cpr:help">Anyone who knows a topic on the public server can read it.
         Choose one nobody would guess.</small>
       </div>
       <div>
-        <label for="server">Server</label>
-        <input type="text" id="server" name="server" placeholder="https://ntfy.sh" value="{{$data.Field "server"}}">
-        <small class="cpr-help">Blank uses ntfy.sh. Put your own here if you run one.</small>
+        <label class="cpr:field-label" for="server">Server</label>
+        <input type="text" class="cpr:input cpr:w-full" id="server" name="server" placeholder="https://ntfy.sh" value="{{$data.Field "server"}}">
+        <small class="cpr:help">Blank uses ntfy.sh. Put your own here if you run one.</small>
       </div>
       <div>
-        <label for="ntfy_token">Access token</label>
-        <input type="password" id="ntfy_token" name="token" autocomplete="new-password">
-        <small class="cpr-help">{{if $editing}}Blank leaves the stored one alone. {{end}}Only for
+        <label class="cpr:field-label" for="ntfy_token">Access token</label>
+        <input type="password" class="cpr:input cpr:w-full" id="ntfy_token" name="token" autocomplete="new-password">
+        <small class="cpr:help">{{if $editing}}Blank leaves the stored one alone. {{end}}Only for
         a topic that is protected.</small>
       </div>
     </div>
   </div>
 
   <div data-for-type="telegram" {{if ne $data.Kind "telegram"}}hidden{{end}}>
-    <div class="cpr-grid2" style="margin-top:var(--s4)">
+    <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
       <div>
-        <label for="telegram_token">Bot token</label>
-        <input type="password" id="telegram_token" name="token" autocomplete="new-password">
-        <small class="cpr-help">{{if $editing}}Blank leaves the stored one alone. {{end}}From
-        BotFather, in the form <span class="cpr-mono">123456:ABC-DEF&hellip;</span></small>
+        <label class="cpr:field-label" for="telegram_token">Bot token</label>
+        <input type="password" class="cpr:input cpr:w-full" id="telegram_token" name="token" autocomplete="new-password">
+        <small class="cpr:help">{{if $editing}}Blank leaves the stored one alone. {{end}}From
+        BotFather, in the form <span class="cpr:mono">123456:ABC-DEF&hellip;</span></small>
       </div>
       <div>
-        <label for="chat_id">Chat</label>
-        <input type="text" id="chat_id" name="chat_id" placeholder="-1001234567890" value="{{$data.Field "chat_id"}}">
-        <small class="cpr-help">The chat the bot should write in. Message the bot once first,
+        <label class="cpr:field-label" for="chat_id">Chat</label>
+        <input type="text" class="cpr:input cpr:w-full" id="chat_id" name="chat_id" placeholder="-1001234567890" value="{{$data.Field "chat_id"}}">
+        <small class="cpr:help">The chat the bot should write in. Message the bot once first,
         or it cannot start the conversation.</small>
       </div>
     </div>
   </div>
 
   <div data-for-type="webhook" {{if ne $data.Kind "webhook"}}hidden{{end}}>
-    <div class="cpr-grid2" style="margin-top:var(--s4)">
+    <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
       <div>
-        <label for="url">URL</label>
-        <input type="text" id="url" name="url" placeholder="https://hooks.slack.com/services/&hellip;" value="{{$data.Field "url"}}">
-        <small class="cpr-help">A Slack or Discord incoming webhook works as it is; anything
+        <label class="cpr:field-label" for="url">URL</label>
+        <input type="text" class="cpr:input cpr:w-full" id="url" name="url" placeholder="https://hooks.slack.com/services/&hellip;" value="{{$data.Field "url"}}">
+        <small class="cpr:help">A Slack or Discord incoming webhook works as it is; anything
         else receives the same JSON.</small>
       </div>
       <div>
-        <label for="webhook_token">Bearer token</label>
-        <input type="password" id="webhook_token" name="token" autocomplete="new-password">
-        <small class="cpr-help">{{if $editing}}Blank leaves the stored one alone. {{end}}Sent as
+        <label class="cpr:field-label" for="webhook_token">Bearer token</label>
+        <input type="password" class="cpr:input cpr:w-full" id="webhook_token" name="token" autocomplete="new-password">
+        <small class="cpr:help">{{if $editing}}Blank leaves the stored one alone. {{end}}Sent as
         an Authorization header, for an endpoint that wants one.</small>
       </div>
     </div>
   </div>
 
-  <fieldset style="margin-top:var(--s5)">
-    <legend>What to send here</legend>
-    <p class="cpr-hint" style="margin:0 0 var(--s3)">Tick nothing and this channel gets
+  <fieldset class="cpr:fieldset cpr:border cpr:border-base-300 cpr:rounded-box cpr:p-4 cpr:mt-6">
+    <legend class="cpr:fieldset-legend">What to send here</legend>
+    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Tick nothing and this channel gets
     everything that has gone wrong — a failed backup, an account that has stopped being backed
     up, a run that has hung, a destination that cannot be reached. That is what most people
     want.</p>
-    <div class="cpr-checks">
+    <div class="cpr:grid cpr:gap-x-6 cpr:grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
       {{range $data.Events}}
-      <label class="cpr-check">
-        <input type="checkbox" name="event_{{.}}" value="1" {{if $data.Wants .}}checked{{end}}>
+      <label class="cpr:check cpr:my-2">
+        <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="event_{{.}}" value="1" {{if $data.Wants .}}checked{{end}}>
         <span>{{.Title}}</span>
       </label>
       {{end}}
     </div>
   </fieldset>
 
-  <label class="cpr-check" style="margin-top:var(--s4)">
-    <input type="checkbox" name="enabled" value="1" {{if $data.Enabled}}checked{{end}}>
+  <label class="cpr:check cpr:mt-4">
+    <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="enabled" value="1" {{if $data.Enabled}}checked{{end}}>
     <span>Send to this channel</span>
   </label>
 
-  <div class="cpr-row" style="margin-top:var(--s4)">
-    <button class="cpr-btn cpr-primary" type="submit">Save</button>
-    <a class="cpr-btn cpr-quiet" href="?p=settings">Cancel</a>
+  <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:mt-4">
+    <button class="cpr:btn cpr:btn-sm cpr:btn-primary" type="submit">Save</button>
+    <a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=settings">Cancel</a>
   </div>
 </form>
 {{end}}

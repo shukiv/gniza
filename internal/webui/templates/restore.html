@@ -1,20 +1,20 @@
 {{define "content"}}
 {{$data := .Data}}
 <div>
-  <h1>Restore</h1>
-  <p class="cpr-sub">Recover a whole account, or single files, from a backup.</p>
+  <h1 class="cpr:page-title">Restore</h1>
+  <p class="cpr:page-sub">Recover a whole account, or single files, from a backup.</p>
 </div>
 {{template "restoretabs" $data.Tab}}
 
-<div class="cpr-card">
-  <div class="cpr-pad" style="border-bottom:1px solid var(--line)"><h2 style="margin:0">Choose a backup</h2></div>
-  <div class="cpr-pad">
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:border-b cpr:border-base-300"><h2 class="cpr:section-title">Choose a backup</h2></div>
+  <div class="cpr:pad">
   <form method="get">
     <input type="hidden" name="p" value="restore">
-    <div class="cpr-grid2">
+    <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2">
       <div>
-        <label for="account">Account</label>
-        <select id="account" name="account" onchange="this.form.submit()">
+        <label class="cpr:field-label" for="account">Account</label>
+        <select class="cpr:select cpr:w-full" id="account" name="account" onchange="this.form.submit()">
           <option value="">Choose an account…</option>
           <optgroup label="On this server">
             {{range $data.Accounts}}
@@ -31,14 +31,14 @@
           {{end}}
         </select>
         {{if $data.Deleted}}
-        <p class="cpr-sublabel">Deleted accounts are gone from {{$.Panel}} but still have backups here, and
+        <p class="cpr:sublabel">Deleted accounts are gone from {{$.Panel}} but still have backups here, and
         are shaded in the list below. A backup made by a server that is gone is under
-        <a class="cpr-link" href="?p=restore&amp;tab=server">Disaster recovery</a>.</p>
+        <a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=restore&amp;tab=server">Disaster recovery</a>.</p>
         {{end}}
       </div>
       <div>
-        <label for="repository">Restore from</label>
-        <select id="repository" name="repository" onchange="this.form.submit()">
+        <label class="cpr:field-label" for="repository">Restore from</label>
+        <select class="cpr:select cpr:w-full" id="repository" name="repository" onchange="this.form.submit()">
           {{range $data.Repositories}}
             {{if .Repository.InitialisedAt}}
             <option value="{{.Repository.ID}}" {{if eq .Repository.ID $data.RepositoryID}}selected{{end}}>{{.Name}}</option>
@@ -47,14 +47,14 @@
         </select>
       </div>
     </div>
-    <noscript><div class="cpr-row"><button class="cpr-btn">Show backups</button></div></noscript>
+    <noscript><div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:mt-4"><button class="cpr:btn cpr:btn-sm">Show backups</button></div></noscript>
   </form>
   </div>
 </div>
 
 {{if $data.AccountDeleted}}
-<div class="cpr-banner cpr-warn">
-  <div class="cpr-body">
+<div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:text-sm">
+  <div>
     <strong>{{$data.Account}} is not on this server any more.</strong>
     Its backups are still here. Restoring the whole account hands the archive to {{$.Panel}}'s own
     restore, which creates the account again — with its files, databases, mail and settings as
@@ -65,21 +65,21 @@
 
 {{if eq $data.Tab "account"}}
 {{if $data.Forgetting}}
-<div class="cpr-card"><div class="cpr-pad">
-    <div class="cpr-banner cpr-bad"><div class="cpr-body">
+<div class="cpr:panel"><div class="cpr:pad">
+    <div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm cpr:items-start"><div class="cpr:min-w-0">
       <strong>Forget {{$data.Forgetting}}?</strong>
-      <p style="margin:var(--s2) 0 0">This deletes every backup of {{$data.Forgetting}} from every
+      <p class="cpr:mt-2">This deletes every backup of {{$data.Forgetting}} from every
       destination, and this server's record that the account ever existed — its backup and restore
       history with it. Nothing here can bring any of it back. The space a backup used comes back at
       the next prune, not now.</p>
-      <form method="post" action="?p=restore/forget" style="margin-top:var(--s3)">
+      <form method="post" action="?p=restore/forget" class="cpr:mt-3">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
         <input type="hidden" name="account" value="{{$data.Forgetting}}">
-        <label class="cpr-check"><input type="checkbox" name="confirm" value="1">
+        <label class="cpr:check"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:checkbox-error" name="confirm" value="1">
           Yes, delete {{$data.Forgetting}}'s backups</label>
-        <div class="cpr-actions" style="margin-top:var(--s3)">
-          <button class="cpr-btn cpr-danger">Forget {{$data.Forgetting}}</button>
-          <a class="cpr-btn cpr-quiet" href="?p=restore">Cancel</a>
+        <div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2 cpr:mt-3">
+          <button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline">Forget {{$data.Forgetting}}</button>
+          <a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=restore">Cancel</a>
         </div>
       </form>
     </div></div>
@@ -87,57 +87,57 @@
 {{end}}
 
 {{if $data.ContentsErr}}
-<div class="cpr-flash cpr-error">Could not read that destination: {{$data.ContentsErr}}
+<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm"><div>Could not read that destination: {{$data.ContentsErr}}
 {{if $data.Contents}} What follows is what this server remembers, which is less than the
-destination knows.{{end}}</div>
+destination knows.{{end}}</div></div>
 {{end}}
 {{if $data.Contents}}
-<div class="cpr-card">
-  <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">Accounts in this destination</h2>
-    <span class="cpr-hint" style="margin:0">Read from the backups themselves, so it includes
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">Accounts in this destination</h2>
+    <span class="cpr:hint cpr:mt-0">Read from the backups themselves, so it includes
     accounts this server no longer has &mdash; those rows are shaded and say so.</span>
   </div>
   <form method="post" action="?p=recover/accounts" data-bulk>
     <input type="hidden" name="csrf" value="{{.CSRF}}">
     <input type="hidden" name="repository" value="{{$data.RepositoryID}}">
-    <div class="cpr-tablewrap"><table data-sortable>
+    <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-sortable>
       <thead><tr>
-        <th style="width:32px" data-nosort><input type="checkbox" data-check-all
+        <th class="cpr:w-8" data-nosort><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-check-all
           aria-label="Choose every account here"></th>
         <th>Account</th><th>Backups</th><th>Most recent</th>
-        <th class="cpr-right" data-nosort>&nbsp;</th></tr></thead>
+        <th class="cpr:text-right" data-nosort>&nbsp;</th></tr></thead>
       <tbody>
         {{range $data.Contents}}
-        <tr {{if .Gone}}class="cpr-row-gone"{{end}}>
-          <td><input type="checkbox" name="account" value="{{.Account}}"
+        <tr {{if .Gone}}class="cpr:row-gone"{{end}}>
+          <td><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="account" value="{{.Account}}"
             aria-label="Choose {{.Account}}"></td>
-          <td class="cpr-acct">{{.Account}}
-            {{if .Gone}}<span class="cpr-pill cpr-idle" title="{{if eq .State "deleted"}}Removed from this server. Its backups are still here.{{else}}This server has never had this account: its backups were made by another server writing to the same destination.{{end}}"><span class="cpr-dot"></span>{{.StateTitle}}</span>{{end}}</td>
-          <td class="cpr-num">{{if .Snapshots}}{{.Snapshots}}{{else}}<span class="cpr-muted">—</span>{{end}}</td>
-          <td data-sort="{{unix .Latest}}">{{stamp .Latest}}<div class="cpr-sublabel">{{ago .Latest}}</div></td>
-          <td class="cpr-right">{{if eq .State "deleted"}}<a class="cpr-btn cpr-quiet"
+          <td class="cpr:font-semibold">{{.Account}}
+            {{if .Gone}}<span class="cpr:pill cpr:badge-ghost" title="{{if eq .State "deleted"}}Removed from this server. Its backups are still here.{{else}}This server has never had this account: its backups were made by another server writing to the same destination.{{end}}"><span class="cpr:dot"></span>{{.StateTitle}}</span>{{end}}</td>
+          <td class="cpr:tabular-nums">{{if .Snapshots}}{{.Snapshots}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
+          <td data-sort="{{unix .Latest}}">{{stamp .Latest}}<div class="cpr:sublabel">{{ago .Latest}}</div></td>
+          <td class="cpr:text-right">{{if eq .State "deleted"}}<a class="cpr:btn cpr:btn-sm cpr:btn-ghost"
             href="?p=restore&amp;forget={{.Account}}">Forget…</a>{{end}}</td>
         </tr>
         {{end}}
       </tbody>
     </table></div>
-    <div class="cpr-pad cpr-bulkbar" style="border-top:1px solid var(--line)">
-      <span class="cpr-hint" style="margin:0" data-bulk-count>Nothing chosen</span>
-      <label class="cpr-pager-size" style="margin:0">Restore point
-        <input type="date" name="asof" aria-label="Newest backup on or before this date"
+    <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:border-t cpr:border-base-300">
+      <span class="cpr:hint cpr:mt-0" data-bulk-count>Nothing chosen</span>
+      <label class="cpr:flex cpr:items-center cpr:gap-1.5 cpr:text-sm cpr:font-semibold">Restore point
+        <input type="date" class="cpr:input cpr:input-sm cpr:w-auto" name="asof" aria-label="Newest backup on or before this date"
                title="The newest backup taken on or before this date. Leave it empty for the most recent backup there is.">
       </label>
-      <span style="flex:1"></span>
-      <label class="cpr-check" style="margin:0" title="{{if $.Cpanel}}gniza asks cPanel for a restricted restore, because the archive holds each account's own home directory and cPanel's restore runs as root.{{else}}{{$.Panel}}'s own restore has no restricted mode: it runs as the server's administrator and this is how it has to be asked for.{{end}}">
-        <input type="checkbox" name="unrestricted" value="1"><span>unrestricted</span></label>
-      <button class="cpr-btn" type="submit" data-bulk-submit disabled>Rebuild chosen</button>
-      <button class="cpr-btn cpr-danger" type="submit" name="apply" value="1"
+      <span class="cpr:flex-1"></span>
+      <label class="cpr:check cpr:my-0 cpr:items-center" title="{{if $.Cpanel}}gniza asks cPanel for a restricted restore, because the archive holds each account's own home directory and cPanel's restore runs as root.{{else}}{{$.Panel}}'s own restore has no restricted mode: it runs as the server's administrator and this is how it has to be asked for.{{end}}">
+        <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="unrestricted" value="1"><span>unrestricted</span></label>
+      <button class="cpr:btn cpr:btn-sm" type="submit" data-bulk-submit disabled>Rebuild chosen</button>
+      <button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline" type="submit" name="apply" value="1"
               data-bulk-submit disabled>Restore chosen onto this server…</button>
     </div>
   </form>
-  <div class="cpr-pad" style="border-top:1px solid var(--line)">
-    <p class="cpr-hint" style="margin:0"><b>Rebuild chosen</b> puts each account back together and
+  <div class="cpr:pad cpr:border-t cpr:border-base-300">
+    <p class="cpr:hint cpr:mt-0"><b>Rebuild chosen</b> puts each account back together and
     leaves the archive here to inspect. <b>Restore chosen onto this server</b> hands those archives
     to {{$.Panel}}'s own restore. Either way they run one after another: staging rebuilds an account in
     full, and a volume with room for one is not a volume with room for nineteen at once.</p>
@@ -146,23 +146,23 @@ destination knows.{{end}}</div>
 {{end}}
 
 {{if $data.LookupError}}
-<div class="cpr-flash cpr-error">Could not read that destination: {{$data.LookupError}}</div>
+<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm"><div>Could not read that destination: {{$data.LookupError}}</div></div>
 {{end}}
 
 {{if $data.Account}}
-<div class="cpr-card">
-  <div class="cpr-pad" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">Available backups of {{$data.Account}}</h2>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">Available backups of {{$data.Account}}</h2>
   </div>
-  <div class="cpr-pad">
+  <div class="cpr:pad">
   {{if $data.Snapshots}}
   <form method="post" action="?p=restore/start">
     <input type="hidden" name="csrf" value="{{$.CSRF}}">
     <input type="hidden" name="account" value="{{$data.Account}}">
     <input type="hidden" name="repository" value="{{$data.RepositoryID}}">
 
-    <div class="cpr-tablewrap"><table>
-      <thead><tr><th>&nbsp;</th><th>Taken</th><th>Size</th><th>Id</th><th class="cpr-right">&nbsp;</th></tr></thead>
+    <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
+      <thead><tr><th>&nbsp;</th><th>Taken</th><th>Size</th><th>Id</th><th class="cpr:text-right">&nbsp;</th></tr></thead>
       <tbody>
       {{/* Every parameter written out on its own. A prefix built with printf
            and spliced into a href is escaped as one query value, ampersands
@@ -171,192 +171,192 @@ destination knows.{{end}}</div>
            parameters of its own. */}}
       {{range $index, $snapshot := $data.Snapshots}}
       <tr>
-        <td><input type="radio" name="snapshot" value="{{$snapshot.ID}}"
+        <td><input type="radio" class="cpr:radio cpr:radio-sm" name="snapshot" value="{{$snapshot.ID}}"
           {{if $data.FileSnapshot}}{{if eq $snapshot.ID $data.FileSnapshot}}checked{{end}}
           {{else if eq $index 0}}checked{{end}}></td>
         <td>{{stamp $snapshot.Time}}</td>
         <td>{{bytes $snapshot.Summary.TotalBytesProcessed}}</td>
-        <td class="cpr-mono">{{short $snapshot.ID}}</td>
-        <td class="cpr-right"><a class="cpr-btn cpr-quiet"
+        <td class="cpr:mono">{{short $snapshot.ID}}</td>
+        <td class="cpr:text-right"><a class="cpr:btn cpr:btn-sm cpr:btn-ghost"
           href="?p=restore&amp;account={{$data.Account}}&amp;repository={{$data.RepositoryID}}&amp;files={{$snapshot.ID}}">Pick files from it</a></td>
       </tr>
       {{end}}
       </tbody>
     </table></div>
 
-    <h2 style="margin-top:var(--s5)">What to restore</h2>
+    <h2 class="cpr:section-title cpr:mt-6 cpr:mb-3">What to restore</h2>
 
     {{if $data.FileErr}}
-    <div class="cpr-banner cpr-bad"><div class="cpr-body">{{$data.FileErr}}</div></div>
+    <div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm"><div>{{$data.FileErr}}</div></div>
     {{end}}
 
     {{if $data.FileEntries}}
-    
-    <div class="cpr-card" style="margin:0 0 var(--s4); box-shadow:none">
-      <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
-        <span class="cpr-mono" style="font-size:13px">{{$data.FilePath}}</span>
-        <span class="cpr-hint" style="margin:0"><span data-chosen-count>0</span> chosen</span>
+
+    <div class="cpr:panel cpr:shadow-none cpr:mb-4">
+      <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+        <span class="cpr:mono cpr:text-[13px]">{{$data.FilePath}}</span>
+        <span class="cpr:hint cpr:mt-0"><span data-chosen-count>0</span> chosen</span>
       </div>
-      <div class="cpr-tablewrap" style="max-height:340px; overflow:auto"><table>
+      <div class="cpr:overflow-auto cpr:max-h-[340px]" data-tablewrap><table class="cpr:table cpr:table-sm">
         <thead><tr>
-          <th style="width:32px"><input type="checkbox" data-choose-all aria-label="Choose everything here"></th>
-          <th>Name</th><th>Size</th><th class="cpr-right">&nbsp;</th>
+          <th class="cpr:w-8"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-choose-all aria-label="Choose everything here"></th>
+          <th>Name</th><th>Size</th><th class="cpr:text-right">&nbsp;</th>
         </tr></thead>
         <tbody>
           {{if $data.FileUp}}
-          <tr><td></td><td colspan="3"><a class="cpr-link"
+          <tr><td></td><td colspan="3"><a class="cpr:link cpr:link-primary cpr:link-hover"
             href="?p=restore&amp;account={{$data.Account}}&amp;repository={{$data.RepositoryID}}&amp;files={{$data.FileSnapshot}}&amp;path={{$data.FileUp}}">↑ up one level</a></td></tr>
           {{end}}
           {{range $data.FileEntries}}
           <tr>
-            <td><input type="checkbox" data-choose="{{.Path}}" aria-label="Choose {{.Name}}"></td>
-            <td class="cpr-acct">
-              {{if .Dir}}<a class="cpr-link" href="?p=restore&amp;account={{$data.Account}}&amp;repository={{$data.RepositoryID}}&amp;files={{$data.FileSnapshot}}&amp;path={{.Path}}">{{.Name}}/</a>
+            <td><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-choose="{{.Path}}" aria-label="Choose {{.Name}}"></td>
+            <td class="cpr:font-semibold">
+              {{if .Dir}}<a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=restore&amp;account={{$data.Account}}&amp;repository={{$data.RepositoryID}}&amp;files={{$data.FileSnapshot}}&amp;path={{.Path}}">{{.Name}}/</a>
               {{else}}{{.Name}}{{end}}</td>
-            <td class="cpr-mono cpr-num">{{if .Size}}{{bytes .Size}}{{else}}<span class="cpr-muted">—</span>{{end}}</td>
-            <td class="cpr-right"><span class="cpr-sublabel cpr-mono">{{.Path}}</span></td>
+            <td class="cpr:mono cpr:tabular-nums">{{if .Size}}{{bytes .Size}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
+            <td class="cpr:text-right"><span class="cpr:sublabel cpr:mono">{{.Path}}</span></td>
           </tr>
           {{end}}
         </tbody>
       </table></div>
-      <div class="cpr-pad cpr-row" style="border-top:1px solid var(--line)">
-        <button type="button" class="cpr-btn" data-choose-add>Add the chosen ones</button>
-        <span class="cpr-hint" style="margin:0">Folders come back whole. What is picked stays
+      <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:border-t cpr:border-base-300">
+        <button type="button" class="cpr:btn cpr:btn-sm" data-choose-add>Add the chosen ones</button>
+        <span class="cpr:hint cpr:mt-0">Folders come back whole. What is picked stays
         picked while you look in other folders.</span>
       </div>
     </div>
     {{end}}
 
-    <label for="paths">Files and folders to restore{{if not $data.FileEntries}}
-      <span class="cpr-muted">(one path per line)</span>{{end}}</label>
-    <textarea id="paths" name="paths" rows="4" data-chosen-paths
+    <label class="cpr:field-label cpr:mt-4" for="paths">Files and folders to restore{{if not $data.FileEntries}}
+      <span class="cpr:text-base-content/70 cpr:font-normal">(one path per line)</span>{{end}}</label>
+    <textarea class="cpr:textarea cpr:w-full cpr:font-mono cpr:text-xs" id="paths" name="paths" rows="4" data-chosen-paths
               data-chosen-key="{{$data.Account}}:{{$data.FileSnapshot}}"
               placeholder="/home/{{$data.Account}}/public_html/index.php"></textarea>
-    <small class="cpr-help">Leave empty to rebuild the whole account.{{if not $data.FileEntries}}
+    <small class="cpr:help">Leave empty to rebuild the whole account.{{if not $data.FileEntries}}
       Choose a backup above and press <b>Pick files from it</b> to browse what is in there.{{end}}</small>
 
-    <label for="target">Put recovered files in</label>
-    <input type="text" id="target" name="target" placeholder="/root/recovered">
-    <small class="cpr-help">Only used when restoring specific files. They keep their original paths inside it.</small>
+    <label class="cpr:field-label cpr:mt-4" for="target">Put recovered files in</label>
+    <input type="text" class="cpr:input cpr:w-full" id="target" name="target" placeholder="/root/recovered">
+    <small class="cpr:help">Only used when restoring specific files. They keep their original paths inside it.</small>
 
-    <h2 style="margin-top:var(--s5)">Whole-account restore</h2>
-    <p class="cpr-hint">By default the account archive is rebuilt and left on this server for you
+    <h2 class="cpr:section-title cpr:mt-6">Whole-account restore</h2>
+    <p class="cpr:hint">By default the account archive is rebuilt and left on this server for you
     to inspect. Nothing is overwritten.</p>
     {{if $data.AccountDeleted}}
-    <label class="cpr-check"><input type="checkbox" name="apply" value="1">
+    <label class="cpr:check"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="apply" value="1">
       <span><strong>Create {{$data.Account}} again from this backup</strong>
-      <small class="cpr-help">Hands the rebuilt archive to {{if $.Cpanel}}cPanel's restorepkg{{else}}{{$.Panel}}'s own restore{{end}}, which creates the
+      <small class="cpr:help">Hands the rebuilt archive to {{if $.Cpanel}}cPanel's restorepkg{{else}}{{$.Panel}}'s own restore{{end}}, which creates the
       account with the files, databases, mail and settings the backup holds. Nothing on this
       server is overwritten: the account is not here to overwrite.</small></span></label>
     {{else}}
-    <label class="cpr-check"><input type="checkbox" name="apply" value="1">
+    <label class="cpr:check"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="apply" value="1">
       <span><strong>Overwrite the live account</strong>
-      <small class="cpr-help">Hands the rebuilt archive to {{if $.Cpanel}}cPanel's restorepkg{{else}}{{$.Panel}}'s own restore{{end}}. The account's
+      <small class="cpr:help">Hands the rebuilt archive to {{if $.Cpanel}}cPanel's restorepkg{{else}}{{$.Panel}}'s own restore{{end}}. The account's
       current files, databases and settings are replaced. There is no undo.</small></span></label>
     {{end}}
     {{if $.Cpanel}}
-    <label class="cpr-check"><input type="checkbox" name="unrestricted" value="1">
+    <label class="cpr:check"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="unrestricted" value="1">
       <span><strong>Restore without cPanel's restricted-restore checks</strong>
-      <small class="cpr-help">Gniza asks cPanel for a restricted restore, because the archive
+      <small class="cpr:help">Gniza asks cPanel for a restricted restore, because the archive
       holds the account's own home directory and cPanel's restore runs as root. Turn this on only
       if a restricted restore refused something this account legitimately had.</small></span></label>
     {{else}}
-    <label class="cpr-check"><input type="checkbox" name="unrestricted" value="1">
+    <label class="cpr:check"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="unrestricted" value="1">
       <span><strong>Restore the only way {{$.Panel}} can</strong>
-      <small class="cpr-help">{{$.Panel}} has no restricted mode: its restore runs as the server's
+      <small class="cpr:help">{{$.Panel}} has no restricted mode: its restore runs as the server's
       administrator and puts the archive back as it is. Gniza will not start a whole-account
       restore here without this, because there is nothing else to ask for.</small></span></label>
     {{end}}
 
-    <div class="cpr-row" style="margin-top:var(--s4)">
-      <button class="cpr-btn cpr-primary" type="submit">Start restore</button>
+    <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:mt-4">
+      <button class="cpr:btn cpr:btn-sm cpr:btn-primary" type="submit">Start restore</button>
     </div>
   </form>
   {{else if not $data.LookupError}}
-  <p class="cpr-hint">No backups of {{$data.Account}} in this destination yet.</p>
+  <p class="cpr:hint cpr:mt-0">No backups of {{$data.Account}} in this destination yet.</p>
   {{end}}
   </div>
 </div>
 {{end}}
 
 {{if and $data.Account $data.Snapshots}}
-<div class="cpr-card">
-  <div class="cpr-pad" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">Restore one thing</h2>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">Restore one thing</h2>
   </div>
-  <div class="cpr-pad">
-    <p class="cpr-hint" style="margin:0 0 var(--s3)">Take a single mailbox, database, file or
+  <div class="cpr:pad">
+    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Take a single mailbox, database, file or
     setting out of a backup without rebuilding the account. What comes back is left on this
     server to collect, unless you ask for it to go back into the account: files, the website,
     mail and databases can be written back, and the rest are a copy to put back by hand.</p>
 
     {{if not $data.Basket.Empty}}
-    <div class="cpr-card" style="margin:0 0 var(--s4)">
-      <div class="cpr-pad" style="border-bottom:1px solid var(--line)">
+    <div class="cpr:panel cpr:mb-4">
+      <div class="cpr:pad cpr:border-b cpr:border-base-300">
         <b>Basket — {{$data.BasketCount}} from this backup</b>
-        <p class="cpr-hint" style="margin:var(--s1) 0 0">These come out in one restore, so a
+        <p class="cpr:hint cpr:mt-1">These come out in one restore, so a
         database and the users that open it arrive together.</p>
       </div>
-      <div class="cpr-tablewrap"><table>
-        <thead><tr><th>Part</th><th>What was chosen</th><th class="cpr-right">&nbsp;</th></tr></thead>
+      <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
+        <thead><tr><th>Part</th><th>What was chosen</th><th class="cpr:text-right">&nbsp;</th></tr></thead>
         <tbody>
           {{range $data.BasketRows}}
           <tr>
-            <td class="cpr-acct">{{.Title}}{{if not .Applies}} <span class="cpr-pill cpr-warn"><span class="cpr-dot"></span>copy only</span>{{end}}</td>
-            <td>{{if .Names}}{{range $i, $name := .Names}}{{if $i}}, {{end}}{{$name}}{{end}}{{else}}<span class="cpr-muted">all of them</span>{{end}}</td>
-            <td class="cpr-right">
-              <form method="post" action="?p=restore/items" class="cpr-inline">
+            <td class="cpr:font-semibold">{{.Title}}{{if not .Applies}} <span class="cpr:pill cpr:badge-warning"><span class="cpr:dot"></span>copy only</span>{{end}}</td>
+            <td>{{if .Names}}{{range $i, $name := .Names}}{{if $i}}, {{end}}{{$name}}{{end}}{{else}}<span class="cpr:text-base-content/70">all of them</span>{{end}}</td>
+            <td class="cpr:text-right">
+              <form method="post" action="?p=restore/items" class="cpr:inline-block cpr:align-middle">
                 <input type="hidden" name="csrf" value="{{$.CSRF}}">
                 <input type="hidden" name="account" value="{{$data.Account}}">
                 <input type="hidden" name="repository" value="{{$data.RepositoryID}}">
                 <input type="hidden" name="snapshot" value="{{$data.SnapshotID}}">
                 <input type="hidden" name="item" value="{{.Kind}}">
-                <button class="cpr-btn" name="action" value="remove">Remove</button>
+                <button class="cpr:btn cpr:btn-sm" name="action" value="remove">Remove</button>
               </form>
             </td>
           </tr>
           {{end}}
         </tbody>
       </table></div>
-      <div class="cpr-pad">
-        <form method="post" action="?p=restore/items" class="cpr-row">
+      <div class="cpr:pad">
+        <form method="post" action="?p=restore/items" class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3">
           <input type="hidden" name="csrf" value="{{$.CSRF}}">
           <input type="hidden" name="account" value="{{$data.Account}}">
           <input type="hidden" name="repository" value="{{$data.RepositoryID}}">
           <input type="hidden" name="snapshot" value="{{$data.SnapshotID}}">
           <input type="hidden" name="basket" value="1">
-          <button class="cpr-btn cpr-primary">Copy out the basket</button>
-          {{if $data.BasketCanApply}}<button class="cpr-btn cpr-danger" name="apply" value="1">Put the basket back into the account…</button>
-          {{else}}<span class="cpr-hint" style="margin:0">{{$data.BasketBlocker}} cannot be written
+          <button class="cpr:btn cpr:btn-sm cpr:btn-primary">Copy out the basket</button>
+          {{if $data.BasketCanApply}}<button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline" name="apply" value="1">Put the basket back into the account…</button>
+          {{else}}<span class="cpr:hint cpr:mt-0">{{$data.BasketBlocker}} cannot be written
           back, and a basket goes back whole or not at all.</span>{{end}}
         </form>
-        <form method="post" action="?p=restore/items" class="cpr-inline" style="margin-top:var(--s2)">
+        <form method="post" action="?p=restore/items" class="cpr:inline-block cpr:align-middle cpr:mt-2">
           <input type="hidden" name="csrf" value="{{$.CSRF}}">
           <input type="hidden" name="account" value="{{$data.Account}}">
           <input type="hidden" name="repository" value="{{$data.RepositoryID}}">
           <input type="hidden" name="snapshot" value="{{$data.SnapshotID}}">
-          <button class="cpr-btn" name="action" value="empty">Empty the basket</button>
+          <button class="cpr:btn cpr:btn-sm" name="action" value="empty">Empty the basket</button>
         </form>
       </div>
     </div>
     {{end}}
 
-    <div class="cpr-chips">
+    <div class="cpr:flex cpr:flex-wrap cpr:gap-2">
       {{range $data.Kinds}}
-      <a class="cpr-chip" aria-pressed="{{if $data.Selected .}}true{{else}}false{{end}}"
+      <a class="cpr:chip" aria-pressed="{{if $data.Selected .}}true{{else}}false{{end}}"
          href="?p=restore&amp;account={{$data.Account}}&amp;repository={{$data.RepositoryID}}&amp;snapshot={{$data.SnapshotID}}&amp;item={{.}}">{{$data.KindTitle .}}</a>
       {{end}}
     </div>
 
     {{if $data.Kind}}
-    <div style="margin-top:var(--s4)">
-      <form method="get" class="cpr-row">
+    <div class="cpr:mt-4">
+      <form method="get" class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3">
         <input type="hidden" name="p" value="restore">
         <input type="hidden" name="account" value="{{$data.Account}}">
         <input type="hidden" name="repository" value="{{$data.RepositoryID}}">
         <input type="hidden" name="item" value="{{$data.Kind}}">
-        <label for="snapshot" style="margin:0">From the backup taken</label>
-        <select id="snapshot" name="snapshot" onchange="this.form.submit()" style="width:auto">
+        <label class="cpr:field-label cpr:mb-0" for="snapshot">From the backup taken</label>
+        <select class="cpr:select cpr:select-sm cpr:w-auto" id="snapshot" name="snapshot" onchange="this.form.submit()">
           {{range $data.Snapshots}}
           <option value="{{.ID}}" {{if eq .ID $data.SnapshotID}}selected{{end}}>{{stamp .Time}}</option>
           {{end}}
@@ -365,35 +365,35 @@ destination knows.{{end}}</div>
     </div>
 
     {{if $data.BrowseErr}}
-    <div class="cpr-banner cpr-bad" style="margin-top:var(--s4)">
-      <div class="cpr-body">{{$data.BrowseErr}}</div>
+    <div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm cpr:mt-4">
+      <div>{{$data.BrowseErr}}</div>
     </div>
     {{else if $data.Entries}}
-    <div class="cpr-tablewrap" style="margin-top:var(--s4)"><table>
-      <thead><tr><th>Name</th><th>Size</th><th class="cpr-right">&nbsp;</th></tr></thead>
+    <div class="cpr:overflow-x-auto cpr:mt-4" data-tablewrap><table class="cpr:table cpr:table-sm">
+      <thead><tr><th>Name</th><th>Size</th><th class="cpr:text-right">&nbsp;</th></tr></thead>
       <tbody>
         {{if $data.Up}}
-        <tr><td colspan="3"><a class="cpr-link"
+        <tr><td colspan="3"><a class="cpr:link cpr:link-primary cpr:link-hover"
           href="?p=restore&amp;account={{$data.Account}}&amp;repository={{$data.RepositoryID}}&amp;snapshot={{$data.SnapshotID}}&amp;item={{$data.Kind}}&amp;path={{$data.Up}}">↑ up one level</a></td></tr>
         {{end}}
         {{range $data.Entries}}
         <tr>
-          <td class="cpr-acct">
-            {{if .Dir}}<a class="cpr-link"
+          <td class="cpr:font-semibold">
+            {{if .Dir}}<a class="cpr:link cpr:link-primary cpr:link-hover"
               href="?p=restore&amp;account={{$data.Account}}&amp;repository={{$data.RepositoryID}}&amp;snapshot={{$data.SnapshotID}}&amp;item={{$data.Kind}}&amp;path={{.Path}}">{{.Name}}/</a>
             {{else}}{{.Name}}{{end}}</td>
-          <td class="cpr-mono cpr-num">{{if .Size}}{{bytes .Size}}{{else}}<span class="cpr-muted">—</span>{{end}}</td>
-          <td class="cpr-right">{{if .Item}}<div class="cpr-actions">
-            <form method="post" action="?p=restore/items" class="cpr-inline">
+          <td class="cpr:mono cpr:tabular-nums">{{if .Size}}{{bytes .Size}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
+          <td class="cpr:text-right">{{if .Item}}<div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
+            <form method="post" action="?p=restore/items" class="cpr:inline-block cpr:align-middle">
               <input type="hidden" name="csrf" value="{{$.CSRF}}">
               <input type="hidden" name="account" value="{{$data.Account}}">
               <input type="hidden" name="repository" value="{{$data.RepositoryID}}">
               <input type="hidden" name="snapshot" value="{{$data.SnapshotID}}">
               <input type="hidden" name="item" value="{{$data.Kind}}">
               <input type="hidden" name="name" value="{{.Item}}">
-              <button class="cpr-btn" name="action" value="append" title="Choose it now, restore it with the rest">Add to basket</button>
-              <button class="cpr-btn">Copy it out</button>
-              {{if $data.Kind.CanApply}}<button class="cpr-btn cpr-danger" name="apply" value="1"
+              <button class="cpr:btn cpr:btn-sm" name="action" value="append" title="Choose it now, restore it with the rest">Add to basket</button>
+              <button class="cpr:btn cpr:btn-sm">Copy it out</button>
+              {{if $data.Kind.CanApply}}<button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline" name="apply" value="1"
                 title="Replaces this in the live account">Put it back…</button>{{end}}
             </form>
           </div>{{end}}</td>
@@ -402,39 +402,39 @@ destination knows.{{end}}</div>
       </tbody>
     </table></div>
     {{else if $data.Kind.NeedsNames}}
-    <p class="cpr-hint" style="margin-top:var(--s4)">Nothing here in this backup.</p>
+    <p class="cpr:hint cpr:mt-4">Nothing here in this backup.</p>
     {{else}}
-    <form method="post" action="?p=restore/items" style="margin-top:var(--s4)">
+    <form method="post" action="?p=restore/items" class="cpr:mt-4">
       <input type="hidden" name="csrf" value="{{$.CSRF}}">
       <input type="hidden" name="account" value="{{$data.Account}}">
       <input type="hidden" name="repository" value="{{$data.RepositoryID}}">
       <input type="hidden" name="snapshot" value="{{$data.SnapshotID}}">
       <input type="hidden" name="item" value="{{$data.Kind}}">
       {{if $data.Items}}
-      <div class="cpr-tablewrap"><table>
+      <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
         <thead><tr>
-          {{if $data.PicksItems}}<th style="width:1%"><input type="checkbox" data-checkall hidden aria-label="Select everything listed"><span class="cpr-visually-hidden">Select</span></th>{{end}}
+          {{if $data.PicksItems}}<th class="cpr:w-px"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-checkall hidden aria-label="Select everything listed"><span class="cpr:sr-only">Select</span></th>{{end}}
           <th>In this backup</th><th>Detail</th>
         </tr></thead>
         <tbody>
           {{range $data.Items}}
           <tr>
-            {{if $data.PicksItems}}<td>{{if .Name}}<input type="checkbox" name="name" value="{{.Name}}" aria-label="Select {{.Label}}">{{end}}</td>{{end}}
-            <td class="cpr-acct">{{.Label}}</td>
-            <td class="cpr-sublabel">{{if .Detail}}{{.Detail}}{{else}}<span class="cpr-muted">—</span>{{end}}</td>
+            {{if $data.PicksItems}}<td>{{if .Name}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="name" value="{{.Name}}" aria-label="Select {{.Label}}">{{end}}</td>{{end}}
+            <td class="cpr:font-semibold">{{.Label}}</td>
+            <td class="cpr:sublabel">{{if .Detail}}{{.Detail}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
           </tr>
           {{end}}
         </tbody>
       </table></div>
-      <p class="cpr-hint">{{$data.ItemsNote}}</p>
+      <p class="cpr:hint">{{$data.ItemsNote}}</p>
       {{else if $data.Kind.ListsItems}}
-      <p class="cpr-hint">Nothing here in this backup.</p>
+      <p class="cpr:hint">Nothing here in this backup.</p>
       {{end}}
-      <div class="cpr-row">
-        <button class="cpr-btn" name="action" value="add">{{if $data.InBasket $data.Kind}}Update the basket{{else}}Add to basket{{end}}</button>
-        <button class="cpr-btn cpr-primary">Copy out {{$data.KindTitle $data.Kind}}</button>
-        {{if $data.Kind.CanApply}}<button class="cpr-btn cpr-danger" name="apply" value="1">Put it back into the account…</button>{{end}}
-        <span class="cpr-hint" style="margin:0">Taken out of the account archive in that backup.</span>
+      <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:mt-4">
+        <button class="cpr:btn cpr:btn-sm" name="action" value="add">{{if $data.InBasket $data.Kind}}Update the basket{{else}}Add to basket{{end}}</button>
+        <button class="cpr:btn cpr:btn-sm cpr:btn-primary">Copy out {{$data.KindTitle $data.Kind}}</button>
+        {{if $data.Kind.CanApply}}<button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline" name="apply" value="1">Put it back into the account…</button>{{end}}
+        <span class="cpr:hint cpr:mt-0">Taken out of the account archive in that backup.</span>
       </div>
     </form>
     {{end}}
@@ -445,6 +445,6 @@ destination knows.{{end}}</div>
 
 {{end}}
 
-<p class="cpr-hint">Restores that have run, and what became of them, are under
-<a class="cpr-link" href="?p=logs&amp;tab=restores">Logs</a>.</p>
+<p class="cpr:hint">Restores that have run, and what became of them, are under
+<a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=logs&amp;tab=restores">Logs</a>.</p>
 {{end}}

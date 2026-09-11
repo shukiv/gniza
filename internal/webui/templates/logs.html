@@ -1,135 +1,135 @@
 {{define "content"}}
 {{$data := .Data}}
 <div>
-  <h1>Logs</h1>
-  <p class="cpr-sub">Everything Gniza has done on this server, by the kind of work it was.</p>
+  <h1 class="cpr:page-title">Logs</h1>
+  <p class="cpr:page-sub">Everything Gniza has done on this server, by the kind of work it was.</p>
 </div>
 {{template "logtabs" $data}}
 
 {{if eq $data.Tab "backups"}}
 {{template "jobtable" $data.BackupTable}}
 {{else if eq $data.Tab "system"}}
-<div class="cpr-card">
-  <div class="cpr-pad">
-    <p class="cpr-hint" style="margin:0">The server's own settings — its {{$.Panel}} configuration,
+<div class="cpr:panel">
+  <div class="cpr:pad">
+    <p class="cpr:hint cpr:mt-0">The server's own settings — its {{$.Panel}} configuration,
     not any one account. A restore of these is what turns a bare machine back into this one.</p>
   </div>
 </div>
 {{template "jobtable" $data.SystemTable}}
 {{else if eq $data.Tab "service"}}
 {{$log := $data.Service}}
-<div class="cpr-card">
-  <form method="get" class="cpr-pad cpr-formgrid" style="border-bottom:1px solid var(--line)">
+<div class="cpr:panel">
+  <form method="get" class="cpr:pad cpr:grid cpr:gap-4 cpr:border-b cpr:border-base-300">
     <input type="hidden" name="p" value="logs">
     <input type="hidden" name="tab" value="service">
     <div>
-      <label for="log_level_filter">Show</label>
-      <select id="log_level_filter" name="level">
+      <label class="cpr:field-label" for="log_level_filter">Show</label>
+      <select class="cpr:select cpr:w-full" id="log_level_filter" name="level">
         {{range $log.Levels}}<option value="{{.}}" {{if eq . $log.Level}}selected{{end}}>{{.}} and above</option>{{end}}
       </select>
-      <small class="cpr-help">What the service wrote, not what it was configured to write.
-      Turning the level up in <a class="cpr-link" href="?p=settings">Settings</a> is what makes
+      <small class="cpr:help">What the service wrote, not what it was configured to write.
+      Turning the level up in <a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=settings">Settings</a> is what makes
       quieter lines exist in the first place.</small>
     </div>
     <div>
-      <label for="log_span">From</label>
-      <select id="log_span" name="span">
+      <label class="cpr:field-label" for="log_span">From</label>
+      <select class="cpr:select cpr:w-full" id="log_span" name="span">
         {{range $log.Spans}}<option value="{{.Key}}" {{if .Chosen}}selected{{end}}>{{.Label}}</option>{{end}}
       </select>
     </div>
     <div>
-      <label for="log_size">At most</label>
-      <select id="log_size" name="size">
+      <label class="cpr:field-label" for="log_size">At most</label>
+      <select class="cpr:select cpr:w-full" id="log_size" name="size">
         {{range $log.Sizes}}<option value="{{.Key}}" {{if .Chosen}}selected{{end}}>{{.Label}}</option>{{end}}
       </select>
     </div>
     <div>
-      <label for="log_account">Account</label>
-      <input type="text" id="log_account" name="account" value="{{$log.Account}}"
+      <label class="cpr:field-label" for="log_account">Account</label>
+      <input type="text" class="cpr:input cpr:w-full" id="log_account" name="account" value="{{$log.Account}}"
              placeholder="every account">
-      <small class="cpr-help">One account's name keeps only the lines that name it.</small>
+      <small class="cpr:help">One account's name keeps only the lines that name it.</small>
     </div>
     <div>
-      <label class="cpr-check" for="log_follow">
-        <input type="checkbox" id="log_follow" name="follow" value="1" {{if $log.Follow}}checked{{end}}>
+      <label class="cpr:check" for="log_follow">
+        <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" id="log_follow" name="follow" value="1" {{if $log.Follow}}checked{{end}}>
         Keep up with it
       </label>
-      <small class="cpr-help">Re-reads every few seconds while you watch.</small>
+      <small class="cpr:help">Re-reads every few seconds while you watch.</small>
     </div>
-    <div class="cpr-bulkbar" style="align-self:end">
-      <button class="cpr-btn cpr-primary" type="submit">Show</button>
-      <a class="cpr-btn" href="?p=logs/download&amp;level={{$log.Level}}&amp;span={{$log.Span}}&amp;account={{$log.Account}}">Download all of it</a>
+    <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:self-end">
+      <button class="cpr:btn cpr:btn-sm cpr:btn-primary" type="submit">Show</button>
+      <a class="cpr:btn cpr:btn-sm" href="?p=logs/download&amp;level={{$log.Level}}&amp;span={{$log.Span}}&amp;account={{$log.Account}}">Download all of it</a>
     </div>
   </form>
   {{if $log.Follow}}<span data-running="1" hidden></span>{{end}}
-  <div class="cpr-pad">
+  <div class="cpr:pad">
     {{if $log.Error}}
-    <div class="cpr-banner cpr-bad" role="alert"><div class="cpr-body">{{$log.Error}}</div></div>
+    <div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm cpr:mb-3" role="alert"><div>{{$log.Error}}</div></div>
     {{end}}
-    <pre class="cpr-mono cpr-logbox" data-live="servicelog" data-live-scroll="end"
+    <pre class="cpr:logbox" data-live="servicelog" data-live-scroll="end"
          tabindex="0" aria-label="The service log">{{if $log.Empty}}Nothing in the log matches that. Widen the span, or lower the level.{{else}}{{$log.Text}}{{end}}</pre>
-    <small class="cpr-help">The download is the whole of what the journal still keeps for the
+    <small class="cpr:help">The download is the whole of what the journal still keeps for the
     span above; the box is the tail of it. Nothing here is filtered for secrets — it is this
     server's own log, read by root. A bug report is redacted, because that leaves the server.</small>
   </div>
 </div>
 
 {{else if eq $data.Tab "restores"}}
-<div class="cpr-card">
-  <div class="cpr-pad" style="border-bottom:1px solid var(--line)"><h2 style="margin:0">Restores</h2></div>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:border-b cpr:border-base-300"><h2 class="cpr:section-title">Restores</h2></div>
   {{if $data.Restores}}
-  <div class="cpr-tablewrap"><table data-sortable>
+  <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-sortable>
     <thead><tr><th>When</th><th>Account</th><th>What</th><th>Result</th><th data-nosort>Detail</th></tr></thead>
     <tbody data-live="restores">
     {{range $data.Restores}}
-    <tr class="cpr-state {{template "runstripe" .Status}}" {{if not .Status.Terminal}}data-running="1"{{end}}>
-      <td style="white-space:nowrap" data-sort="{{unix .QueuedAt}}">{{stamp .QueuedAt}}</td>
-      <td class="cpr-acct">{{.Account}}</td>
-      <td>{{.Parts}}{{if .Applied}} <span class="cpr-pill cpr-warn"><span class="cpr-dot"></span>applied</span>{{end}}</td>
+    <tr class="{{template "runstripe" .Status}}" {{if not .Status.Terminal}}data-running="1"{{end}}>
+      <td class="cpr:whitespace-nowrap" data-sort="{{unix .QueuedAt}}">{{stamp .QueuedAt}}</td>
+      <td class="cpr:font-semibold">{{.Account}}</td>
+      <td>{{.Parts}}{{if .Applied}} <span class="cpr:pill cpr:badge-warning"><span class="cpr:dot"></span>applied</span>{{end}}</td>
       <td data-sort="{{.Status}}">{{template "runstate" .Status}}</td>
       <td>
-        {{if .Detail}}<div class="cpr-mono" style="font-size:12px; color:var(--muted)">{{.Detail}}</div>{{end}}
-        {{if .Error}}<div style="font-size:13px">{{.Error}}</div>
+        {{if .Detail}}<div class="cpr:mono cpr:text-xs cpr:text-base-content/70">{{.Detail}}</div>{{end}}
+        {{if .Error}}<div class="cpr:text-[13px]">{{.Error}}</div>
         {{else if .Collectable}}
-          <a class="cpr-btn" href="?p=download&amp;id={{.ID}}">Download</a>
-          <div class="cpr-sublabel cpr-mono">{{.ArchivePath}}</div>
+          <a class="cpr:btn cpr:btn-sm" href="?p=download&amp;id={{.ID}}">Download</a>
+          <div class="cpr:sublabel cpr:mono">{{.ArchivePath}}</div>
         {{else if .ArchivePath}}
-          <div class="cpr-sublabel">no longer on this server</div>
-        {{else}}<span class="cpr-mono" style="font-size:12px; color:var(--muted)">{{.RestoredTo}}</span>{{end}}
+          <div class="cpr:sublabel">no longer on this server</div>
+        {{else}}<span class="cpr:mono cpr:text-xs cpr:text-base-content/70">{{.RestoredTo}}</span>{{end}}
       </td>
     </tr>
     {{end}}
     </tbody>
   </table></div>
-  {{else}}<div class="cpr-empty"><p>No restores or rehearsals yet.</p></div>{{end}}
+  {{else}}<div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p>No restores or rehearsals yet.</p></div>{{end}}
 </div>
 {{else}}
-<div class="cpr-card">
-  <div class="cpr-pad" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">{{$.Panel}} account lifecycle</h2>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">{{$.Panel}} account lifecycle</h2>
   </div>
   {{if $data.Lifecycle}}
-  <div class="cpr-tablewrap"><table data-sortable>
+  <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-sortable>
     <thead><tr><th>Event</th><th>Account</th><th>Result</th><th>When</th></tr></thead>
     <tbody>
       {{range $data.Lifecycle}}
-      <tr class="cpr-state {{if .OK}}cpr-s-ok{{else}}cpr-s-bad{{end}}">
+      <tr class="{{if .OK}}cpr:stripe-ok{{else}}cpr:stripe-bad{{end}}">
         <td>{{.Title}}</td>
-        <td class="cpr-acct">{{if .Account}}{{.Account}}{{else}}<span class="cpr-muted">unknown</span>{{end}}</td>
-        <td data-sort="{{.Outcome}}"><span class="cpr-pill {{if .OK}}cpr-ok{{else}}cpr-bad{{end}}"><span class="cpr-dot"></span>{{.Outcome}}</span>
-          {{if .Detail}}<div class="cpr-sublabel">{{.Detail}}</div>{{end}}</td>
+        <td class="cpr:font-semibold">{{if .Account}}{{.Account}}{{else}}<span class="cpr:text-base-content/70">unknown</span>{{end}}</td>
+        <td data-sort="{{.Outcome}}"><span class="cpr:pill {{if .OK}}cpr:badge-success{{else}}cpr:badge-error{{end}}"><span class="cpr:dot"></span>{{.Outcome}}</span>
+          {{if .Detail}}<div class="cpr:sublabel">{{.Detail}}</div>{{end}}</td>
         <td data-sort="{{unix .At}}">{{ago .When}}</td>
       </tr>
       {{end}}
     </tbody>
   </table></div>
-  <div class="cpr-pad" style="border-top:1px solid var(--line)">
-    <p class="cpr-hint" style="margin:0">What {{$.Panel}} told Gniza as accounts were created,
+  <div class="cpr:pad cpr:border-t cpr:border-base-300">
+    <p class="cpr:hint cpr:mt-0">What {{$.Panel}} told Gniza as accounts were created,
     renamed, suspended or removed. A removal that says <b>Blocked</b> is this service refusing
     to let {{$.Panel}} delete an account it has no complete copy of.</p>
   </div>
   {{else}}
-  <div class="cpr-empty"><p>No account lifecycle hook has reached the service yet.</p></div>
+  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p>No account lifecycle hook has reached the service yet.</p></div>
   {{end}}
 </div>
 {{end}}

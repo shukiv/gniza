@@ -214,7 +214,7 @@ func TestEveryPageRenders(t *testing.T) {
 		}
 		// The page is a fragment: WHM's own interface supplies the
 		// document around it, so there is no <html> of our own.
-		if !strings.Contains(body, `<div class="gniza">`) {
+		if !strings.Contains(body, `<div class="gniza `) {
 			t.Errorf("GET %s did not render the layout", path)
 		}
 		if !strings.Contains(body, "</main>") {
@@ -1271,10 +1271,10 @@ func TestARunningBackupShowsItsProgress(t *testing.T) {
 
 	_, page := get(t, client, "/jobs")
 	for _, want := range []string{
-		`data-running="1"`, // the page knows to keep itself current
-		"cpr-spin",         // and the pill spins rather than sitting still
-		"43%",              // restic's own percentage, rounded
-		"width:42.5%",
+		`data-running="1"`,    // the page knows to keep itself current
+		"cpr:loading-spinner", // and the pill spins rather than sitting still
+		"43%",                 // restic's own percentage, rounded
+		`<progress class="cpr:progress`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the history page does not show %q", want)
@@ -1302,7 +1302,7 @@ func TestAFinishedJobShowsNoProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, page := get(t, client, "/jobs"); strings.Contains(page, `class="cpr-progress"`) {
+	if _, page := get(t, client, "/jobs"); strings.Contains(page, `<progress`) {
 		t.Error("a finished job is still showing a progress bar")
 	}
 }
@@ -1536,20 +1536,18 @@ func TestTheDrawerIsOnlyVisibleWhenItIsOpen(t *testing.T) {
 	client, _, _ := newUI(t)
 
 	_, page := get(t, client, "/destinations")
+	// daisyUI keeps a closed modal invisible and out of reach, fixed to
+	// the viewport rather than standing in the flow, and only [open] shows it.
 	for _, rule := range []string{
-		".gniza .cpr-sheet[open] { display:flex; }",
+		`.cpr\:modal{pointer-events:none;visibility:hidden;`,
+		`.cpr\:modal[open]{pointer-events:auto;visibility:visible;`,
 	} {
 		if !strings.Contains(page, rule) {
 			t.Errorf("the stylesheet does not say %q", rule)
 		}
 	}
-	// Nothing may give a dialog a display of its own outside [open].
-	for _, forbidden := range []string{
-		".gniza .cpr-sheet {\n  position:fixed; inset:0 0 0 auto; margin:0;\n  width:min(520px, 94vw); max-width:none; height:100%; max-height:none;\n  padding:0; border:0; border-left:1px solid var(--line-strong); border-radius:0;\n  background:var(--surface); color:var(--ink);\n  box-shadow:-8px 0 28px rgba(10,14,20,.22);\n  display:flex;",
-	} {
-		if strings.Contains(page, forbidden) {
-			t.Error("the drawer is displayed whether or not it is open")
-		}
+	if !strings.Contains(page, `<dialog id="add-destination" class="cpr:modal cpr:modal-end" data-sheet`) {
+		t.Error("the drawer is not a daisyUI modal")
 	}
 }
 
@@ -1950,16 +1948,16 @@ func TestAttachingWritesNothingUntilTheBackupsCanBeRead(t *testing.T) {
 // firstError pulls the banner text out of a rendered page, for a test that
 // needs to say why the page it got was not the page it wanted.
 func firstError(page string) string {
-	start := strings.Index(page, `cpr-banner cpr-bad`)
+	start := strings.Index(page, `cpr:alert-error`)
 	if start < 0 {
 		return "no error banner"
 	}
 	rest := page[start:]
-	open := strings.Index(rest, `<div class="cpr-body">`)
+	open := strings.Index(rest, `<div>`)
 	if open < 0 {
 		return "no body"
 	}
-	rest = rest[open+len(`<div class="cpr-body">`):]
+	rest = rest[open+len(`<div>`):]
 	end := strings.Index(rest, "</div>")
 	if end < 0 {
 		return rest
@@ -2110,7 +2108,7 @@ func TestThePluginDoesNotDrawWHMsBreadcrumbAgain(t *testing.T) {
 		}
 	}
 
-	rail := strings.Index(page, `class="cpr-rail-foot"`)
+	rail := strings.Index(page, `data-rail-foot>`)
 	theme := strings.Index(page, `id="theme"`)
 	aside := strings.Index(page, "</aside>")
 	if rail < 0 || theme < 0 || aside < 0 {
@@ -2157,24 +2155,21 @@ func TestTheBrandIsOnThePageInItsOwnColour(t *testing.T) {
 
 	_, page := get(t, client, "/")
 	for _, want := range []string{
-		`<span class="cpr-brand-mark" aria-hidden="true"><svg`,
+		`aria-hidden="true" data-brand-mark><svg`,
 		// The mark takes its colour from the badge around it rather than
-		// carrying its own, so the one CSS rule below decides both.
-		`fill="currentColor"`,
-		`<span class="cpr-brand-name">Gniza</span>`,
+		// carrying its own, so the one class below decides both.
+		`cpr:fill-current`,
+		`data-brand-name>Gniza</span>`,
 		// The strapline sits inside the lockup, beside the mark rather
 		// than under the whole block on a margin kept in step by hand.
-		`<span class="cpr-server">Backup. Restore. Repeat.</span>`,
+		`data-server>Backup. Restore. Repeat.</span>`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the interface does not carry the name: %s is missing", want)
 		}
 	}
-	if !strings.Contains(page, "background:#F47216; color:#FFFFFF;") {
+	if !strings.Contains(page, `cpr:bg-primary cpr:text-primary-content" aria-hidden="true" data-brand-mark>`) {
 		t.Error("the mark is not in its own colour")
-	}
-	if strings.Contains(page, ".gniza .cpr-brand span { color:var(--muted)") {
-		t.Error("a rule is still greying out everything inside the brand")
 	}
 }
 
@@ -2219,7 +2214,7 @@ func TestLogsSeparateTheKindsOfWork(t *testing.T) {
 	}
 
 	_, backups := get(t, client, "/logs")
-	if !strings.Contains(backups, "<h1>Logs</h1>") {
+	if !strings.Contains(backups, `<h1 class="cpr:page-title">Logs</h1>`) {
 		t.Error("the page is not called Logs")
 	}
 	if !strings.Contains(backups, ">customer1<") {
@@ -2244,7 +2239,7 @@ func TestLogsSeparateTheKindsOfWork(t *testing.T) {
 
 	// The page was History at /jobs, and somebody's bookmark still says so.
 	status, old := get(t, client, "/jobs")
-	if status != http.StatusOK || !strings.Contains(old, "<h1>Logs</h1>") {
+	if status != http.StatusOK || !strings.Contains(old, `<h1 class="cpr:page-title">Logs</h1>`) {
 		t.Errorf("the old address does not still work: %d", status)
 	}
 }
@@ -2264,7 +2259,7 @@ func TestTablesCarrySortKeysOnCellsThatNeedThem(t *testing.T) {
 	}
 
 	_, history := get(t, client, "/jobs")
-	if strings.Count(history, "<table data-sortable>") < 1 {
+	if strings.Count(history, `<table class="cpr:table cpr:table-sm" data-sortable>`) < 1 {
 		t.Error("the history tables are not sortable")
 	}
 	// "2026-09-03 21:47" and "6.2 MiB new of 152.5 MiB" sort as text into
@@ -2281,7 +2276,7 @@ func TestTablesCarrySortKeysOnCellsThatNeedThem(t *testing.T) {
 	}
 
 	_, accounts := get(t, client, "/accounts")
-	if !strings.Contains(accounts, `<table id="accounts" data-sortable>`) {
+	if !strings.Contains(accounts, `<table id="accounts" class="cpr:table cpr:table-sm" data-sortable>`) {
 		t.Error("the accounts table is not sortable")
 	}
 }
@@ -2312,19 +2307,19 @@ func TestDestinationRowKeepsOneButtonAndAMenu(t *testing.T) {
 	}
 
 	_, page := get(t, client, "/destinations")
-	if !strings.Contains(page, `<details class="cpr-menu">`) {
+	if !strings.Contains(page, `<details class="cpr:dropdown cpr:dropdown-end" data-menu>`) {
 		t.Error("the row actions are not behind a menu")
 	}
 	if !strings.Contains(page, `aria-label="More actions for test"`) {
 		t.Error("the menu does not say whose actions it holds")
 	}
 	// Test is the one that stays out, as a button of its own on the row.
-	if !strings.Contains(page, `<button class="cpr-btn cpr-quiet">Test</button>`) {
+	if !strings.Contains(page, `<button class="cpr:btn cpr:btn-sm cpr:btn-ghost">Test</button>`) {
 		t.Error("Test is not on the row")
 	}
 	// The rest are still reachable, and still carry their token.
 	for _, want := range []string{
-		`<a class="cpr-menu-item" href="?p=destinations&amp;edit=`,
+		`<a class="cpr:menu-item" href="?p=destinations&amp;edit=`,
 		`data-dialog-title="Edit “test”"`,
 		`action="?p=destinations/delete"`,
 		`data-confirm="Remove this destination`,
@@ -2333,7 +2328,7 @@ func TestDestinationRowKeepsOneButtonAndAMenu(t *testing.T) {
 			t.Errorf("the menu lost %q", want)
 		}
 	}
-	if strings.Contains(page, `<button class="cpr-btn cpr-danger">Remove</button>`) {
+	if strings.Contains(page, `<button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline">Remove</button>`) {
 		t.Error("Remove is still a button on the row")
 	}
 }
@@ -2399,7 +2394,7 @@ func TestDestinationsShowTheRoomTheyHaveLeft(t *testing.T) {
 		}
 	}
 	// Nearly full reads as nearly full, not as a healthy bar.
-	if !strings.Contains(page, `<i class="cpr-none"`) {
+	if !strings.Contains(page, `<i class="cpr:block cpr:bg-error"`) {
 		t.Error("a destination at 90% is not marked as one")
 	}
 }
@@ -2425,12 +2420,12 @@ func TestSeveralAccountsCanBeRestoredAtOnce(t *testing.T) {
 
 	_, page := get(t, client, "/restore")
 	for _, want := range []string{
-		`<input type="checkbox" name="account" value="gone1"`,
-		`<input type="checkbox" name="account" value="gone2"`,
+		`<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="account" value="gone1"`,
+		`<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="account" value="gone2"`,
 		`data-check-all`,
 		`action="?p=recover/accounts"`,
 		// One list, with the state on the row rather than in a tab.
-		`class="cpr-row-gone"`, ">deleted</span>",
+		`class="cpr:row-gone"`, ">deleted</span>",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the deleted accounts cannot be chosen in bulk: %s is missing", want)
@@ -2488,7 +2483,7 @@ func TestRestoreCarriesItsThreeViewsAsTabs(t *testing.T) {
 
 	_, account := get(t, client, "/restore")
 	for _, want := range []string{
-		`<nav class="cpr-tabs" aria-label="Restore views">`,
+		`<nav class="cpr:tabs cpr:tabs-border cpr:mb-4" aria-label="Restore views">`,
 		`href="?p=restore" aria-current="page"`,
 		`href="?p=restore&amp;tab=server"`,
 		// The page restores accounts, one or several, and the third tab
@@ -2846,9 +2841,9 @@ func TestWHMPagesUseTheOperationalRail(t *testing.T) {
 
 	_, page := get(t, client, "/restore")
 	for _, want := range []string{
-		`class="cpr-shell"`,
-		`class="cpr-rail"`,
-		`class="cpr-workspace"`,
+		`data-shell>`,
+		`data-rail>`,
+		`data-workspace>`,
 		`href="?p=restore" aria-label="Restore" aria-current="page"`,
 		`id="gniza-main" tabindex="-1"`,
 	} {
@@ -3178,7 +3173,7 @@ func TestARunningRestoreShowsItsStageAndABar(t *testing.T) {
 	_, page := get(t, client, "/restore")
 	for _, want := range []string{
 		"Restoring customer1", "reading the home directory", "57%",
-		`role="progressbar"`, "width:57.4%",
+		`<progress class="cpr:progress`, `value="57"`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the strip does not say %q", want)

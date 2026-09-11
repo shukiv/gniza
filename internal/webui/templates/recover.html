@@ -1,14 +1,14 @@
 {{define "content"}}
 {{$data := .Data}}
 <div>
-  <h1>Restore</h1>
-  <p class="cpr-sub">Recover a whole account, or single files, from a backup.</p>
+  <h1 class="cpr:page-title">Restore</h1>
+  <p class="cpr:page-sub">Recover a whole account, or single files, from a backup.</p>
 </div>
 {{template "restoretabs" "server"}}
 
-<div class="cpr-card">
-  <div class="cpr-pad">
-    <p class="cpr-hint" style="margin:0">The machine is gone and this one is taking its place.
+<div class="cpr:panel">
+  <div class="cpr:pad">
+    <p class="cpr:hint cpr:mt-0">The machine is gone and this one is taking its place.
     Point it at the backups the old server made — the destination it wrote to, and its recovery
     key — and its accounts become restorable here. Restore the server's own settings first: an
     account put back on a machine that has not been set up lands somewhere that cannot serve it.</p>
@@ -16,28 +16,28 @@
 </div>
 
 {{with $data.Error}}
-<div class="cpr-banner cpr-bad"><div class="cpr-body">{{.}}</div></div>
+<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm"><div>{{.}}</div></div>
 {{end}}
 
-<div class="cpr-card">
-  <div class="cpr-pad" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">{{if $data.Repositories}}Attach another set of backups{{else}}Where are the old backups?{{end}}</h2>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">{{if $data.Repositories}}Attach another set of backups{{else}}Where are the old backups?{{end}}</h2>
   </div>
-  <div class="cpr-pad">
-    <p class="cpr-hint" style="margin-top:0">This needs two things: how to reach the destination
+  <div class="cpr:pad">
+    <p class="cpr:hint cpr:mt-0 cpr:mb-4">This needs two things: how to reach the destination
     the old server wrote to, and that server's recovery key. Without the key nothing here can
     read them — that is what the encryption is for.</p>
 
-    <form method="post" action="?p=recover/attach">
+    <form method="post" action="?p=recover/attach" class="cpr:space-y-4">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
-      <div class="cpr-grid2">
+      <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2">
         <div>
-          <label for="name">Call it</label>
-          <input type="text" id="name" name="name" placeholder="Recovered backups">
+          <label class="cpr:field-label" for="name">Call it</label>
+          <input type="text" class="cpr:input cpr:w-full" id="name" name="name" placeholder="Recovered backups">
         </div>
         <div>
-          <label for="type">Where they are</label>
-          <select id="type" name="type" data-type-toggle>
+          <label class="cpr:field-label" for="type">Where they are</label>
+          <select class="cpr:select cpr:w-full" id="type" name="type" data-type-toggle>
             <option value="sftp">Another Linux server (SFTP)</option>
             <option value="rest">Backup server (restic REST)</option>
             <option value="s3">S3 or S3-compatible</option>
@@ -46,127 +46,139 @@
         </div>
       </div>
 
-      <div data-for-type="sftp">
-        <div class="cpr-grid2">
+      <div data-for-type="sftp" class="cpr:space-y-4">
+        <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2">
           <div>
-            <label for="host">Host</label>
-            <input type="text" id="host" name="host" placeholder="backup.example.com">
+            <label class="cpr:field-label" for="host">Host</label>
+            <input type="text" class="cpr:input cpr:w-full" id="host" name="host" placeholder="backup.example.com">
           </div>
           <div>
-            <label for="port">Port</label>
-            <input type="number" id="port" name="port" value="22">
+            <label class="cpr:field-label" for="port">Port</label>
+            <input type="number" class="cpr:input cpr:w-full" id="port" name="port" value="22">
           </div>
           <div>
-            <label for="user">SSH user</label>
-            <input type="text" id="user" name="user" placeholder="cpbackup">
+            <label class="cpr:field-label" for="user">SSH user</label>
+            <input type="text" class="cpr:input cpr:w-full" id="user" name="user" placeholder="cpbackup">
           </div>
           <div>
-            <label for="root">Remote directory</label>
-            <input type="text" id="root" name="root" placeholder="/home/cpbackup/backups">
+            <label class="cpr:field-label" for="root">Remote directory</label>
+            <input type="text" class="cpr:input cpr:w-full" id="root" name="root" placeholder="/home/cpbackup/backups">
           </div>
         </div>
-        <label for="identity_file">Private key on this server</label>
-        <input type="text" id="identity_file" name="identity_file" placeholder="/root/.ssh/id_ed25519">
-        <small class="cpr-help">The old server's key is gone with it, so this needs a key that
-        can log in — one you add to that account now.</small>
-        <label for="known_hosts_file">known_hosts file</label>
-        <input type="text" id="known_hosts_file" name="known_hosts_file" placeholder="/root/.ssh/known_hosts">
-      </div>
-
-      <div data-for-type="rest" hidden>
-        <label for="base_url">Server address</label>
-        <input type="text" id="base_url" name="base_url" placeholder="https://backup.example.com">
-        <div class="cpr-grid2">
-          <div>
-            <label for="username">Username</label>
-            <input type="text" id="username" name="username">
-          </div>
-          <div>
-            <label for="password">Password</label>
-            <input type="password" id="password" name="password">
-          </div>
+        <div>
+          <label class="cpr:field-label" for="identity_file">Private key on this server</label>
+          <input type="text" class="cpr:input cpr:w-full" id="identity_file" name="identity_file" placeholder="/root/.ssh/id_ed25519">
+          <small class="cpr:help">The old server's key is gone with it, so this needs a key that
+          can log in — one you add to that account now.</small>
+        </div>
+        <div>
+          <label class="cpr:field-label" for="known_hosts_file">known_hosts file</label>
+          <input type="text" class="cpr:input cpr:w-full" id="known_hosts_file" name="known_hosts_file" placeholder="/root/.ssh/known_hosts">
         </div>
       </div>
 
-      <div data-for-type="s3" hidden>
-        <div class="cpr-grid2">
+      <div data-for-type="rest" hidden class="cpr:space-y-4">
+        <div>
+          <label class="cpr:field-label" for="base_url">Server address</label>
+          <input type="text" class="cpr:input cpr:w-full" id="base_url" name="base_url" placeholder="https://backup.example.com">
+        </div>
+        <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2">
           <div>
-            <label for="bucket">Bucket</label>
-            <input type="text" id="bucket" name="bucket">
+            <label class="cpr:field-label" for="username">Username</label>
+            <input type="text" class="cpr:input cpr:w-full" id="username" name="username">
           </div>
           <div>
-            <label for="region">Region</label>
-            <input type="text" id="region" name="region" placeholder="us-east-1">
+            <label class="cpr:field-label" for="password">Password</label>
+            <input type="password" class="cpr:input cpr:w-full" id="password" name="password">
           </div>
         </div>
-        <label for="endpoint">Endpoint (leave empty for Amazon S3)</label>
-        <input type="text" id="endpoint" name="endpoint" placeholder="s3.us-east-1.wasabisys.com">
-        <div class="cpr-grid2">
+      </div>
+
+      <div data-for-type="s3" hidden class="cpr:space-y-4">
+        <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2">
           <div>
-            <label for="access_key_id">Access key</label>
-            <input type="text" id="access_key_id" name="access_key_id">
+            <label class="cpr:field-label" for="bucket">Bucket</label>
+            <input type="text" class="cpr:input cpr:w-full" id="bucket" name="bucket">
           </div>
           <div>
-            <label for="secret_access_key">Secret key</label>
-            <input type="password" id="secret_access_key" name="secret_access_key">
+            <label class="cpr:field-label" for="region">Region</label>
+            <input type="text" class="cpr:input cpr:w-full" id="region" name="region" placeholder="us-east-1">
+          </div>
+        </div>
+        <div>
+          <label class="cpr:field-label" for="endpoint">Endpoint (leave empty for Amazon S3)</label>
+          <input type="text" class="cpr:input cpr:w-full" id="endpoint" name="endpoint" placeholder="s3.us-east-1.wasabisys.com">
+        </div>
+        <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2">
+          <div>
+            <label class="cpr:field-label" for="access_key_id">Access key</label>
+            <input type="text" class="cpr:input cpr:w-full" id="access_key_id" name="access_key_id">
+          </div>
+          <div>
+            <label class="cpr:field-label" for="secret_access_key">Secret key</label>
+            <input type="password" class="cpr:input cpr:w-full" id="secret_access_key" name="secret_access_key">
           </div>
         </div>
       </div>
 
       <div data-for-type="local" hidden>
-        <label for="local_root">Directory</label>
-        <input type="text" id="local_root" name="root" placeholder="/mnt/backups">
+        <label class="cpr:field-label" for="local_root">Directory</label>
+        <input type="text" class="cpr:input cpr:w-full" id="local_root" name="root" placeholder="/mnt/backups">
       </div>
 
-      <label for="repo_path">Folder inside the destination</label>
-      <input type="text" id="repo_path" name="repo_path" placeholder="the old server's hostname" required>
-      <small class="cpr-help">What the old server called itself. It is on the recovery card.</small>
+      <div>
+        <label class="cpr:field-label" for="repo_path">Folder inside the destination</label>
+        <input type="text" class="cpr:input cpr:w-full" id="repo_path" name="repo_path" placeholder="the old server's hostname" required>
+        <small class="cpr:help">What the old server called itself. It is on the recovery card.</small>
+      </div>
 
-      <label for="recovery_key">Recovery key</label>
-      <input type="password" id="recovery_key" name="recovery_key" required autocomplete="off">
-      <small class="cpr-help">The repository password from the old server. Nothing can read those
-      backups without it — not this program, not the machine holding them.</small>
+      <div>
+        <label class="cpr:field-label" for="recovery_key">Recovery key</label>
+        <input type="password" class="cpr:input cpr:w-full" id="recovery_key" name="recovery_key" required autocomplete="off">
+        <small class="cpr:help">The repository password from the old server. Nothing can read those
+        backups without it — not this program, not the machine holding them.</small>
+      </div>
 
-      <div class="cpr-row" style="margin-top:var(--s4)">
-        <button class="cpr-btn cpr-primary" type="submit">Read the backups</button>
-        <span class="cpr-hint" style="margin:0">Nothing is written until they can be read.</span>
+      <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3">
+        <button class="cpr:btn cpr:btn-sm cpr:btn-primary" type="submit">Read the backups</button>
+        <span class="cpr:hint cpr:mt-0">Nothing is written until they can be read.</span>
       </div>
     </form>
   </div>
 </div>
 
 {{range $data.Repositories}}
-<div class="cpr-card">
-  <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">{{.Name}} · {{.Path}}</h2>
-    <span class="cpr-hint" style="margin:0">{{.Contents.Snapshots}} backups</span>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">{{.Name}} · {{.Path}}</h2>
+    <span class="cpr:hint cpr:mt-0">{{.Contents.Snapshots}} backups</span>
   </div>
 
   {{if .Err}}
-  <div class="cpr-pad"><div class="cpr-banner cpr-bad"><div class="cpr-body">{{.Err}}</div></div></div>
+  <div class="cpr:pad"><div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm"><div>{{.Err}}</div></div></div>
   {{else}}
 
   {{if .Contents.System}}
-  <div class="cpr-pad" style="border-bottom:1px solid var(--line)">
-    <div class="cpr-row">
-      <span class="cpr-pill cpr-ok"><span class="cpr-dot"></span>Server settings</span>
-      <span class="cpr-hint" style="margin:0">taken {{ago .Contents.SystemAt}} — EasyApache,
+  <div class="cpr:pad cpr:border-b cpr:border-base-300">
+    <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3">
+      <span class="cpr:pill cpr:badge-success"><span class="cpr:dot"></span>Server settings</span>
+      <span class="cpr:hint cpr:mt-0">taken {{ago .Contents.SystemAt}} — EasyApache,
       packages, tweak settings and the rest. Restore these first: an account restored onto a
       server that has not been set up lands somewhere that cannot serve it.</span>
-      <span style="flex:1"></span>
-      <a class="cpr-btn" href="?p=restore&amp;account=%40system&amp;repository={{.ID}}&amp;item=system">Restore the settings</a>
+      <span class="cpr:flex-1"></span>
+      <a class="cpr:btn cpr:btn-sm" href="?p=restore&amp;account=%40system&amp;repository={{.ID}}&amp;item=system">Restore the settings</a>
     </div>
   </div>
   {{end}}
 
   {{if .Contents.Accounts}}
-  <div class="cpr-pad">
-    <p class="cpr-hint" style="margin:0">{{len .Contents.Accounts}} account(s) in this
+  <div class="cpr:pad">
+    <p class="cpr:hint cpr:mt-0">{{len .Contents.Accounts}} account(s) in this
     destination. Choose and restore them under
-    <a class="cpr-link" href="?p=restore">Restore account(s)</a>.</p>
+    <a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=restore">Restore account(s)</a>.</p>
   </div>
   {{else}}
-  <div class="cpr-empty"><p>No account backups in this repository.</p></div>
+  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p>No account backups in this repository.</p></div>
   {{end}}
   {{end}}
 </div>

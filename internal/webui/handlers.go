@@ -398,11 +398,11 @@ func (d destinationView) TypeName() string {
 func (d destinationView) Stripe() string {
 	switch d.Status {
 	case "ok":
-		return "cpr-s-ok"
+		return "cpr:stripe-ok"
 	case "error":
-		return "cpr-s-bad"
+		return "cpr:stripe-bad"
 	}
-	return "cpr-s-warn"
+	return "cpr:stripe-warn"
 }
 
 func (s *Server) destinationViews() ([]destinationView, error) {
@@ -1313,11 +1313,11 @@ type policyView struct {
 func (p policyView) Stripe() string {
 	switch {
 	case !p.Enabled:
-		return "cpr-s-warn"
+		return "cpr:stripe-warn"
 	case len(p.RepositoryIDs) == 0:
-		return "cpr-s-bad"
+		return "cpr:stripe-bad"
 	default:
-		return "cpr-s-ok"
+		return "cpr:stripe-ok"
 	}
 }
 
@@ -1676,13 +1676,13 @@ func (a accountView) NeedsRemovalPreparation() bool {
 func (a accountView) Stripe() string {
 	switch {
 	case a.Running:
-		return "cpr-s-warn"
+		return "cpr:stripe-warn"
 	case a.LastBackup == nil, a.LastStatus == job.StatusFailed:
-		return "cpr-s-bad"
+		return "cpr:stripe-bad"
 	case a.LastStatus == job.StatusPartialSuccess, len(a.MissingCopies) > 0:
-		return "cpr-s-warn"
+		return "cpr:stripe-warn"
 	default:
-		return "cpr-s-ok"
+		return "cpr:stripe-ok"
 	}
 }
 
@@ -2299,11 +2299,11 @@ type activityRow struct {
 func (a activityRow) Stripe() string {
 	switch a.Status {
 	case job.StatusSuccess:
-		return "cpr-s-ok"
+		return "cpr:stripe-ok"
 	case job.StatusFailed:
-		return "cpr-s-bad"
+		return "cpr:stripe-bad"
 	default:
-		return "cpr-s-warn"
+		return "cpr:stripe-warn"
 	}
 }
 

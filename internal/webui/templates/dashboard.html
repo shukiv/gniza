@@ -1,67 +1,67 @@
 {{define "content"}}
 {{$d := .Data}}
 <div>
-  <h1>Overview</h1>
-  <p class="cpr-sub">{{$d.Hostname}} · {{len $d.Accounts}} account{{if ne (len $d.Accounts) 1}}s{{end}}</p>
+  <h1 class="cpr:page-title">Overview</h1>
+  <p class="cpr:page-sub">{{$d.Hostname}} · {{len $d.Accounts}} account{{if ne (len $d.Accounts) 1}}s{{end}}</p>
 </div>
 
 {{/* The verdict, first and in one sentence: the page is opened to find out
      whether this server is covered, and a row of counters answers that only
      after it has been read and added up. */}}
-<div class="cpr-band cpr-b-{{$d.Band}}">
-  <div class="cpr-verdict">{{$d.Verdict}}</div>
+<div class="cpr:panel cpr:pad cpr:flex cpr:flex-col cpr:gap-3 cpr:border-l-4 {{if eq $d.Band "bad"}}cpr:border-l-error{{else if eq $d.Band "warn"}}cpr:border-l-warning{{else}}cpr:border-l-success{{end}}">
+  <div class="cpr:text-lg cpr:font-semibold cpr:tracking-tight">{{$d.Verdict}}</div>
   {{if $d.Accounts}}
-  <div class="cpr-meter" role="img" aria-label="{{$d.Protected}} with a good recent backup, {{$d.Stale}} needing attention, {{$d.Unprotected}} never backed up">
-    {{if $d.Protected}}<i class="cpr-ok" style="width:{{$d.ProtectedPct}}%"></i>{{end}}
-    {{if $d.Stale}}<i class="cpr-stale" style="width:{{$d.StalePct}}%"></i>{{end}}
-    {{if $d.Unprotected}}<i class="cpr-none" style="width:{{$d.UnprotectedPct}}%"></i>{{end}}
+  <div class="cpr:flex cpr:h-2.5 cpr:rounded-full cpr:overflow-hidden cpr:bg-base-300" role="img" aria-label="{{$d.Protected}} with a good recent backup, {{$d.Stale}} needing attention, {{$d.Unprotected}} never backed up">
+    {{if $d.Protected}}<i class="cpr:block cpr:bg-success" style="width:{{$d.ProtectedPct}}%"></i>{{end}}
+    {{if $d.Stale}}<i class="cpr:block cpr:bg-warning" style="width:{{$d.StalePct}}%"></i>{{end}}
+    {{if $d.Unprotected}}<i class="cpr:block cpr:bg-error" style="width:{{$d.UnprotectedPct}}%"></i>{{end}}
   </div>
-  <div class="cpr-legend">
-    <span><span class="cpr-key" style="background:var(--good)"></span><b>{{$d.Protected}}</b> backed up</span>
-    <span><span class="cpr-key" style="background:var(--warn)"></span><b>{{$d.Stale}}</b> need attention</span>
-    <span><span class="cpr-key" style="background:var(--bad)"></span><b>{{$d.Unprotected}}</b> never</span>
-    {{if $d.Failed}}<span><b>{{$d.Failed}}</b> failed</span>{{end}}
-    {{if $d.Partial}}<span><b>{{$d.Partial}}</b> partly stored</span>{{end}}
-    {{if $d.CopyGaps}}<span><b>{{$d.CopyGaps}}</b> missing a second copy</span>{{end}}
-    {{if $d.Unscheduled}}<span><b>{{$d.Unscheduled}}</b> outside every schedule</span>{{end}}
+  <div class="cpr:flex cpr:flex-wrap cpr:gap-4 cpr:text-sm cpr:text-base-content/70">
+    <span><span class="cpr:inline-block cpr:size-2 cpr:rounded-sm cpr:mr-1.5 cpr:bg-success"></span><b class="cpr:text-base-content cpr:font-semibold">{{$d.Protected}}</b> backed up</span>
+    <span><span class="cpr:inline-block cpr:size-2 cpr:rounded-sm cpr:mr-1.5 cpr:bg-warning"></span><b class="cpr:text-base-content cpr:font-semibold">{{$d.Stale}}</b> need attention</span>
+    <span><span class="cpr:inline-block cpr:size-2 cpr:rounded-sm cpr:mr-1.5 cpr:bg-error"></span><b class="cpr:text-base-content cpr:font-semibold">{{$d.Unprotected}}</b> never</span>
+    {{if $d.Failed}}<span><b class="cpr:text-base-content cpr:font-semibold">{{$d.Failed}}</b> failed</span>{{end}}
+    {{if $d.Partial}}<span><b class="cpr:text-base-content cpr:font-semibold">{{$d.Partial}}</b> partly stored</span>{{end}}
+    {{if $d.CopyGaps}}<span><b class="cpr:text-base-content cpr:font-semibold">{{$d.CopyGaps}}</b> missing a second copy</span>{{end}}
+    {{if $d.Unscheduled}}<span><b class="cpr:text-base-content cpr:font-semibold">{{$d.Unscheduled}}</b> outside every schedule</span>{{end}}
   </div>
   {{end}}
   {{if not $d.Destinations}}
-  <div><a class="cpr-btn cpr-primary" href="?p=destinations">Add a destination</a></div>
+  <div><a class="cpr:btn cpr:btn-sm cpr:btn-primary" href="?p=destinations">Add a destination</a></div>
   {{else if $d.Unscheduled}}
-  <div class="cpr-hint">An old backup is not continuing protection. Put those accounts on a
+  <div class="cpr:hint cpr:mt-0">An old backup is not continuing protection. Put those accounts on a
     schedule, or use an all-account schedule so accounts added later are enrolled on their own.
-    <a class="cpr-link" href="?p=schedule">Review schedules</a></div>
+    <a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=schedule">Review schedules</a></div>
   {{end}}
 </div>
 
 {{if $d.Attention}}
-<div class="cpr-card">
-  <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">Worth acting on</h2>
-    <a class="cpr-link" href="?p=accounts">All accounts</a>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">Worth acting on</h2>
+    <a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=accounts">All accounts</a>
   </div>
-  <div class="cpr-tablewrap">
-    <table>
-      <thead><tr><th>Account</th><th>Last backup</th><th>State</th><th class="cpr-right">&nbsp;</th></tr></thead>
+  <div class="cpr:overflow-x-auto" data-tablewrap>
+    <table class="cpr:table cpr:table-sm">
+      <thead><tr><th>Account</th><th>Last backup</th><th>State</th><th class="cpr:text-right">&nbsp;</th></tr></thead>
       <tbody data-live="attention">
         {{range $d.Attention}}
-        <tr class="cpr-state {{.Stripe}}" {{if .Running}}data-running="1"{{end}}>
-          <td class="cpr-acct"><a class="cpr-link" href="?p=account&amp;user={{.User}}">{{.User}}</a>
-            {{if .PrimaryDomain}}<div class="cpr-sublabel">{{.PrimaryDomain}}</div>{{end}}</td>
-          <td>{{if .LastBackup}}{{ago .LastBackup}}{{else}}<span class="cpr-mono">never</span>{{end}}</td>
+        <tr class="{{.Stripe}}" {{if .Running}}data-running="1"{{end}}>
+          <td class="cpr:font-semibold"><a class="cpr:link cpr:link-primary cpr:link-hover cpr:block" href="?p=account&amp;user={{.User}}">{{.User}}</a>
+            {{if .PrimaryDomain}}<div class="cpr:sublabel">{{.PrimaryDomain}}</div>{{end}}</td>
+          <td>{{if .LastBackup}}{{ago .LastBackup}}{{else}}<span class="cpr:mono">never</span>{{end}}</td>
           <td>{{template "accountstate" .}}</td>
-          <td class="cpr-right">
-            {{if .RepairPolicyID}}<form method="post" action="?p=accounts/repair" class="cpr-inline">
+          <td class="cpr:text-right">
+            {{if .RepairPolicyID}}<form method="post" action="?p=accounts/repair" class="cpr:inline-block cpr:align-middle">
               <input type="hidden" name="csrf" value="{{$.CSRF}}">
               <input type="hidden" name="account" value="{{.User}}">
               <input type="hidden" name="policy" value="{{.RepairPolicyID}}">
-              <button class="cpr-btn cpr-primary" {{if .Running}}disabled{{end}}>Repair copies</button>
+              <button class="cpr:btn cpr:btn-sm cpr:btn-primary" {{if .Running}}disabled{{end}}>Repair copies</button>
             </form>{{else}}
-            <form method="post" action="?p=accounts/backup" class="cpr-inline">
+            <form method="post" action="?p=accounts/backup" class="cpr:inline-block cpr:align-middle">
               <input type="hidden" name="csrf" value="{{$.CSRF}}">
               <input type="hidden" name="account" value="{{.User}}">
-              <button class="cpr-btn" {{if .Running}}disabled{{end}}>Back up now</button>
+              <button class="cpr:btn cpr:btn-sm" {{if .Running}}disabled{{end}}>Back up now</button>
             </form>
             {{end}}
           </td>
@@ -71,90 +71,88 @@
     </table>
   </div>
   {{if $d.AttentionMore}}
-  <div class="cpr-pad" style="border-top:1px solid var(--line); color:var(--muted); font-size:13px">
+  <div class="cpr:pad cpr:border-t cpr:border-base-300 cpr:text-[13px] cpr:text-base-content/70">
     and {{$d.AttentionMore}} more
   </div>
   {{end}}
 </div>
 {{end}}
 
-<div class="cpr-tiles">
-  <div class="cpr-tile"><span class="cpr-n">{{len $d.Accounts}}</span><span class="cpr-k">Accounts</span></div>
+<div class="cpr:stats cpr:stats-vertical cpr:md:stats-horizontal cpr:w-full cpr:bg-base-100 cpr:border cpr:border-base-300 cpr:shadow-sm">
+  <div class="cpr:stat"><span class="cpr:stat-value cpr:n">{{len $d.Accounts}}</span><span class="cpr:stat-title cpr:k">Accounts</span></div>
   {{if $d.Managed}}
-  <div class="cpr-tile"><span class="cpr-n">{{bytes $d.Managed}}</span><span class="cpr-k">Under management</span></div>
+  <div class="cpr:stat"><span class="cpr:stat-value cpr:n">{{bytes $d.Managed}}</span><span class="cpr:stat-title cpr:k">Under management</span></div>
   {{end}}
-  <div class="cpr-tile">
+  <div class="cpr:stat">
     {{/* Red only once there is something to have tested: a server with no
          backups yet has nothing to rehearse, and is not failing at it. */}}
-    <span class="cpr-n {{if and $d.Protected (not $d.Verified)}}cpr-badish{{end}}">{{$d.Verified}} <small>of {{len $d.Accounts}}</small></span>
-    <span class="cpr-k">Restore-tested</span>
+    <span class="cpr:stat-value cpr:n {{if and $d.Protected (not $d.Verified)}}cpr:text-error{{end}}">{{$d.Verified}} <small class="cpr:text-xs cpr:font-medium cpr:text-base-content/70 cpr:tracking-normal">of {{len $d.Accounts}}</small></span>
+    <span class="cpr:stat-title cpr:k">Restore-tested</span>
   </div>
-  <div class="cpr-tile"><span class="cpr-n">{{$d.BackedUp}}</span><span class="cpr-k">Backed up this week</span></div>
   {{if $d.Held.Known}}
-  {{/* Measured on a slow cadence and stored, never asked for while this
-       page draws: restic answers by walking the repository index across
+  {{/* What the destinations hold, from the last census rather than from
        the network. The date is shown once the reading is old enough that
        reading it as today's would mislead. */}}
-  <div class="cpr-tile">
-    <span class="cpr-n">{{$d.Held.Copies}}</span>
-    <span class="cpr-k">Copies held{{if $d.Held.Partial}}, of what has been measured{{end}}{{if $d.Held.Stale $d.Now}} · as of {{agoTime $d.Held.MeasuredAt}}{{end}}</span>
+  <div class="cpr:stat">
+    <span class="cpr:stat-value cpr:n">{{$d.Held.Copies}}</span>
+    <span class="cpr:stat-title cpr:k">Copies held{{if $d.Held.Partial}}, of what has been measured{{end}}{{if $d.Held.Stale $d.Now}} · as of {{agoTime $d.Held.MeasuredAt}}{{end}}</span>
   </div>
-  <div class="cpr-tile">
-    <span class="cpr-n">{{bytes $d.Held.Stored}}</span>
-    <span class="cpr-k">Stored at destinations</span>
+  <div class="cpr:stat">
+    <span class="cpr:stat-value cpr:n">{{bytes $d.Held.Stored}}</span>
+    <span class="cpr:stat-title cpr:k">Stored at destinations</span>
   </div>
   {{end}}
   {{if $.Running.Queue}}
-  <div class="cpr-tile"><span class="cpr-n cpr-warnish">{{len $.Running.Queue}}</span><span class="cpr-k">Waiting now</span></div>
+  <div class="cpr:stat"><span class="cpr:stat-value cpr:n cpr:text-warning">{{len $.Running.Queue}}</span><span class="cpr:stat-title cpr:k">Waiting now</span></div>
   {{end}}
 </div>
 
-<div class="cpr-factrow">
-  <div class="cpr-fact">
-    <span class="cpr-k">Last run</span>
+<div class="cpr:panel cpr:grid cpr:md:grid-cols-3 cpr:divide-y cpr:md:divide-y-0 cpr:md:divide-x cpr:divide-base-300">
+  <div class="cpr:pad cpr:flex cpr:flex-col cpr:gap-1">
+    <span class="cpr:k">Last run</span>
     {{if $d.LastRun}}
-    <span class="cpr-value {{if eq $d.LastRun.Tone "bad"}}cpr-badish{{else if eq $d.LastRun.Tone "warn"}}cpr-warnish{{end}}">{{$d.LastRun.Outcome}}</span>
-    <span class="cpr-note"><em>{{$d.LastRun.Policy}}</em>
+    <span class="cpr:text-lg cpr:font-semibold cpr:tabular-nums {{if eq $d.LastRun.Tone "bad"}}cpr:text-error{{else if eq $d.LastRun.Tone "warn"}}cpr:text-warning{{end}}">{{$d.LastRun.Outcome}}</span>
+    <span class="cpr:text-[13px] cpr:text-base-content/70"><em class="cpr:not-italic cpr:font-medium cpr:text-base-content">{{$d.LastRun.Policy}}</em>
       {{if $d.LastRun.Done}}· finished {{agoTime $d.LastRun.FinishedAt}}{{if $d.LastRun.Took}}, took {{took $d.LastRun.Took}}{{end}}
       {{else}}· started {{agoTime $d.LastRun.StartedAt}}{{end}}
       {{if $d.LastRun.BytesAdded}}· {{bytes $d.LastRun.BytesAdded}} of new data{{end}}</span>
     {{else}}
-    <span class="cpr-value cpr-muted">None yet</span>
-    <span class="cpr-note">Nothing has run in the last week.</span>
+    <span class="cpr:text-lg cpr:font-semibold cpr:text-base-content/70">None yet</span>
+    <span class="cpr:text-[13px] cpr:text-base-content/70">Nothing has run in the last week.</span>
     {{end}}
   </div>
-  <div class="cpr-fact">
-    <span class="cpr-k">Next run</span>
+  <div class="cpr:pad cpr:flex cpr:flex-col cpr:gap-1">
+    <span class="cpr:k">Next run</span>
     {{if $d.NextRun}}
-    <span class="cpr-value">{{$d.NextRun}}</span>
-    <span class="cpr-note"><em>{{$d.NextRunPolicy}}</em>, {{$d.NextRunIn}}</span>
+    <span class="cpr:text-lg cpr:font-semibold cpr:tabular-nums">{{$d.NextRun}}</span>
+    <span class="cpr:text-[13px] cpr:text-base-content/70"><em class="cpr:not-italic cpr:font-medium cpr:text-base-content">{{$d.NextRunPolicy}}</em>, {{$d.NextRunIn}}</span>
     {{else}}
-    <span class="cpr-value cpr-muted">None</span>
-    <span class="cpr-note">No schedule is enabled, so nothing runs on its own.</span>
+    <span class="cpr:text-lg cpr:font-semibold cpr:text-base-content/70">None</span>
+    <span class="cpr:text-[13px] cpr:text-base-content/70">No schedule is enabled, so nothing runs on its own.</span>
     {{end}}
   </div>
-  <div class="cpr-fact">
-    <span class="cpr-k">Staging space</span>
-    <span class="cpr-value {{if $d.SpaceTight}}cpr-warnish{{end}}">{{bytes $d.StagingFree}} free</span>
-    <span class="cpr-note">A backup needs room for one account at a time.{{if $d.Largest}}
-      The largest here is <em>{{$d.LargestAccount}}</em> at {{bytes $d.Largest}}.{{end}}</span>
+  <div class="cpr:pad cpr:flex cpr:flex-col cpr:gap-1">
+    <span class="cpr:k">Staging space</span>
+    <span class="cpr:text-lg cpr:font-semibold cpr:tabular-nums {{if $d.SpaceTight}}cpr:text-warning{{end}}">{{bytes $d.StagingFree}} free</span>
+    <span class="cpr:text-[13px] cpr:text-base-content/70">A backup needs room for one account at a time.{{if $d.Largest}}
+      The largest here is <em class="cpr:not-italic cpr:font-medium cpr:text-base-content">{{$d.LargestAccount}}</em> at {{bytes $d.Largest}}.{{end}}</span>
   </div>
 </div>
 
 {{if $d.Feed}}
-<div class="cpr-card">
-  <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">What has happened</h2>
-    <a class="cpr-link" href="?p=jobs">All history</a>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">What has happened</h2>
+    <a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=jobs">All history</a>
   </div>
-  <div class="cpr-feed">
+  <div class="cpr:flex cpr:flex-col cpr:divide-y cpr:divide-base-300">
     {{range $d.Feed}}
-    <div class="cpr-ev">
-      <span class="cpr-when">{{agoTime .When}}</span>
-      <span class="cpr-what">
-        <span class="cpr-evhead">{{.Head}}
-          {{if .Tag}}<span class="cpr-pill {{if eq .Tone "bad"}}cpr-bad{{else if eq .Tone "warn"}}cpr-warn{{else}}cpr-ok{{end}}"><span class="cpr-dot"></span>{{.Tag}}</span>{{end}}</span>
-        {{if .Note}}<span class="cpr-evline">{{.Note}}</span>{{end}}
+    <div class="cpr:grid cpr:md:grid-cols-[92px_1fr] cpr:gap-3 cpr:px-4 cpr:py-3">
+      <span class="cpr:mono cpr:text-xs cpr:text-base-content/60 cpr:pt-0.5 cpr:md:text-right">{{agoTime .When}}</span>
+      <span class="cpr:flex cpr:min-w-0 cpr:flex-col cpr:gap-0.5">
+        <span class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-2 cpr:font-semibold">{{.Head}}
+          {{if .Tag}}<span class="cpr:pill {{if eq .Tone "bad"}}cpr:badge-error{{else if eq .Tone "warn"}}cpr:badge-warning{{else}}cpr:badge-success{{end}}"><span class="cpr:dot"></span>{{.Tag}}</span>{{end}}</span>
+        {{if .Note}}<span class="cpr:text-[13px] cpr:text-base-content/70 cpr:break-words">{{.Note}}</span>{{end}}
       </span>
     </div>
     {{end}}
@@ -163,24 +161,24 @@
 {{end}}
 
 {{if $d.Schedules}}
-<div class="cpr-card">
-  <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">Schedules</h2>
-    <a class="cpr-link" href="?p=schedule">Manage</a>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">Schedules</h2>
+    <a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=schedule">Manage</a>
   </div>
-  <div class="cpr-tablewrap"><table>
+  <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
     <thead><tr><th>Name</th><th>Covers</th><th>What it keeps</th><th>Last run</th><th>Next run</th><th></th></tr></thead>
     <tbody>
       {{range $d.Schedules}}
       <tr>
-        <td class="cpr-acct">{{.Name}}<div class="cpr-sublabel">{{.Payload}}</div></td>
+        <td class="cpr:font-semibold">{{.Name}}<div class="cpr:sublabel">{{.Payload}}</div></td>
         <td>{{.Covers}}</td>
-        <td class="cpr-hint" style="margin:0">{{if keepsSet .Retention}}Keeps {{keepsSaid .Retention}}{{else}}Keeps everything{{end}}</td>
-        <td>{{if .LastAt.IsZero}}<span class="cpr-mono">never</span>{{else}}{{agoTime .LastAt}}{{end}}
-          {{if .Last}}<div class="cpr-sublabel {{if eq .Last.Tone "bad"}}cpr-badish{{else if eq .Last.Tone "warn"}}cpr-warnish{{end}}">{{.Last.Outcome}}</div>{{end}}</td>
-        <td>{{if .NextAt.IsZero}}<span class="cpr-muted">—</span>{{else}}{{stamp .NextAt}}<div class="cpr-sublabel">{{.NextIn}}</div>{{end}}</td>
-        <td class="cpr-right">{{if .Enabled}}<span class="cpr-pill cpr-ok"><span class="cpr-dot"></span>On</span>
-          {{else}}<span class="cpr-pill cpr-idle"><span class="cpr-dot"></span>Off</span>{{end}}</td>
+        <td class="cpr:text-[13px] cpr:text-base-content/70">{{if keepsSet .Retention}}Keeps {{keepsSaid .Retention}}{{else}}Keeps everything{{end}}</td>
+        <td>{{if .LastAt.IsZero}}<span class="cpr:mono">never</span>{{else}}{{agoTime .LastAt}}{{end}}
+          {{if .Last}}<div class="cpr:sublabel {{if eq .Last.Tone "bad"}}cpr:text-error{{else if eq .Last.Tone "warn"}}cpr:text-warning{{end}}">{{.Last.Outcome}}</div>{{end}}</td>
+        <td>{{if .NextAt.IsZero}}<span class="cpr:text-base-content/70">—</span>{{else}}{{stamp .NextAt}}<div class="cpr:sublabel">{{.NextIn}}</div>{{end}}</td>
+        <td class="cpr:text-right">{{if .Enabled}}<span class="cpr:pill cpr:badge-success"><span class="cpr:dot"></span>On</span>
+          {{else}}<span class="cpr:pill cpr:badge-ghost"><span class="cpr:dot"></span>Off</span>{{end}}</td>
       </tr>
       {{end}}
     </tbody>
@@ -188,54 +186,54 @@
 </div>
 {{end}}
 
-<div class="cpr-grid2">
-  <div class="cpr-card">
-    <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
-      <h2 style="margin:0">Where backups go</h2>
-      <a class="cpr-link" href="?p=destinations">Manage</a>
+<div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2">
+  <div class="cpr:panel">
+    <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+      <h2 class="cpr:section-title">Where backups go</h2>
+      <a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=destinations">Manage</a>
     </div>
     {{if $d.Destinations}}
-    <div class="cpr-tablewrap"><table><tbody>
+    <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm"><tbody>
       {{range $d.Destinations}}
       <tr>
-        <td class="cpr-acct">{{.Name}}<div class="cpr-sublabel cpr-mono">{{.Endpoint}}</div>
+        <td class="cpr:font-semibold">{{.Name}}<div class="cpr:sublabel cpr:mono">{{.Endpoint}}</div>
           {{template "repocensus" .Repository.Census}}</td>
-        <td class="cpr-right">
-          {{if eq .Status "ok"}}<span class="cpr-pill cpr-ok"><span class="cpr-dot"></span>Reachable</span>
-          {{else if eq .Status "error"}}<span class="cpr-pill cpr-bad"><span class="cpr-dot"></span>Unreachable</span>
-          {{else}}<span class="cpr-pill cpr-idle"><span class="cpr-dot"></span>Not checked</span>{{end}}
+        <td class="cpr:text-right">
+          {{if eq .Status "ok"}}<span class="cpr:pill cpr:badge-success"><span class="cpr:dot"></span>Reachable</span>
+          {{else if eq .Status "error"}}<span class="cpr:pill cpr:badge-error"><span class="cpr:dot"></span>Unreachable</span>
+          {{else}}<span class="cpr:pill cpr:badge-ghost"><span class="cpr:dot"></span>Not checked</span>{{end}}
           {{template "destspace" .Space}}
         </td>
       </tr>
       {{end}}
     </tbody></table></div>
     {{else}}
-    <div class="cpr-empty"><p>Nothing configured yet.</p>
-      <a class="cpr-btn cpr-primary" href="?p=destinations">Add a destination</a></div>
+    <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p class="cpr:mb-4">Nothing configured yet.</p>
+      <a class="cpr:btn cpr:btn-sm cpr:btn-primary" href="?p=destinations">Add a destination</a></div>
     {{end}}
   </div>
 
-  <div class="cpr-card">
-    <div class="cpr-pad" style="border-bottom:1px solid var(--line)"><h2 style="margin:0">Last verified restore</h2></div>
+  <div class="cpr:panel">
+    <div class="cpr:pad cpr:border-b cpr:border-base-300"><h2 class="cpr:section-title">Last verified restore</h2></div>
     {{if $d.LastDrill}}
-    <div class="cpr-pad">
-      <div class="cpr-row" style="gap:var(--s2)">
-        {{if eq (printf "%s" $d.LastDrill.Status) "success"}}<span class="cpr-pill cpr-ok"><span class="cpr-dot"></span>Passed</span>
-        {{else}}<span class="cpr-pill cpr-bad"><span class="cpr-dot"></span>Failed</span>{{end}}
-        <span class="cpr-mono">{{$d.LastDrill.Account}}</span>
-        <span style="color:var(--muted); font-size:13px">{{ago $d.LastDrill.FinishedAt}}</span>
+    <div class="cpr:pad">
+      <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-2">
+        {{if eq (printf "%s" $d.LastDrill.Status) "success"}}<span class="cpr:pill cpr:badge-success"><span class="cpr:dot"></span>Passed</span>
+        {{else}}<span class="cpr:pill cpr:badge-error"><span class="cpr:dot"></span>Failed</span>{{end}}
+        <span class="cpr:mono">{{$d.LastDrill.Account}}</span>
+        <span class="cpr:text-[13px] cpr:text-base-content/70">{{ago $d.LastDrill.FinishedAt}}</span>
       </div>
-      {{if $d.LastDrill.Detail}}<p class="cpr-hint">{{$d.LastDrill.Detail}}</p>{{end}}
-      {{if $d.LastDrill.Error}}<p class="cpr-hint">{{$d.LastDrill.Error}}</p>{{end}}
-      <p class="cpr-note">A rehearsal proves the backup rebuilds. It does not prove the panel would
+      {{if $d.LastDrill.Detail}}<p class="cpr:hint">{{$d.LastDrill.Detail}}</p>{{end}}
+      {{if $d.LastDrill.Error}}<p class="cpr:hint">{{$d.LastDrill.Error}}</p>{{end}}
+      <p class="cpr:text-xs cpr:text-base-content/60 cpr:mt-4">A rehearsal proves the backup rebuilds. It does not prove the panel would
         accept it — only a restore onto a spare account does that.</p>
     </div>
     {{else}}
-    <div class="cpr-empty">
-      <p><b>No restore has been rehearsed yet.</b><br>
+    <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70">
+      <p class="cpr:mb-4"><b>No restore has been rehearsed yet.</b><br>
         Verifying an account rebuilds its backup in scratch space, checks it and throws it away.
         The live account is not touched.</p>
-      <a class="cpr-btn" href="?p=accounts">Choose an account</a>
+      <a class="cpr:btn cpr:btn-sm" href="?p=accounts">Choose an account</a>
     </div>
     {{end}}
   </div>
@@ -245,20 +243,20 @@
      a record of them says whether to trust it -- but a list of accounts
      that have never failed says nothing at all. */}}
 {{if $d.Weakest}}
-<div class="cpr-card">
-  <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">Accounts with the worst record</h2>
-    <a class="cpr-link" href="?p=accounts">All accounts</a>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">Accounts with the worst record</h2>
+    <a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=accounts">All accounts</a>
   </div>
-  <div class="cpr-tablewrap"><table>
-    <thead><tr><th>Account</th><th>Record</th><th class="cpr-right">Failed</th></tr></thead>
+  <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
+    <thead><tr><th>Account</th><th>Record</th><th class="cpr:text-right">Failed</th></tr></thead>
     <tbody>
       {{range $d.Weakest}}
       <tr>
-        <td class="cpr-acct"><a class="cpr-link" href="?p=account&amp;user={{.User}}">{{.User}}</a></td>
-        <td class="cpr-hint" style="margin:0">{{.Record}}</td>
-        <td class="cpr-right">{{if .Failures}}<span class="cpr-pill cpr-warn"><span class="cpr-dot"></span>{{.Failures}} of {{.Runs}}</span>
-          {{else}}<span class="cpr-pill cpr-ok"><span class="cpr-dot"></span>never failed</span>{{end}}</td>
+        <td class="cpr:font-semibold"><a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=account&amp;user={{.User}}">{{.User}}</a></td>
+        <td class="cpr:text-[13px] cpr:text-base-content/70">{{.Record}}</td>
+        <td class="cpr:text-right">{{if .Failures}}<span class="cpr:pill cpr:badge-warning"><span class="cpr:dot"></span>{{.Failures}} of {{.Runs}}</span>
+          {{else}}<span class="cpr:pill cpr:badge-success"><span class="cpr:dot"></span>never failed</span>{{end}}</td>
       </tr>
       {{end}}
     </tbody>
@@ -268,19 +266,19 @@
 
 {{/* The lifecycle log is a record, not a verdict: it is folded to one line
      so it cannot take half the page from what somebody came here to read. */}}
-<div class="cpr-card cpr-pad">
+<div class="cpr:panel cpr:pad">
   {{if $d.Lifecycle}}
-  <details class="cpr-queue" data-fold="cpr-lifecycle">
-    <summary>Account lifecycle — {{len $d.Lifecycle}} recent event{{if ne (len $d.Lifecycle) 1}}s{{end}}</summary>
-    <div class="cpr-tablewrap" style="margin-top:var(--s3)"><table>
+  <details data-fold="cpr-lifecycle">
+    <summary class="cpr:fold">Account lifecycle — {{len $d.Lifecycle}} recent event{{if ne (len $d.Lifecycle) 1}}s{{end}}</summary>
+    <div class="cpr:overflow-x-auto cpr:mt-3" data-tablewrap><table class="cpr:table cpr:table-sm">
       <thead><tr><th>Event</th><th>Account</th><th>Result</th><th>When</th></tr></thead>
       <tbody>
         {{range $d.Lifecycle}}
-        <tr class="cpr-state {{if .OK}}cpr-s-ok{{else}}cpr-s-bad{{end}}">
+        <tr class="{{if .OK}}cpr:stripe-ok{{else}}cpr:stripe-bad{{end}}">
           <td>{{.Title}}</td>
-          <td class="cpr-acct">{{if .Account}}{{.Account}}{{else}}<span class="cpr-muted">unknown</span>{{end}}</td>
-          <td><span class="cpr-pill {{if .OK}}cpr-ok{{else}}cpr-bad{{end}}"><span class="cpr-dot"></span>{{.Outcome}}</span>
-            {{if .Detail}}<div class="cpr-sublabel">{{.Detail}}</div>{{end}}</td>
+          <td class="cpr:font-semibold">{{if .Account}}{{.Account}}{{else}}<span class="cpr:text-base-content/70">unknown</span>{{end}}</td>
+          <td><span class="cpr:pill {{if .OK}}cpr:badge-success{{else}}cpr:badge-error{{end}}"><span class="cpr:dot"></span>{{.Outcome}}</span>
+            {{if .Detail}}<div class="cpr:sublabel">{{.Detail}}</div>{{end}}</td>
           <td>{{ago .When}}</td>
         </tr>
         {{end}}
@@ -288,7 +286,7 @@
     </table></div>
   </details>
   {{else}}
-  <span class="cpr-hint">No account lifecycle hook has reached the service yet.</span>
+  <span class="cpr:hint cpr:mt-0">No account lifecycle hook has reached the service yet.</span>
   {{end}}
 </div>
 {{end}}

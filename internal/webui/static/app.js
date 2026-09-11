@@ -16,7 +16,7 @@
     var term = search ? search.value.trim().toLowerCase() : "";
     var state = "";
     if (chips) {
-      var pressed = chips.querySelector('.cpr-chip[aria-pressed="true"]');
+      var pressed = chips.querySelector('button[aria-pressed="true"]');
       state = pressed ? pressed.dataset.state : "";
     }
 
@@ -61,9 +61,9 @@
   Array.prototype.forEach.call(document.querySelectorAll("[data-filter-state]"), function (group) {
     var target = group.dataset.filterState;
     group.addEventListener("click", function (event) {
-      var chip = event.target.closest(".cpr-chip");
+      var chip = event.target.closest("button[aria-pressed]");
       if (!chip) { return; }
-      Array.prototype.forEach.call(group.querySelectorAll(".cpr-chip"), function (other) {
+      Array.prototype.forEach.call(group.querySelectorAll("button[aria-pressed]"), function (other) {
         other.setAttribute("aria-pressed", String(other === chip));
       });
       applyFilters(target);
@@ -222,7 +222,7 @@
   // which no scroll container can clip and no layout has to make room
   // for. It goes back into the flow when the menu closes.
   function placeMenu(menu) {
-    var panel = menu.querySelector(".cpr-menu-body");
+    var panel = menu.querySelector("[data-menu-body]");
     var button = menu.querySelector("summary");
     if (!panel || !button) { return; }
     var rect = button.getBoundingClientRect();
@@ -235,19 +235,19 @@
   }
 
   function unplaceMenu(menu) {
-    var panel = menu.querySelector(".cpr-menu-body");
+    var panel = menu.querySelector("[data-menu-body]");
     if (panel) { panel.removeAttribute("style"); }
   }
 
   function closeMenus(except) {
-    Array.prototype.forEach.call(document.querySelectorAll(".cpr-menu[open]"), function (menu) {
+    Array.prototype.forEach.call(document.querySelectorAll("details[data-menu][open]"), function (menu) {
       if (menu === except) { return; }
       menu.open = false;
       unplaceMenu(menu);
     });
   }
 
-  Array.prototype.forEach.call(document.querySelectorAll(".cpr-menu"), function (menu) {
+  Array.prototype.forEach.call(document.querySelectorAll("details[data-menu]"), function (menu) {
     menu.addEventListener("toggle", function () {
       if (menu.open) {
         closeMenus(menu);
@@ -264,11 +264,11 @@
   window.addEventListener("resize", function () { closeMenus(null); });
 
   document.addEventListener("click", function (event) {
-    closeMenus(event.target.closest(".cpr-menu"));
+    closeMenus(event.target.closest("details[data-menu]"));
   });
   document.addEventListener("keydown", function (event) {
     if (event.key !== "Escape") { return; }
-    var open = document.querySelector(".cpr-menu[open] summary");
+    var open = document.querySelector("details[data-menu][open] summary");
     closeMenus(null);
     if (open) { open.focus(); }
   });
@@ -369,15 +369,16 @@
   }
 
   function build(table) {
-    var wrap = table.closest(".cpr-tablewrap") || table;
+    var wrap = table.closest("[data-tablewrap]") || table;
 
     var bar = document.createElement("div");
-    bar.className = "cpr-pager";
+    bar.className = "cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:px-4 cpr:py-2.5 cpr:border-t cpr:border-base-300 cpr:text-[13px] cpr:text-base-content/70";
 
     var label = document.createElement("label");
-    label.className = "cpr-pager-size";
+    label.className = "cpr:flex cpr:items-center cpr:gap-1.5 cpr:font-semibold";
     label.textContent = "Rows ";
     var select = document.createElement("select");
+    select.className = "cpr:select cpr:select-sm cpr:w-auto";
     SIZES.forEach(function (size) {
       var option = document.createElement("option");
       option.value = String(size);
@@ -387,20 +388,20 @@
     label.appendChild(select);
 
     var range = document.createElement("span");
-    range.className = "cpr-pager-range";
+    range.className = "cpr:tabular-nums";
     range.setAttribute("aria-live", "polite");
 
     var previous = document.createElement("button");
     previous.type = "button";
-    previous.className = "cpr-btn cpr-quiet";
+    previous.className = "cpr:btn cpr:btn-sm cpr:btn-ghost";
     previous.textContent = "Previous";
     var next = document.createElement("button");
     next.type = "button";
-    next.className = "cpr-btn cpr-quiet";
+    next.className = "cpr:btn cpr:btn-sm cpr:btn-ghost";
     next.textContent = "Next";
 
     var buttons = document.createElement("div");
-    buttons.className = "cpr-pager-steps";
+    buttons.className = "cpr:flex cpr:gap-1.5 cpr:ml-auto";
     buttons.appendChild(previous);
     buttons.appendChild(next);
 
@@ -543,7 +544,7 @@
       var label = cell.textContent.trim();
       var button = document.createElement("button");
       button.type = "button";
-      button.className = "cpr-sortbtn";
+      button.className = "cpr:sortbtn";
       button.textContent = label;
       cell.textContent = "";
       cell.appendChild(button);
@@ -697,7 +698,7 @@
   // cpsrvd passing a content type through, which it does not.
   function loadIntoDrawer(dialog, link) {
     drawerTitle.textContent = link.dataset.dialogTitle || drawerHome.title;
-    drawerBody.innerHTML = '<p class="cpr-hint">Loading…</p>';
+    drawerBody.innerHTML = '<p class="cpr:hint">Loading…</p>';
     dialog.showModal();
 
     window.fetch(link.href, { credentials: "same-origin" })
@@ -737,7 +738,7 @@
     }
     // Clicking the backdrop is how a sheet is dismissed by everyone who
     // has ever used one.
-    if (event.target.tagName === "DIALOG" && event.target.classList.contains("cpr-sheet")) {
+    if (event.target.tagName === "DIALOG" && event.target.hasAttribute("data-sheet")) {
       event.target.close();
       return;
     }
@@ -750,7 +751,7 @@
 
   // A form that came back with something wrong reopens where it was being
   // filled in, rather than leaving the reason on a page behind it.
-  var refused = document.querySelector(".cpr-sheet[data-drawer-open]");
+  var refused = document.querySelector("dialog[data-sheet][data-drawer-open]");
   if (refused && refused.showModal) {
     refused.showModal();
     focusFirst(refused);
@@ -758,7 +759,7 @@
 
   // Whatever was loaded in goes away with the drawer, so opening it again
   // is opening the same thing it was before.
-  var drawer = document.querySelector(".cpr-sheet");
+  var drawer = document.querySelector("dialog[data-sheet]");
   if (drawer && drawerHome) {
     drawer.addEventListener("close", function () {
       drawerBody.innerHTML = drawerHome.html;

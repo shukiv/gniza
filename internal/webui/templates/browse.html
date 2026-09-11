@@ -1,155 +1,155 @@
 {{define "content"}}
 {{$data := .Data}}
 <div>
-  <h1>Browse backups</h1>
-  <p class="cpr-sub">What is actually stored, read from the destination itself.</p>
+  <h1 class="cpr:page-title">Browse backups</h1>
+  <p class="cpr:page-sub">What is actually stored, read from the destination itself.</p>
 </div>
 
-<div class="cpr-crumb">
-  {{range $i, $crumb := $data.Crumbs}}{{if $i}} <span>›</span> {{end}}<a class="cpr-link" href="{{$crumb.URL}}">{{$crumb.Label}}</a>{{end}}
+<div class="cpr:text-sm cpr:text-base-content/70 cpr:mb-2 cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-1.5">
+  {{range $i, $crumb := $data.Crumbs}}{{if $i}} <span>›</span> {{end}}<a class="cpr:link cpr:link-primary cpr:link-hover" href="{{$crumb.URL}}">{{$crumb.Label}}</a>{{end}}
 </div>
 
 {{with $data.Err}}
-<div class="cpr-banner cpr-bad"><div class="cpr-body">{{.}}</div></div>
+<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm"><div>{{.}}</div></div>
 {{end}}
 
 {{/* ---- destinations ---- */}}
 {{if not $data.Repository}}
-<div class="cpr-card">
+<div class="cpr:panel">
   {{if $data.Destinations}}
-  <div class="cpr-tablewrap"><table>
-    <thead><tr><th>Destination</th><th>Address</th><th>Repository</th><th class="cpr-right">&nbsp;</th></tr></thead>
+  <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
+    <thead><tr><th>Destination</th><th>Address</th><th>Repository</th><th class="cpr:text-right">&nbsp;</th></tr></thead>
     <tbody>
       {{range $data.Destinations}}
-      <tr class="cpr-state {{.Stripe}}">
-        <td class="cpr-acct">{{.Name}}<div class="cpr-sublabel">{{.TypeName}}</div></td>
-        <td class="cpr-mono">{{.Endpoint}}</td>
-        <td class="cpr-mono">{{.Repository.Path}}</td>
-        <td class="cpr-right"><div class="cpr-actions">
+      <tr class="{{.Stripe}}">
+        <td class="cpr:font-semibold">{{.Name}}<div class="cpr:sublabel">{{.TypeName}}</div></td>
+        <td class="cpr:mono">{{.Endpoint}}</td>
+        <td class="cpr:mono">{{.Repository.Path}}</td>
+        <td class="cpr:text-right"><div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
           {{if .Repository.ID}}
-          <a class="cpr-btn" href="?p=browse&amp;repository={{.Repository.ID}}">Open</a>
-          {{else}}<span class="cpr-muted">no repository yet</span>{{end}}
+          <a class="cpr:btn cpr:btn-sm" href="?p=browse&amp;repository={{.Repository.ID}}">Open</a>
+          {{else}}<span class="cpr:text-base-content/70">no repository yet</span>{{end}}
         </div></td>
       </tr>
       {{end}}
     </tbody>
   </table></div>
   {{else}}
-  <div class="cpr-empty"><p><b>No destination yet.</b><br>There is nothing stored to look at.</p></div>
+  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p><b>No destination yet.</b><br>There is nothing stored to look at.</p></div>
   {{end}}
 </div>
 
 {{/* ---- accounts in one destination ---- */}}
 {{else if not $data.Account}}
-<div class="cpr-card">
-  <div class="cpr-pad" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">What {{$data.Destination}} holds</h2>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">What {{$data.Destination}} holds</h2>
   </div>
   {{if $data.SystemBackup}}
-  <div class="cpr-pad" style="border-bottom:1px solid var(--line)">
-    <div class="cpr-row">
-      <span class="cpr-pill cpr-ok"><span class="cpr-dot"></span>Server settings</span>
-      <span class="cpr-hint" style="margin:0">EasyApache, tweak settings, packages and the rest.</span>
-      <span style="flex:1"></span>
-      <a class="cpr-btn" href="?p=browse&amp;repository={{$data.Repository}}&amp;account=%40system">Open</a>
+  <div class="cpr:pad cpr:border-b cpr:border-base-300">
+    <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3">
+      <span class="cpr:pill cpr:badge-success"><span class="cpr:dot"></span>Server settings</span>
+      <span class="cpr:hint cpr:mt-0">EasyApache, tweak settings, packages and the rest.</span>
+      <span class="cpr:flex-1"></span>
+      <a class="cpr:btn cpr:btn-sm" href="?p=browse&amp;repository={{$data.Repository}}&amp;account=%40system">Open</a>
     </div>
   </div>
   {{end}}
   {{if $data.Accounts}}
-  <div class="cpr-tablewrap"><table>
-    <thead><tr><th>Account</th><th>Backups</th><th>Most recent</th><th class="cpr-right">&nbsp;</th></tr></thead>
+  <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
+    <thead><tr><th>Account</th><th>Backups</th><th>Most recent</th><th class="cpr:text-right">&nbsp;</th></tr></thead>
     <tbody>
       {{range $data.Accounts}}
       <tr>
-        <td class="cpr-acct">{{.Account}}</td>
-        <td class="cpr-num">{{.Snapshots}}</td>
-        <td>{{stamp .Latest}}<div class="cpr-sublabel">{{ago .Latest}}</div></td>
-        <td class="cpr-right"><div class="cpr-actions">
-          <a class="cpr-btn" href="?p=browse&amp;repository={{$data.Repository}}&amp;account={{.Account}}">Open</a>
+        <td class="cpr:font-semibold">{{.Account}}</td>
+        <td class="cpr:tabular-nums">{{.Snapshots}}</td>
+        <td>{{stamp .Latest}}<div class="cpr:sublabel">{{ago .Latest}}</div></td>
+        <td class="cpr:text-right"><div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
+          <a class="cpr:btn cpr:btn-sm" href="?p=browse&amp;repository={{$data.Repository}}&amp;account={{.Account}}">Open</a>
         </div></td>
       </tr>
       {{end}}
     </tbody>
   </table></div>
   {{else if not $data.Err}}
-  <div class="cpr-empty"><p>Nothing has been backed up to this destination yet.</p></div>
+  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p>Nothing has been backed up to this destination yet.</p></div>
   {{end}}
 </div>
 
 {{/* ---- one account's backups ---- */}}
 {{else if not $data.Snapshot}}
-<div class="cpr-card">
-  <div class="cpr-pad" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">Backups of {{$data.Account}}</h2>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">Backups of {{$data.Account}}</h2>
   </div>
   {{if $data.Snapshots}}
-  <div class="cpr-tablewrap"><table>
-    <thead><tr><th>Taken</th><th>Read</th><th>Stored</th><th>Id</th><th class="cpr-right">&nbsp;</th></tr></thead>
+  <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
+    <thead><tr><th>Taken</th><th>Read</th><th>Stored</th><th>Id</th><th class="cpr:text-right">&nbsp;</th></tr></thead>
     <tbody>
       {{range $data.Snapshots}}
       <tr>
-        <td>{{stamp .Time}}<div class="cpr-sublabel">{{ago .Time}}</div></td>
-        <td class="cpr-mono cpr-num">{{bytes .Summary.TotalBytesProcessed}}</td>
-        <td class="cpr-mono cpr-num">{{if .Summary.DataAdded}}{{bytes .Summary.DataAdded}}{{else}}<span class="cpr-muted">—</span>{{end}}</td>
-        <td class="cpr-mono">{{short .ID}}</td>
-        <td class="cpr-right"><div class="cpr-actions">
-          <a class="cpr-btn" href="?p=browse&amp;repository={{$data.Repository}}&amp;account={{$data.Account}}&amp;snapshot={{.ID}}">Look inside</a>
-          <a class="cpr-btn cpr-quiet" href="?p=restore&amp;account={{$data.Account}}&amp;repository={{$data.Repository}}">Restore from it</a>
+        <td>{{stamp .Time}}<div class="cpr:sublabel">{{ago .Time}}</div></td>
+        <td class="cpr:mono cpr:tabular-nums">{{bytes .Summary.TotalBytesProcessed}}</td>
+        <td class="cpr:mono cpr:tabular-nums">{{if .Summary.DataAdded}}{{bytes .Summary.DataAdded}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
+        <td class="cpr:mono">{{short .ID}}</td>
+        <td class="cpr:text-right"><div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
+          <a class="cpr:btn cpr:btn-sm" href="?p=browse&amp;repository={{$data.Repository}}&amp;account={{$data.Account}}&amp;snapshot={{.ID}}">Look inside</a>
+          <a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=restore&amp;account={{$data.Account}}&amp;repository={{$data.Repository}}">Restore from it</a>
         </div></td>
       </tr>
       {{end}}
     </tbody>
   </table></div>
   {{else if not $data.Err}}
-  <div class="cpr-empty"><p>No backups of {{$data.Account}} in this destination.</p></div>
+  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p>No backups of {{$data.Account}} in this destination.</p></div>
   {{end}}
 </div>
 
 {{/* ---- inside one backup ---- */}}
 {{else}}
-<div class="cpr-card">
-  <div class="cpr-pad cpr-spread" style="border-bottom:1px solid var(--line)">
-    <h2 style="margin:0">{{$data.Account}} · {{short $data.Snapshot}}</h2>
-    <span class="cpr-hint" style="margin:0">taken {{stamp $data.SnapshotAt}}</span>
+<div class="cpr:panel">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">{{$data.Account}} · {{short $data.Snapshot}}</h2>
+    <span class="cpr:hint cpr:mt-0">taken {{stamp $data.SnapshotAt}}</span>
   </div>
   {{if $data.Entries}}
-  <div class="cpr-tablewrap"><table>
-    <thead><tr><th>Name</th><th>Size</th><th class="cpr-right">&nbsp;</th></tr></thead>
+  <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
+    <thead><tr><th>Name</th><th>Size</th><th class="cpr:text-right">&nbsp;</th></tr></thead>
     <tbody>
       {{/* Each parameter its own action. A prefix built with printf is
            escaped once on the way out, so "&amp;" written there arrives as
            "&amp;amp;", and a value off the query string could name
            parameters of its own. */}}
       {{if $data.Up}}
-      <tr><td colspan="3"><a class="cpr-link" href="?p=browse&amp;repository={{$data.Repository}}&amp;account={{$data.Account}}&amp;snapshot={{$data.Snapshot}}&amp;path={{$data.Up}}">↑ up one level</a></td></tr>
+      <tr><td colspan="3"><a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=browse&amp;repository={{$data.Repository}}&amp;account={{$data.Account}}&amp;snapshot={{$data.Snapshot}}&amp;path={{$data.Up}}">↑ up one level</a></td></tr>
       {{end}}
       {{range $data.Entries}}
       <tr>
-        <td class="cpr-acct">
-          {{if .Dir}}<a class="cpr-link" href="?p=browse&amp;repository={{$data.Repository}}&amp;account={{$data.Account}}&amp;snapshot={{$data.Snapshot}}&amp;path={{.Path}}">{{.Name}}/</a>
+        <td class="cpr:font-semibold">
+          {{if .Dir}}<a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=browse&amp;repository={{$data.Repository}}&amp;account={{$data.Account}}&amp;snapshot={{$data.Snapshot}}&amp;path={{.Path}}">{{.Name}}/</a>
           {{else}}{{.Name}}{{end}}</td>
-        <td class="cpr-mono cpr-num">{{if .Size}}{{bytes .Size}}{{else}}<span class="cpr-muted">—</span>{{end}}</td>
-        <td class="cpr-right"><div class="cpr-actions">
-          <form method="post" action="?p=restore/items" class="cpr-inline">
+        <td class="cpr:mono cpr:tabular-nums">{{if .Size}}{{bytes .Size}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
+        <td class="cpr:text-right"><div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
+          <form method="post" action="?p=restore/items" class="cpr:inline-block cpr:align-middle">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="account" value="{{$data.Account}}">
             <input type="hidden" name="repository" value="{{$data.Repository}}">
             <input type="hidden" name="snapshot" value="{{$data.Snapshot}}">
             <input type="hidden" name="item" value="files">
             <input type="hidden" name="name" value="{{.Path}}">
-            <button class="cpr-btn">Restore this</button>
+            <button class="cpr:btn cpr:btn-sm">Restore this</button>
           </form>
         </div></td>
       </tr>
       {{end}}
     </tbody>
   </table></div>
-  <div class="cpr-pad" style="border-top:1px solid var(--line)">
-    <p class="cpr-hint" style="margin:0">Restoring from here puts what you picked in the work
+  <div class="cpr:pad cpr:border-t cpr:border-base-300">
+    <p class="cpr:hint cpr:mt-0">Restoring from here puts what you picked in the work
     directory, with a download beside it in the restores log. Nothing is written back into the account.</p>
   </div>
   {{else if not $data.Err}}
-  <div class="cpr-empty"><p>Nothing here.</p></div>
+  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p>Nothing here.</p></div>
   {{end}}
 </div>
 {{end}}

@@ -21,7 +21,7 @@ artwork.
 
 The same outline is set inline in the WHM plugin's sidebar, in
 `internal/webui/templates/layout.html`. There it is filled with
-`currentColor` so `.cpr-brand-mark` decides the badge and the mark on it
+`currentColor` so the badge (`data-brand-mark`) decides both it and the mark on it
 with one rule.
 
 ## Colours

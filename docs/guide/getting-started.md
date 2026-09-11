@@ -119,16 +119,20 @@ refuses until it has finished, since a restart would fail it.
 the default: versions somebody decided to make. *The dist branch* is whatever
 was built last.
 
-On the machine that holds the release key, publishing to it is one command:
+Publishing to it is a run of the release workflow started by hand, since the
+release key lives in the repository's secrets and nowhere else:
 
 ```bash
-make release GNIZA_SIGNING_KEY_FILE=~/.gniza/gniza-release.pem
+gh workflow run release --repo shukiv/gniza --ref master
 ```
 
-It builds the plugin, signs the checksums with that key, and pushes the
-tarball, the checksums and the signature to the `dist` branch — written with
-git's plumbing, so the working tree is untouched and no branch is checked out.
-`GNIZA_DIST_PUSH=0` stops before the push if you would rather look first.
+It builds the plugin from master, signs the checksums with that key, and
+pushes the tarballs, the checksums and the signature to the `dist` branch —
+written with git's plumbing, so nothing is checked out. A tag push publishes a
+release instead and leaves the branch alone. On a machine that does hold the
+key, `make release GNIZA_SIGNING_KEY_FILE=…` does the same from a working
+tree, and `GNIZA_DIST_PUSH=0` stops it before the push if you would rather
+look first.
 
 Servers on that channel read those three files and check them exactly as they
 check a release. Nothing about the checking is relaxed; what is relaxed is

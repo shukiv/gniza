@@ -77,6 +77,22 @@ jobs:
           openssl dgst -sha256 -verify internal/update/release.pub \
             -signature bin/SHA256SUMS.sig bin/SHA256SUMS
 
+      # A run started by hand is a build of whatever master is, published
+      # on the dist branch for the servers that follow the work rather
+      # than the releases (Settings -> Where updates come from). The key
+      # lives only here, so this is the one place a dist build can be
+      # signed. A tag push publishes a release below instead, never both:
+      # a server on the dist channel orders builds by commit time, and a
+      # release has none, so putting one there would offer it to nobody.
+      - name: Publish the build on the dist branch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -eu
+          git config user.name "gniza release workflow"
+          git config user.email "release@gniza.invalid"
+          git fetch --quiet origin "+refs/heads/dist:refs/remotes/origin/dist" || true
+          sh packaging/whm/publish-dist.sh bin "$(git describe --tags --always)"
+
       # get.sh is published as an asset of its own so that the one-line
       # install fetches it from the release rather than from a branch: what
       # somebody pipes into a root shell is then a named version with its

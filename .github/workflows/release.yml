@@ -33,6 +33,16 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The stylesheet is compiled from internal/webui/ui/input.css and
+      # committed (ADR 0023). A template edited without `make css` would
+      # ship with classes no rule matches, so the copy has to be current.
+      - name: Stylesheet is current
+        run: make css-check
+
       - name: Vet
         run: make vet
 

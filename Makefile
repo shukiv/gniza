@@ -270,5 +270,22 @@ vuln:
 fmt:
 	gofmt -l -w .
 
+# The stylesheet is compiled from internal/webui/ui/input.css with Tailwind
+# and daisyUI and committed as internal/webui/static/app.css, so the Go
+# build, the release and every server never need Node. Run this after
+# changing input.css, a template, app.js or a class name in Go; CI fails
+# on a stale copy (see css-check).
+UI := internal/webui/ui
+css: $(UI)/node_modules
+	cd $(UI) && npm run --silent build
+
+$(UI)/node_modules: $(UI)/package.json $(UI)/package-lock.json
+	cd $(UI) && npm ci --no-audit --no-fund --silent
+	touch $@
+
+css-check: css
+	@git diff --quiet -- internal/webui/static/app.css || \
+	  { echo "internal/webui/static/app.css is stale: run make css and commit it"; git --no-pager diff --stat -- internal/webui/static/app.css; exit 1; }
+
 clean:
 	trash $(BIN) coverage.out $(E2E_TMPDIR) 2>/dev/null || true

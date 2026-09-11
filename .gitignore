@@ -13,3 +13,7 @@ coverage.out
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Node packages for the stylesheet build (make css); the compiled
+# stylesheet is committed, so a Go build never needs them.
+/internal/webui/ui/node_modules/

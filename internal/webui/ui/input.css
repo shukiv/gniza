@@ -1,0 +1,145 @@
+/* Gniza interface styles: Tailwind 4 + daisyUI 5, compiled into
+ * ../static/app.css by `make css` and inlined into every page (ADR 0008).
+ *
+ * Every class this emits is namespaced `cpr:` (ADR 0009, ADR 0023): the page
+ * is a fragment inside WHM's, DirectAdmin's or cPanel's own interface, whose
+ * stylesheets own .btn, .table, .alert and every bare element.
+ *
+ * Layers, lowest first. `reset` rolls every element of ours back to the
+ * browser's own styles, so a host layer below it cannot reach in; the
+ * unlayered rule at the end rolls back what the host's unlayered sheets
+ * put on top. Between them, only these layers style the fragment. */
+@layer reset, theme, base, gniza, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme) prefix(cpr);
+@import "tailwindcss/utilities.css" layer(utilities) prefix(cpr);
+
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark;
+  /* The document is the host's: nothing that paints :root, its scrollbar or
+     its scroll gutter. color-scheme stays, so native controls follow the theme. */
+  exclude: rootcolor, rootscrollgutter, rootscrolllock, scrollbar;
+}
+
+@source "../templates/*.html";
+@source "../static/app.js";
+@source "../*.go";
+
+@theme {
+  --font-sans: "Fira Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ---- host isolation ---------------------------------------------------- */
+
+@layer reset {
+  /* Not inside an <svg>: its shapes are positioned by presentation
+     attributes — transform, x, rx — which are author-level and would go too. */
+  .gniza, .gniza :where(*):not(svg *), .gniza :where(*):not(svg *)::before, .gniza :where(*):not(svg *)::after { all: revert; }
+}
+
+/* Element defaults for our own markup, at zero specificity so every
+   component and utility wins. What Tailwind's preflight would do, scoped. */
+@layer gniza {
+  .gniza {
+    font-family: var(--cpr-font-sans); font-size: 0.875rem; line-height: 1.5;
+    color: var(--color-base-content); -webkit-font-smoothing: antialiased;
+    box-sizing: border-box;
+  }
+  .gniza :where(*, *::before, *::after) { box-sizing: border-box; border-width: 0; border-style: solid; border-color: var(--color-base-300); }
+  .gniza :where(h1, h2, h3, h4, p, ul, ol, dl, dd, fieldset, figure, pre, blockquote) { margin: 0; padding: 0; }
+  .gniza :where(h1, h2, h3, h4) { font-size: inherit; font-weight: inherit; line-height: inherit; color: inherit; }
+  .gniza :where(a) { color: inherit; text-decoration: inherit; }
+  .gniza :where(ul, ol) { list-style: none; }
+  .gniza :where(table) { border-collapse: collapse; border-spacing: 0; text-indent: 0; font-size: inherit; }
+  .gniza :where(th, td) { text-align: start; padding: 0; font-weight: inherit; }
+  .gniza :where(button, input, select, textarea, optgroup, option) { font: inherit; color: inherit; margin: 0; letter-spacing: inherit; }
+  .gniza :where(button, [type="button"], [type="submit"], [type="reset"], summary) { cursor: pointer; appearance: button; background: transparent; }
+  .gniza :where(input[type="hidden"]) { display: none !important; }
+  .gniza :where(img, svg, video, canvas) { display: block; vertical-align: middle; max-width: 100%; }
+  /* Presentation attributes on an SVG (fill="…", stroke-linecap="…") are
+     author-level and the reset layer discards them: icons say it in classes,
+     and the line ends are round everywhere. */
+  .gniza :where(svg) { fill: currentColor; stroke-linecap: round; stroke-linejoin: round; }
+  .gniza :where(code, kbd, pre, samp) { font-family: var(--cpr-font-mono); font-size: 0.9em; }
+  .gniza :where(legend) { padding: 0; }
+  .gniza :where(summary) { list-style: none; }
+  .gniza :where(summary)::-webkit-details-marker { display: none; }
+  .gniza :where(dialog) { margin: auto; }
+  .gniza :where(b, strong) { font-weight: 600; }
+  .gniza :where(small) { font-size: 0.85em; }
+  .gniza :where([hidden]:not([hidden="until-found"])) { display: none !important; }
+  .gniza :where(:focus-visible) { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+  /* Sort arrows on a sortable column, set by app.js. */
+  .gniza :where(th[aria-sort] > button)::after { content: ""; font-size: 10px; }
+  .gniza :where(th[aria-sort="ascending"] > button)::after { content: "▲"; opacity: 1; }
+  .gniza :where(th[aria-sort="descending"] > button)::after { content: "▼"; opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gniza :where(*, *::before, *::after) { animation: none !important; transition: none !important; }
+  }
+}
+
+/* ---- project utilities (rendered as cpr:<name>) ------------------------ */
+
+/* Surfaces */
+@utility panel { @apply cpr:card cpr:bg-base-100 cpr:border cpr:border-base-300 cpr:shadow-sm; }
+@utility pad { @apply cpr:px-6 cpr:py-4; }
+
+/* Type */
+@utility page-title { @apply cpr:text-2xl cpr:font-semibold cpr:tracking-tight cpr:text-balance; }
+@utility page-sub { @apply cpr:text-sm cpr:text-base-content/70 cpr:mt-1; }
+@utility section-title { @apply cpr:text-xs cpr:font-semibold cpr:uppercase cpr:tracking-wider cpr:text-base-content/60; }
+@utility hint { @apply cpr:text-[13px] cpr:text-base-content/70 cpr:mt-2; }
+@utility help { @apply cpr:block cpr:text-xs cpr:text-base-content/65 cpr:mt-1; }
+@utility sublabel { @apply cpr:text-xs cpr:text-base-content/60 cpr:mt-px; }
+@utility k { @apply cpr:text-[11px] cpr:font-semibold cpr:uppercase cpr:tracking-widest cpr:text-base-content/55; }
+@utility n { @apply cpr:text-2xl cpr:font-bold cpr:tracking-tight cpr:leading-tight cpr:tabular-nums; }
+@utility mono { @apply cpr:font-mono cpr:text-[0.85em]; }
+@utility log { @apply cpr:bg-base-200 cpr:border cpr:border-base-300 cpr:rounded-box cpr:p-3 cpr:font-mono cpr:text-xs cpr:leading-relaxed cpr:whitespace-pre-wrap cpr:break-words cpr:max-h-52 cpr:overflow-auto cpr:text-base-content/75; }
+@utility logbox { @apply cpr:bg-base-200 cpr:border cpr:border-base-300 cpr:rounded-box cpr:p-3 cpr:font-mono cpr:text-xs cpr:leading-relaxed cpr:whitespace-pre cpr:max-h-[60vh] cpr:overflow-auto; tab-size: 4; }
+
+/* State */
+@utility pill { @apply cpr:badge cpr:badge-soft cpr:badge-sm cpr:gap-1.5 cpr:whitespace-nowrap cpr:font-medium; }
+@utility dot { @apply cpr:inline-block cpr:size-1.5 cpr:rounded-full cpr:bg-current cpr:shrink-0; }
+@utility wait { @apply cpr:inline-block cpr:size-2.5 cpr:rounded-full cpr:border-[1.5px] cpr:border-current cpr:opacity-45 cpr:shrink-0; }
+@utility runline { @apply cpr:flex cpr:items-center cpr:gap-2 cpr:font-medium; }
+/* Severity on a row's leading edge, readable without colour alone: an
+   inset shadow on the first cell, because a border on a <tr> only paints
+   with collapsed borders and daisyUI's table keeps them separate. */
+@utility stripe-ok { & > :first-child { box-shadow: inset 4px 0 0 var(--color-success); } }
+@utility stripe-warn { & > :first-child { box-shadow: inset 4px 0 0 var(--color-warning); } }
+@utility stripe-bad { & > :first-child { box-shadow: inset 4px 0 0 var(--color-error); } }
+@utility row-gone { @apply cpr:bg-base-200/70 cpr:text-base-content/70; }
+
+/* Controls */
+@utility field-label { @apply cpr:block cpr:text-sm cpr:font-medium cpr:mb-1; }
+@utility check { @apply cpr:flex cpr:items-start cpr:gap-2 cpr:my-3 cpr:text-sm cpr:font-normal cpr:cursor-pointer; }
+@utility chip {
+  @apply cpr:btn cpr:btn-sm cpr:btn-outline cpr:rounded-full cpr:font-medium cpr:border-base-300 cpr:text-base-content/70;
+  &[aria-pressed="true"] { @apply cpr:btn-primary cpr:btn-soft cpr:border-primary; }
+}
+@utility sortbtn { @apply cpr:flex cpr:w-full cpr:min-h-8 cpr:items-center cpr:gap-1.5 cpr:cursor-pointer cpr:text-left; font: inherit; letter-spacing: inherit; text-transform: inherit; }
+@utility skip { @apply cpr:sr-only cpr:focus:not-sr-only cpr:focus:fixed cpr:focus:top-2 cpr:focus:left-2 cpr:focus:z-[1000] cpr:focus:btn cpr:focus:btn-neutral cpr:focus:btn-sm; }
+
+/* Row menu: a details element that works with no script; app.js pins the
+   open panel to the viewport so no scroll container clips it. */
+@utility menu-panel { @apply cpr:flex cpr:flex-col cpr:gap-0.5 cpr:min-w-44 cpr:mt-1.5 cpr:p-1 cpr:bg-base-100 cpr:border cpr:border-base-300 cpr:rounded-box cpr:shadow-md cpr:text-left cpr:z-30; }
+@utility menu-item { @apply cpr:flex cpr:w-full cpr:min-h-9 cpr:items-center cpr:rounded-field cpr:px-2.5 cpr:text-sm cpr:text-left cpr:whitespace-nowrap cpr:cursor-pointer cpr:hover:bg-base-200; }
+
+/* A fold: one summary line with a chevron that turns when it is open. */
+@utility fold {
+  @apply cpr:flex cpr:items-center cpr:gap-2 cpr:font-medium cpr:cursor-pointer cpr:list-none;
+  &::after { content: "\203A"; margin-left: 0.25rem; opacity: .6; display: inline-block; transition: transform .15s ease; }
+  details[open] > &::after { transform: rotate(90deg); }
+}
+
+/* Side sheet: a modal-box that fills the right edge. */
+@utility sheet { @apply cpr:h-full cpr:max-h-none cpr:w-[min(520px,94vw)] cpr:max-w-none cpr:rounded-none cpr:p-0 cpr:flex cpr:flex-col cpr:border-l cpr:border-base-300; }
+
+/* ---- last word ---------------------------------------------------------- */
+
+/* Unlayered and high in specificity: whatever the host's own unlayered
+   stylesheets declare on an element of ours is rolled back to our layers. */
+.gniza:not(#g#g), .gniza :where(*):not(#g#g, svg *), .gniza :where(*):not(#g#g, svg *)::before, .gniza :where(*):not(#g#g, svg *)::after { all: revert-layer; }

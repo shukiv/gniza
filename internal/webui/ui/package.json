@@ -1,0 +1,13 @@
+{
+  "name": "gniza-ui",
+  "private": true,
+  "description": "Builds internal/webui/static/app.css from input.css with Tailwind and daisyUI. Run `make css` from the repository root; the compiled stylesheet is committed so the Go build never needs Node.",
+  "scripts": {
+    "build": "tailwindcss -i input.css -o ../static/app.css --minify"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "daisyui": "5.7.37",
+    "tailwindcss": "4.3.3"
+  }
+}

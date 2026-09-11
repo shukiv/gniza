@@ -2,6 +2,7 @@ package webui
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"math"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/shukiv/gniza/internal/agent"
+	"github.com/shukiv/gniza/internal/answer"
 	"github.com/shukiv/gniza/internal/human"
 	"github.com/shukiv/gniza/internal/nodestore"
 	"github.com/shukiv/gniza/internal/notify"
@@ -76,6 +78,15 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name, title, nav
 func (s *Server) renderWithCSRF(
 	w http.ResponseWriter, r *http.Request, name, title, nav string, data any, csrf string,
 ) {
+	s.renderStatus(w, r, http.StatusOK, name, title, nav, data, csrf)
+}
+
+// renderStatus draws a page under a status of the caller's choosing. The
+// status is written after the headers and before the body: an error page
+// whose status was written first went out without its content type.
+func (s *Server) renderStatus(
+	w http.ResponseWriter, r *http.Request, status int, name, title, nav string, data any, csrf string,
+) {
 	// These pages show repository passwords and private keys. A shared
 	// browser, a back button, or a proxy that keeps a copy would each be
 	// a way for the key to the backups to outlive the session that was
@@ -111,6 +122,11 @@ func (s *Server) renderWithCSRF(
 		}
 	}
 
+	if wantsData(r) {
+		s.answer(w, status, view)
+		return
+	}
+
 	// Rendered to a buffer first: a template that fails halfway through
 	// would otherwise leave a half-written page with a 200 on it.
 	set, known := s.templates[name]
@@ -131,7 +147,51 @@ func (s *Server) renderWithCSRF(
 	// by anything else or sniffed into another type.
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "same-origin")
+	w.WriteHeader(status)
 	_, _ = buffer.WriteTo(w)
+}
+
+// wantsData says the request asked for the page as data rather than as
+// HTML. The terminal interface asks; a browser never does.
+func wantsData(r *http.Request) bool {
+	return strings.Contains(r.Header.Get("Accept"), answer.Header)
+}
+
+// answer writes the page as data: the same view the template would have
+// drawn, without the stylesheet, the fonts or the navigation.
+func (s *Server) answer(w http.ResponseWriter, status int, view page) {
+	data, err := json.Marshal(view.Data)
+	if err != nil {
+		s.log.Error("answer a page as data", "page", view.Nav, "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	out := answer.Page{
+		Title: view.Title, Nav: view.Nav, CSRF: view.CSRF, Data: data,
+		Version: view.RunningVersion, Panel: view.Panel,
+	}
+	if view.Flash != nil {
+		out.Flash = &answer.Flash{Kind: view.Flash.Kind, Message: view.Flash.Message}
+	}
+	for _, work := range view.Running {
+		out.Running = append(out.Running, answer.Running{
+			Account: work.Account, Doing: work.Doing, Waiting: work.Waiting,
+			Detail: work.Detail, Percent: work.Percent, Known: work.Known,
+		})
+	}
+	if view.Update != nil {
+		out.Update = &answer.Update{Version: view.Update.Version, Current: view.Update.Current, URL: view.Update.URL}
+	}
+	body, err := json.Marshal(out)
+	if err != nil {
+		s.log.Error("answer a page as data", "page", view.Nav, "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", answer.Header+"; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
 }
 
 // updateNotice reports a release newer than this build, or nil.
@@ -187,8 +247,7 @@ func (s *Server) redirect(w http.ResponseWriter, r *http.Request, path, kind, me
 
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, status int, err error) {
 	s.log.Error("request failed", "path", r.URL.Path, "error", err)
-	w.WriteHeader(status)
-	s.render(w, r, "error.html", "Problem", "", err.Error())
+	s.renderStatus(w, r, status, "error.html", "Problem", "", err.Error(), s.csrfToken)
 }
 
 // failUser keeps an account-side failure on the account side of the trust

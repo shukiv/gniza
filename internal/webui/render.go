@@ -122,7 +122,9 @@ func (s *Server) renderStatus(
 		}
 	}
 
-	if wantsData(r) {
+	// Operators only. The account-facing pages print a subset of their
+	// view on purpose, and the rest is not a customer's to read.
+	if wantsData(r) && accountOf(r) == "" {
 		s.answer(w, status, view)
 		return
 	}

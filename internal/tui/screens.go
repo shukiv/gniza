@@ -218,6 +218,13 @@ type settingsPage struct {
 	}
 }
 
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
 func decode[T any](m Model, which screen) T {
 	var out T
 	if m.loaded[which] {
@@ -335,8 +342,8 @@ func (m Model) overviewView() string {
 	}
 	b.WriteString(style.Render(v.Sentence) + "\n\n")
 	fmt.Fprintf(&b, "%-18s %s\n", "Server", v.Hostname)
-	fmt.Fprintf(&b, "%-18s %d accounts · %d destinations · %d schedules\n", "Configured",
-		len(v.Accounts), len(v.Destinations), len(v.Policies))
+	fmt.Fprintf(&b, "%-18s %s · %s · %s\n", "Configured",
+		plural(len(v.Accounts), "account"), plural(len(v.Destinations), "destination"), plural(len(v.Policies), "schedule"))
 	fmt.Fprintf(&b, "%-18s %d protected · %d stale · %d never backed up · %d failing\n", "Coverage",
 		v.Protected, v.Stale, v.Unprotected, v.Failed)
 	if v.NextRun != "" {
@@ -832,10 +839,11 @@ func (m Model) settingsKey(key string) (tea.Model, tea.Cmd) {
 		}
 		m.confirm = &confirmation{
 			question: fmt.Sprintf("Install %s over %s?", v.Update.Latest, v.Version),
-			warning:  "The service restarts on the new build. A backup running now finishes first.",
-			path:     "/settings/update/install",
-			form:     url.Values{"version": {v.Update.Latest}, "confirm": {"1"}},
-			intent:   intentAct,
+			warning: "Backups already queued stay queued and run afterwards. The service " +
+				"restarts, so this screen is unreachable for a few seconds.",
+			path:   "/settings/update/install",
+			form:   url.Values{"version": {v.Update.Latest}, "confirm": {"1"}},
+			intent: intentAct,
 		}
 		m.mode = modeConfirm
 		return m, nil

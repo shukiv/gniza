@@ -423,5 +423,5 @@ After the four, the account came back with everything on the list but
 one: the webmail contact. DirectAdmin's own archive of the same account,
 deleted and restored the same way, did not bring it back either -- its
 `restore_roundcube.php` is not reached on a restore that creates the
-account -- so that is DirectAdmin's, recorded as `cprest-8vb`. Over a
+account -- so that is DirectAdmin's, recorded as `cprest-dbr`. Over a
 live account the contact is restored, added beside what is there.

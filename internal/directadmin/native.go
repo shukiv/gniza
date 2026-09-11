@@ -121,10 +121,6 @@ func (r *Real) nativeWorkspace(account string) (_ *nativeWorkspace, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("directadmin: resolve native backup owner: %w", err)
 	}
-	selected, err := lookup(account)
-	if err != nil {
-		return nil, fmt.Errorf("directadmin: resolve account identity: %w", err)
-	}
 	adminUID, err := strconv.Atoi(admin.Uid)
 	if err != nil {
 		return nil, err
@@ -133,9 +129,18 @@ func (r *Real) nativeWorkspace(account string) (_ *nativeWorkspace, err error) {
 	if err != nil {
 		return nil, err
 	}
-	accountGID, err := strconv.Atoi(selected.Gid)
-	if err != nil {
-		return nil, err
+	// The workspace is traversable by the account's group so that what
+	// DirectAdmin writes into it as the account can be read. An account
+	// that is not on the server yet -- a restore is about to create it --
+	// has no group, and the workspace is the administrator's alone.
+	accountGID := adminGID
+	var unknown user.UnknownUserError
+	if selected, err := lookup(account); err == nil {
+		if accountGID, err = strconv.Atoi(selected.Gid); err != nil {
+			return nil, err
+		}
+	} else if !errors.As(err, &unknown) {
+		return nil, fmt.Errorf("directadmin: resolve account identity: %w", err)
 	}
 	root := r.nativeRoot()
 	if !filepath.IsAbs(root) || filepath.Clean(root) == "/" {

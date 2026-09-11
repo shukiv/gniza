@@ -896,23 +896,32 @@ func (r *Real) StageSystem(ctx context.Context, stagingDir string) (pkgacct.Payl
 
 // Apply hands a rebuilt archive to DirectAdmin's own restore.
 //
-// Only an existing ordinary account, explicitly overwritten using the native
-// unrestricted restore, is supported. No shared task.queue is read or written.
-// New-account, renamed and restricted restore have not been established.
+// Two cases, and DirectAdmin's restore does the same thing in both: it
+// reads the account out of the archive and puts it on the server. An
+// account that is not on the server -- deleted, or the server being
+// rebuilt, which is the case a backup exists for -- is created from the
+// archive. An account that is on the server is overwritten, and that
+// only when it was asked for twice, the overwrite and the unrestricted
+// acknowledgement; a restore that could replace a live account by
+// accident does not run. Renamed and restricted restores have not been
+// established. No shared task.queue is read or written.
 func (r *Real) Apply(ctx context.Context, archivePath string, options panel.ApplyOptions) (string, error) {
-	if !options.Unrestricted || options.NewUser != "" || options.SkipDNS || !options.Overwrite {
-		return "", unverified("DirectAdmin restore requires explicit native/unrestricted overwrite of an existing account; restricted, renamed and new-account restores are not supported")
+	if options.NewUser != "" || options.SkipDNS {
+		return "", unverified("DirectAdmin restore puts an account back under its own name with its zone; renamed and restricted restores are not supported")
 	}
 	account, err := dabackup.ArchiveAccount(filepath.Base(archivePath))
 	if err != nil {
 		return "", err
 	}
 	conf, err := r.userConf(account)
-	if err != nil {
-		return "", err
-	}
-	if conf["username"] != account || conf["usertype"] != "user" {
+	exists := err == nil
+	switch {
+	case exists && (!options.Overwrite || !options.Unrestricted):
+		return "", unverified("DirectAdmin restore requires explicit native/unrestricted overwrite of an existing account; restricted, renamed and new-account restores are not supported")
+	case exists && (conf["username"] != account || conf["usertype"] != "user"):
 		return "", fmt.Errorf("directadmin: native overwrite requires an existing ordinary user account")
+	case !exists && !errors.Is(err, os.ErrNotExist):
+		return "", err
 	}
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -926,6 +935,9 @@ func (r *Real) Apply(ctx context.Context, archivePath string, options panel.Appl
 			r.debug("native workspace cleanup failed", "path", w.path, "error", err)
 		}
 	}()
+	if !exists {
+		r.debug("restoring an account this server does not have; DirectAdmin creates it from the archive", "account", account)
+	}
 	staged := filepath.Join(w.destination, filepath.Base(archivePath))
 	if err := copyArchive(ctx, archivePath, staged, uint32(os.Geteuid())); err != nil {
 		return "", err

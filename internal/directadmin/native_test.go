@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/shukiv/gniza/internal/layout/dabackup"
 	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/pkgacct"
 )
@@ -38,6 +39,7 @@ func nativeHost(t *testing.T) *Real {
 		t.Fatal(err)
 	}
 	t.Setenv("GNIZA_NATIVE_CAPTURE", filepath.Join(t.TempDir(), "task"))
+	t.Setenv("GNIZA_NATIVE_DATADIR", r.DataDir)
 	return r
 }
 
@@ -128,6 +130,23 @@ func TestNativeCommandProcess(t *testing.T) {
 	} else if task.Get("action") == "restore" {
 		if _, err := os.Stat(filepath.Join(task.Get("local_path"), task.Get("select0"))); err != nil {
 			os.Exit(2)
+		}
+		// DirectAdmin's restore creates the account when the server does
+		// not have it, from the user.conf in the archive.
+		if dataDir := os.Getenv("GNIZA_NATIVE_DATADIR"); dataDir != "" {
+			account, err := dabackup.ArchiveAccount(task.Get("select0"))
+			if err != nil {
+				os.Exit(2)
+			}
+			conf := filepath.Join(dataDir, account, "user.conf")
+			if _, err := os.Stat(conf); err != nil {
+				if err := os.MkdirAll(filepath.Dir(conf), 0o700); err != nil {
+					os.Exit(2)
+				}
+				if err := os.WriteFile(conf, []byte("username="+account+"\nusertype=user\n"), 0o600); err != nil {
+					os.Exit(2)
+				}
+			}
 		}
 	}
 	if scenario == "failure-zero" {
@@ -708,5 +727,59 @@ func TestTheLeanTaskLineSaysItKnowsWhatEmailDataIs(t *testing.T) {
 	// options it did not use.
 	if whole := backupTask("studio", "/tmp/x", false); whole.Has("what") || whole.Has("email_data_aware") {
 		t.Errorf("a whole-account task carries selection flags: %v", whole)
+	}
+}
+
+// The case a backup exists for: the account is gone -- deleted, or the
+// server is being rebuilt -- and has to come back from the archive alone.
+// DirectAdmin's own restore creates the account from the user.conf in the
+// archive when the server does not have it. The guard here demanded an
+// existing account to overwrite, so on 2026-09-11 a deleted drill account
+// on the validation host could not be restored by the program whose job
+// that is, with "restore requires explicit native/unrestricted overwrite
+// of an existing account".
+func TestARestoreOfAnAccountTheServerNoLongerHasCreatesIt(t *testing.T) {
+	r := nativeHost(t)
+	r.lookupUser = func(name string) (*user.User, error) {
+		if name == "admin" {
+			return user.Current()
+		}
+		return nil, user.UnknownUserError(name)
+	}
+	if err := os.RemoveAll(filepath.Join(r.DataDir, "studio")); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(t.TempDir(), "user.admin.studio.tar.zst")
+	writeNativeArchive(t, archive, "studio")
+	// What the agent sends for an account it could not look up: no
+	// overwrite, because there is nothing to overwrite.
+	transcript, err := r.Apply(t.Context(), archive, panel.ApplyOptions{})
+	if err != nil {
+		t.Fatalf("the account was not restored: %v\n%s", err, transcript)
+	}
+	data, err := os.ReadFile(os.Getenv("GNIZA_NATIVE_CAPTURE"))
+	if err != nil {
+		t.Fatal("DirectAdmin's restore was not run")
+	}
+	if task, _ := url.ParseQuery(string(data)); task.Get("action") != "restore" || task.Get("select0") != filepath.Base(archive) {
+		t.Fatalf("wrong task: %s", data)
+	}
+	if _, err := os.Stat(filepath.Join(r.DataDir, "studio", "user.conf")); err != nil {
+		t.Fatalf("the account is not on the server afterwards: %v", err)
+	}
+}
+
+// An account that is on the server is only ever restored over on
+// purpose: both the overwrite and the unrestricted acknowledgement, or
+// nothing runs.
+func TestAnAccountTheServerHasIsNotOverwrittenByAccident(t *testing.T) {
+	r := nativeHost(t)
+	archive := filepath.Join(t.TempDir(), "user.admin.studio.tar.zst")
+	writeNativeArchive(t, archive, "studio")
+	if _, err := r.Apply(t.Context(), archive, panel.ApplyOptions{}); !errors.Is(err, ErrUnverified) {
+		t.Fatalf("an existing account was restored over without being asked: %v", err)
+	}
+	if _, err := os.Stat(os.Getenv("GNIZA_NATIVE_CAPTURE")); !os.IsNotExist(err) {
+		t.Fatal("DirectAdmin's restore was run")
 	}
 }

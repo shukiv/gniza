@@ -56,12 +56,25 @@ A few project utilities (`cpr:panel`, `cpr:pill`, `cpr:hint`,
 `@utility` in `input.css` from daisyUI and Tailwind pieces; they exist so
 the templates say what a thing is rather than repeat eight classes.
 
-Themes are daisyUI's `light` and `dark`, keyed on the `data-theme` attribute
-the rail's switch already sets on the document; `dark --prefersdark` is the
-"system" choice. daisyUI's root colour, scroll-lock, scroll-gutter and
-scrollbar components are excluded: the document is the host's. The
-typefaces stay Fira Sans and Fira Code, set as the theme's `--font-sans`
-and `--font-mono`. Another of daisyUI's themes is one word in `input.css`.
+Themes are named `light` and `dark`, keyed on the `data-theme` attribute
+the rail's switch already sets on the document; `dark` is also the
+`prefersdark` theme, which is the "system" choice. daisyUI's root colour,
+scroll-lock, scroll-gutter and scrollbar components are excluded: the
+document is the host's. The typefaces stay Fira Sans and Fira Code, set as
+the theme's `--font-sans` and `--font-mono`.
+
+*Amended 2026-09-12.* v0.3.8 shipped daisyUI's own `light` and `dark`. From
+v0.3.9 the two themes are Gniza's own, declared with `@plugin
+"daisyui/theme"` in `input.css` under the same two names so the switch,
+the script and the viewer's `data-theme` stamp are unchanged: cool greys
+with a blue bias, a marine-ink primary, teal as the accent, and success,
+warning and error kept as their own colours so a state never borrows the
+accent. Depth and noise are off and the radii small: the pages sit inside
+a host panel and should read as part of it. The base type size is 13px
+and the layouts follow the approved redesign mockup (a verdict band that
+leads, a strip of fact cards, a two-column overview, destination health
+cards, join-strip row actions). A different palette is still one edit in
+`input.css`.
 
 Scripts hook elements by `data-*` attributes (`data-menu`, `data-sheet`,
 `data-tablewrap`, `button[aria-pressed]`), not by class, so a class list

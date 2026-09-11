@@ -190,10 +190,10 @@ say "Gniza is installed."
 say "  accounts: every directory under $(sed -n 's/^GNIZA_PLAIN_ROOTS=//p' "$ENV_FILE") (edit $ENV_FILE to change)"
 say "  socket:   $RUN_DIR/admin/ui.sock"
 say "  remove:   sh $SHARE_DIR/uninstall.sh"
-warn_block "This server has no panel, and Gniza has no terminal interface yet" \
-	"Backups of the directories under the roots, and of the MySQL databases" \
-	"named after them, run as scheduled. Destinations and schedules are" \
-	"configured over the socket until the terminal interface ships:" \
-	"see docs/guide/plain-server.md in the repository for the commands." \
+warn_block "This server has no panel: Gniza is set up from the terminal" \
+	"Run  gniza-agent -tui  as root to add a destination and a schedule." \
+	"Every directory under the roots in /etc/gniza/plain.env is an account," \
+	"and a MySQL database named after one is backed up with it." \
+	"Write the recovery key down somewhere off this server when it is shown." \
 	"A restore of files and databases has not yet been proved on a live" \
-	"server (ADR 0022)."
+	"server (ADR 0022); see docs/guide/plain-server.md."

@@ -34,61 +34,67 @@ takes the web, PHP, database, container, cron and SSH configuration, the
 certificates and the unit files, with a list of the installed packages
 and of the containers and volumes present.
 
-## Until the terminal interface ships
+## Setting it up from the terminal
 
-There is no page to open on a server with no panel, and the terminal
-interface is not written yet. The service listens on a unix socket, and
-the same forms the plugins post are posted with `curl`. Every request
+There is no page to open on a server with no panel. The service listens
+on a unix socket, and the terminal interface reads the same pages the
+plugins draw from it:
+
+```bash
+gniza-agent -tui
+```
+
+Run it as root; the socket is root's. The screens are the plugins'
+screens, numbered along the top: 1 Overview, 2 Destinations, 3
+Schedules, 4 Accounts, 5 Logs, 6 Restore, 7 Settings. The foot of every
+screen says what the keys do there. The first hour is:
+
+1. On Destinations, press `a`. A local disk or mounted share needs a
+   name and a directory; another Linux server needs its address, a
+   user there and that user's password once, which installs Gniza's
+   key and is then discarded. The server's host key is shown before
+   anything is sent to it.
+2. The recovery key is shown when the destination is ready. Write it
+   down somewhere that survives this server, then press `n`. The
+   destinations screen warns until that is done, because the disaster
+   the backups exist for is also the one that destroys the only copy.
+3. On Schedules, press `a`. The defaults are nightly at two, split
+   shape, the server's own configuration included, seven daily, four
+   weekly and six monthly backups kept, written to every destination.
+4. On Accounts, `b` backs up the account under the cursor now, and
+   `B` runs the schedule over every account. Logs shows what happened.
+
+The same forms are posted with `curl` from a script. Every request
 carries the CSRF token from any page:
 
 ```bash
 S=/var/run/gniza/admin/ui.sock
 CSRF=$(curl -s --unix-socket $S http://x/settings | grep -o 'name="csrf" value="[^"]*"' | head -1 | sed 's/.*value="//; s/"//')
-```
-
-A destination on a mounted disk:
-
-```bash
 curl -s --unix-socket $S -X POST http://x/destinations/add \
   -d "csrf=$CSRF" -d "name=usb" -d "type=local" -d "root=/mnt/backups/gniza"
-```
-
-The destination's recovery key exists only on this server until it is
-shown and kept somewhere else. Show it, and keep it:
-
-```bash
-curl -s --unix-socket $S http://x/destinations | sed 's/<[^>]*>/ /g' | grep -A3 -i "recovery"
-```
-
-A nightly schedule of every account, seven daily, four weekly and six
-monthly backups kept:
-
-```bash
 curl -s --unix-socket $S -X POST http://x/schedule/save \
   -d "csrf=$CSRF" -d "name=Nightly" -d "cron=0 2 * * *" -d "mode=split" \
   -d "enabled=1" -d "include_system=1" \
   -d "keep_daily=7" -d "keep_weekly=4" -d "keep_monthly=6"
-```
-
-A backup of one account now, and the history afterwards:
-
-```bash
 curl -s --unix-socket $S -X POST http://x/accounts/backup -d "csrf=$CSRF" -d "account=shop"
-curl -s --unix-socket $S "http://x/logs?tab=backups" | sed 's/<[^>]*>/ /g' | tr -s ' \n' ' ' | cut -c1-2000
 ```
 
-Any page reads the same way: `http://x/`, `http://x/accounts`,
-`http://x/destinations`, `http://x/schedule`, `http://x/settings`.
+Any page reads as data with `-H 'Accept: application/json'`: `http://x/`,
+`http://x/accounts`, `http://x/destinations`, `http://x/schedule`,
+`http://x/logs?tab=backups`, `http://x/settings`.
 
 ## Restore
 
 There is no native restore to hand an archive to. What a plain server
-restores is files and databases: from the Restore page's item restores,
-the website files go back over the account's directory (a file added
-since the backup stays), and a database dump is loaded into a database
-the account owns by name, created first if it is gone. A whole-account
-restore is refused as unverified, on purpose. None of this has been
-proved on a live plain server yet; the drill is bead `cprest-44s`.
+restores is files and databases: the website files go back over the
+account's directory (a file added since the backup stays), and a
+database dump is loaded into a database the account owns by name,
+created first if it is gone. A whole-account restore is refused as
+unverified, on purpose. The terminal's Restore screen shows what has
+been restored; asking for one from the terminal is not written yet
+(bead `cprest-91g.2`), so the restore form is posted with `curl`
+until then. None of this has been proved on a live plain server yet;
+the drill is bead `cprest-44s`.
 
 ## Remove
 

@@ -1,7 +1,8 @@
 # 0022 — A server without a panel
 
-Status: accepted, 2026-09-11. The provider and the package are in; the
-terminal interface is not yet (bead `cprest-u5y`).
+Status: accepted, 2026-09-11. The provider, the package and the terminal
+interface are in; the terminal does not yet ask for a restore or change
+a setting.
 
 ## Context
 
@@ -65,14 +66,20 @@ credential is still the wrong shape, and a server that later gains a
 panel must keep working the same way. The answer to "there is no
 browser" is a terminal interface over the same socket, not a TCP port.
 
-**The terminal interface reads JSON from the same handlers.** bolt is a
+**The terminal interface reads the same pages as data.** bolt is a
 single-writer store, so the interface cannot open `state.db` beside the
-service. The write side already works over the form routes. The read
-side gets JSON from the existing view structs when asked with
-`Accept: application/json` (bead `cprest-udv`), and the interface itself
-is a subcommand of the agent (bead `cprest-u5y`). Until it lands, the
-service is configured with `curl --unix-socket`, and the installer says
-so where it cannot be missed.
+service. The write side is the form routes the plugins post. The read
+side is the same handlers answering with the view the template would
+have drawn, when asked with `Accept: application/json`
+(`internal/answer`); the verdicts the templates get from methods are
+written down as fields for it. The interface is `gniza-agent -tui`,
+built on bubbletea, which brings twenty-odd indirect modules into a
+program that had six: the price of not writing a terminal from scratch,
+paid once. It opens before anything in the agent touches the store or
+the master key. It covers the first hour -- destinations, the recovery
+key, schedules, backing up now, the logs -- and shows the rest; asking
+for a restore or changing a setting from it are beads of their own
+(`cprest-91g.2`, `cprest-91g.3`).
 
 **Its own package.** `gniza-plain-amd64.tar.gz` carries the binary and
 two scripts, is signed in the same `SHA256SUMS` as the other two, and is
@@ -85,11 +92,9 @@ right one there.
 - A server with no panel installs with the same one-liner, updates from
   the same release and dist channels, and is removed by the same button
   path (`/usr/local/share/gniza/uninstall.sh`).
-- Until the terminal interface ships, setting up a plain server is
-  three `curl` commands from `docs/guide/plain-server.md`. That is a
-  worse first hour than the plugins give, and the installer's closing
-  warning says so rather than letting it be discovered at two in the
-  morning.
+- Setting up a plain server is `gniza-agent -tui` and three screens,
+  which the installer's closing block says. A script does the same with
+  `curl`, from `docs/guide/plain-server.md`.
 - Nothing about restore has been proved on a live plain server. The
   provider carries the same kind of `Provisional` sentence DirectAdmin
   carries, said at start and by the installer, and the drill is a bead

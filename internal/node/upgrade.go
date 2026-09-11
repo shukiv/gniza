@@ -291,9 +291,17 @@ func (e *Engine) runUpgrade(state nodestore.UpgradeState) error {
 	return nil
 }
 
-// uninstaller is the copy of the uninstall script the installer leaves on
-// the server, so removing Gniza never means finding the package again.
-const uninstaller = "/usr/local/share/gniza/uninstall.sh"
+// uninstallerFor is where the panel's installer put the uninstaller. The
+// WHM installer keeps it beside the program's other files; DirectAdmin's
+// keeps it in the plugin directory, which is the one place DirectAdmin
+// removes with the plugin. Looking in one place for both is why the
+// Remove button on DirectAdmin always answered "is not on this server".
+func uninstallerFor(panel string) string {
+	if panel == "DirectAdmin" {
+		return "/usr/local/directadmin/plugins/gniza/uninstall.sh"
+	}
+	return "/usr/local/share/gniza/uninstall.sh"
+}
 
 // StartUninstall removes Gniza from this server.
 //
@@ -307,6 +315,7 @@ const uninstaller = "/usr/local/share/gniza/uninstall.sh"
 // touched, and neither are the master key or the state file, so a
 // reinstall comes back with the same destinations, schedules and history.
 func (e *Engine) StartUninstall() error {
+	uninstaller := uninstallerFor(e.PanelName())
 	if _, err := os.Stat(uninstaller); err != nil {
 		return fmt.Errorf("%s is not on this server, so there is nothing here to run; "+
 			"this copy was installed some other way", uninstaller)

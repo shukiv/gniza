@@ -129,3 +129,20 @@ func TestARestoreIsSizedByTheBackupNotTheLiveAccount(t *testing.T) {
 		t.Errorf("a %d-byte backup reserves %d, less than the two copies the restore makes", backup, got)
 	}
 }
+
+// The Remove button looked for the uninstaller where the WHM installer
+// puts it, /usr/local/share/gniza/uninstall.sh, on every panel. The
+// DirectAdmin installer puts it in the plugin directory, so on
+// DirectAdmin the button always answered "is not on this server; this
+// copy was installed some other way".
+func TestTheUninstallerIsWhereThePanelsInstallerPutIt(t *testing.T) {
+	for panel, want := range map[string]string{
+		"cPanel":             "/usr/local/share/gniza/uninstall.sh",
+		"DirectAdmin":        "/usr/local/directadmin/plugins/gniza/uninstall.sh",
+		"your control panel": "/usr/local/share/gniza/uninstall.sh",
+	} {
+		if got := uninstallerFor(panel); got != want {
+			t.Errorf("%s: the uninstaller is looked for at %s, want %s", panel, got, want)
+		}
+	}
+}

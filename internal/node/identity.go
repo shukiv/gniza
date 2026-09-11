@@ -11,6 +11,7 @@ import (
 	"github.com/shukiv/gniza/internal/hookspool"
 	"github.com/shukiv/gniza/internal/job"
 	"github.com/shukiv/gniza/internal/nodestore"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/resticrun"
 )
 
@@ -615,7 +616,7 @@ func (e *Engine) AccountRemoved(account string) error {
 // worth telling apart from a lookup that failed for some other reason: a
 // name that is gone cannot be given an ownership boundary, and a name the
 // lookup could not read might still get one on the next try.
-var ErrNoSuchAccount = errors.New("not an account on this server")
+var ErrNoSuchAccount = panel.ErrNoSuchAccount
 
 // accountUID is the unix account a cPanel name means right now.
 func accountUID(account string) (int, error) {

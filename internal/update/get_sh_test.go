@@ -96,7 +96,7 @@ func TestTheInstallerPicksThePackageForThePanelOnTheServer(t *testing.T) {
 		{"DirectAdmin", []string{"directadmin"}, "gniza-directadmin-amd64.tar.gz", "gniza-directadmin"},
 		{"both, which keeps the package it has always had",
 			[]string{"cpanel", "directadmin"}, "cprest-plugin-amd64.tar.gz", "cprest-plugin"},
-		{"neither", nil, "", ""},
+		{"neither, which is a plain server", nil, "gniza-plain-amd64.tar.gz", "gniza-plain"},
 	} {
 		t.Run(server.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -112,15 +112,6 @@ func TestTheInstallerPicksThePackageForThePanelOnTheServer(t *testing.T) {
 				strings.ReplaceAll(block, "/usr/local/", root+"/usr/local/") +
 				"\nprintf '%s %s' \"$tarball\" \"$tree\"\n"
 			out, err := exec.Command("sh", "-c", script).CombinedOutput()
-			if server.tarball == "" {
-				if err == nil {
-					t.Fatalf("a server with no panel was installed onto: %s", out)
-				}
-				if !strings.Contains(string(out), "DirectAdmin") {
-					t.Errorf("the refusal does not say what it looked for: %s", out)
-				}
-				return
-			}
 			if err != nil {
 				t.Fatalf("running the installer's own choice: %v: %s", err, out)
 			}

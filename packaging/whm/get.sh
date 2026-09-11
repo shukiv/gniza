@@ -51,10 +51,11 @@ main() {
         *)      die "the published builds are x86-64 only; on $(uname -m), build from source with 'make plugin'" ;;
     esac
 
-    # Which package this server takes. A release publishes one per panel,
-    # and installing the other one puts a plugin on a machine that has no
-    # panel to show it. cPanel first, so a server that somehow has both
-    # directories gets the package it has always had.
+    # Which package this server takes. A release publishes one per panel
+    # and one for a server with none, and installing a panel's on a
+    # machine that has no panel puts a plugin where nothing shows it.
+    # cPanel first, so a server that somehow has both directories gets
+    # the package it has always had.
     #
     # The cPanel asset keeps the name from before the rename to Gniza,
     # because servers running an older release ask for it by that name.
@@ -68,7 +69,12 @@ main() {
         tarball=gniza-directadmin-$arch.tar.gz
         tree=gniza-directadmin
     else
-        die "this does not look like a cPanel or a DirectAdmin server (neither /usr/local/cpanel nor /usr/local/directadmin is here)"
+        # Neither panel: a plain server. A LAMP box, a docker or podman
+        # host. The package for it has no plugin to install; it runs the
+        # service and is worked from the terminal (ADR 0022).
+        panel="plain server (neither /usr/local/cpanel nor /usr/local/directadmin is here)"
+        tarball=gniza-plain-$arch.tar.gz
+        tree=gniza-plain
     fi
     say "installing the $panel package"
 

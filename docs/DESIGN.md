@@ -268,7 +268,7 @@ Today the agent uploads independently to each target repository — N full uploa
 restic -r <secondary> init --from-repo <primary> --copy-chunker-params
 ```
 
-This is free to do now and impossible to do later. The controller enforces it: a server's first repository is recorded as its chunker source, and repository provisioning refuses to run a plain `init` for any subsequent repository on that server.
+This is free to do now and impossible to do later. The controller enforces it: a server's first repository is recorded as its chunker source, and repository provisioning refuses to run a plain `init` for any subsequent repository on that server. Standalone mode holds it as far as it can: a later repository copies from the first while the first is still there and can be opened in the same restic process, and otherwise is created on its own and stops naming it, with the reason in the log. Two SFTP destinations with keys of their own cannot share an invocation (`-o sftp.args` is global), and a first destination the operator has removed cannot be copied from; either used to leave the new destination with no repository at all.
 
 `restic copy` is not used in v1. The rule exists purely to keep the option open.
 

@@ -18,6 +18,7 @@ package panel
 
 import (
 	"context"
+	"errors"
 
 	"github.com/shukiv/gniza/internal/pkgacct"
 )
@@ -53,6 +54,21 @@ type ApplyOptions struct {
 	// SkipDNS prevents a certification restore from changing production
 	// DNS zones.
 	SkipDNS bool
+}
+
+// ErrNoSuchAccount says a name is not an account on this server, as
+// opposed to a lookup that failed for some other reason.
+var ErrNoSuchAccount = errors.New("not an account on this server")
+
+// Identifier is implemented by a provider whose accounts are not unix
+// users. The identity behind a name is what tells a name that changed
+// hands from one that did not: on cPanel it is the uid, and the node
+// asks the operating system. A panel whose accounts are directories
+// answers for itself.
+type Identifier interface {
+	// AccountIdentity is the identity behind a name right now. A name
+	// that is not an account returns an error wrapping ErrNoSuchAccount.
+	AccountIdentity(user string) (int, error)
 }
 
 // Certifier is implemented by a provider that can prove an archive is

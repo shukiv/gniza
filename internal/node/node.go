@@ -188,7 +188,13 @@ func New(cfg Config) (*Engine, error) {
 
 	uidLookup := cfg.AccountUID
 	if uidLookup == nil {
-		uidLookup = accountUID
+		// A panel whose accounts are not unix users answers for its own
+		// identities; the rest are the operating system's to answer.
+		if own, has := cfg.Provider.(panel.Identifier); has {
+			uidLookup = own.AccountIdentity
+		} else {
+			uidLookup = accountUID
+		}
 	}
 	spoolDir := cfg.HookSpool
 	if spoolDir == "" {

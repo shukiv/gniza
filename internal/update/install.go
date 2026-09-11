@@ -68,6 +68,9 @@ type Package struct {
 var (
 	WHMPackage         = Package{Asset: TarballName, TopDir: TopDir}
 	DirectAdminPackage = Package{Asset: "gniza-directadmin-amd64.tar.gz", TopDir: "gniza-directadmin"}
+	// PlainPackage is for a server with no panel at all: a LAMP or
+	// container host, run from the terminal (ADR 0022).
+	PlainPackage = Package{Asset: "gniza-plain-amd64.tar.gz", TopDir: "gniza-plain"}
 )
 
 // PackageFor is the release package for a panel, by the name the panel's
@@ -83,6 +86,8 @@ func PackageFor(panelName string) (Package, error) {
 		return WHMPackage, nil
 	case "DirectAdmin":
 		return DirectAdminPackage, nil
+	case "Plain server":
+		return PlainPackage, nil
 	}
 	return Package{}, fmt.Errorf("update: a release publishes no package for %s", panelName)
 }

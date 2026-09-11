@@ -467,6 +467,9 @@ func TestEachPanelTakesItsOwnPackage(t *testing.T) {
 	if _, err := PackageFor("Plesk"); err == nil {
 		t.Error("a panel a release publishes nothing for was given a package")
 	}
+	if plain, err := PackageFor("Plain server"); err != nil || plain != PlainPackage {
+		t.Errorf("PackageFor(Plain server) = %v, %v; want the plain package", plain, err)
+	}
 	want, err := PackageFor("DirectAdmin")
 	if err != nil {
 		t.Fatalf("PackageFor(DirectAdmin): %v", err)

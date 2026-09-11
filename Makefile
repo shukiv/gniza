@@ -22,7 +22,7 @@ REST_SERVER_VERSION := v0.14.0
 # fetches whatever is newest is a build step nobody reviewed.
 GOVULNCHECK         := golang.org/x/vuln/cmd/govulncheck@v1.7.0
 
-.PHONY: all build plugin directadmin-package release provenance test cover e2e vet vuln fmt tools clean
+.PHONY: all build plugin directadmin-package plain-package release provenance test cover e2e vet vuln fmt tools clean
 
 all: fmt vet test build
 
@@ -39,7 +39,7 @@ build:
 # an older release have those spellings compiled in and ask for exactly them;
 # see internal/update/install.go. Everything inside the tarball is named
 # gniza.
-plugin: directadmin-package
+plugin: directadmin-package plain-package
 	# From scratch every time. This directory is assembled by copying into
 	# it, so a file that was in the package yesterday and is not in it today
 	# stays there and ships -- which is how a build after the rename to
@@ -73,9 +73,11 @@ plugin: directadmin-package
 	@# nothing it can verify.
 	cd $(BIN) && { printf '# cprest %s %s\n' '$(VERSION)' '$(BUILT_AT)'; \
 		sha256sum cprest-plugin-$(PLUGIN_ARCH).tar.gz \
-			gniza-directadmin-$(PLUGIN_ARCH).tar.gz get.sh; } > SHA256SUMS
+			gniza-directadmin-$(PLUGIN_ARCH).tar.gz \
+			gniza-plain-$(PLUGIN_ARCH).tar.gz get.sh; } > SHA256SUMS
 	@echo
 	@echo "built $(BIN)/cprest-plugin-$(PLUGIN_ARCH).tar.gz, $(BIN)/gniza-directadmin-$(PLUGIN_ARCH).tar.gz,"
+	@echo "$(BIN)/gniza-plain-$(PLUGIN_ARCH).tar.gz (a server with no panel),"
 	@echo "$(BIN)/get.sh and $(BIN)/SHA256SUMS"
 	@echo "copy the one for the panel to the server:"
 	@echo "  scp $(BIN)/cprest-plugin-$(PLUGIN_ARCH).tar.gz root@your-cpanel-server:/root/"
@@ -94,6 +96,22 @@ plugin: directadmin-package
 #
 # GNIZA_SIGNING_KEY_FILE says where the private key is. It is never read
 # from the repository and never written into one.
+# The package for a server with no panel: the service, its unit and the
+# scripts that put them in place. There is no plugin in it, because there
+# is nothing to show one; the server is worked from the terminal (ADR
+# 0022). get.sh installs it when neither panel directory is there.
+plain-package:
+	rm -rf $(BIN)/gniza-plain
+	mkdir -p $(BIN)/gniza-plain
+	CGO_ENABLED=0 GOOS=linux GOARCH=$(PLUGIN_ARCH) go build -trimpath \
+		-ldflags="-s -w -X github.com/shukiv/gniza/internal/agent.Version=$(VERSION) \
+			-X github.com/shukiv/gniza/internal/agent.BuiltAt=$(BUILT_AT)" \
+		-o $(BIN)/gniza-plain/gniza-agent ./cmd/agent
+	cp packaging/plain/install.sh packaging/plain/uninstall.sh $(BIN)/gniza-plain/
+	chmod +x $(BIN)/gniza-plain/install.sh $(BIN)/gniza-plain/uninstall.sh
+	tar -C $(BIN) --owner=0 --group=0 --numeric-owner --mode='u+rwX,go+rX,go-w' \
+		-czf $(BIN)/gniza-plain-$(PLUGIN_ARCH).tar.gz gniza-plain
+
 # The DirectAdmin package.
 #
 # It is published beside the cPanel one, and get.sh installs whichever the

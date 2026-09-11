@@ -118,6 +118,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" "$@" \
             bin/cprest-plugin-amd64.tar.gz \
             bin/gniza-directadmin-amd64.tar.gz \
+            bin/gniza-plain-amd64.tar.gz \
             bin/SHA256SUMS \
             bin/SHA256SUMS.sig \
             bin/get.sh

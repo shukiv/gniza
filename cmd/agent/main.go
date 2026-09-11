@@ -27,6 +27,7 @@ import (
 	"github.com/shukiv/gniza/internal/hookspool"
 	"github.com/shukiv/gniza/internal/layout/dabackup"
 	"github.com/shukiv/gniza/internal/panel"
+	"github.com/shukiv/gniza/internal/plain"
 	"github.com/shukiv/gniza/internal/resticrun"
 	"github.com/shukiv/gniza/internal/staging"
 )
@@ -49,6 +50,7 @@ type config struct {
 	logLevel      string
 	fakeRoot      string
 	panelName     string
+	plainRoots    string
 	preflightOnly bool
 
 	standalone          bool
@@ -209,8 +211,13 @@ func parseFlags() config {
 	flag.StringVar(&cfg.hostname, "hostname", hostname, "hostname reported to the controller")
 	flag.StringVar(&cfg.logLevel, "log-level", "info", "debug, info, warn or error")
 	flag.StringVar(&cfg.panelName, "panel", "cpanel",
-		"the hosting panel this server runs: cpanel, or directadmin, which is "+
-			"unfinished and refuses what it cannot do (see ADR 0019)")
+		"the hosting panel this server runs: cpanel; directadmin, which is "+
+			"unfinished and refuses what it cannot do (see ADR 0019); or plain, "+
+			"a server with no panel, whose accounts are the directories under "+
+			"-plain-roots (see ADR 0022)")
+	flag.StringVar(&cfg.plainRoots, "plain-roots", "/var/www,/srv,/opt",
+		"plain: the directories whose subdirectories are the accounts, comma separated; "+
+			"a root that is not there is skipped")
 	flag.StringVar(&cfg.fakeRoot, "fake-cpanel-root", "",
 		"use a synthetic cPanel provider rooted here, for development without cPanel")
 	flag.BoolVar(&cfg.preflightOnly, "preflight", false, "check local prerequisites and exit")
@@ -434,8 +441,24 @@ func buildProvider(cfg config, log *slog.Logger) (panel.Provider, error) {
 		}
 		return provider, nil
 	}
+	if cfg.panelName == "plain" {
+		if cfg.fakeRoot != "" {
+			return nil, fmt.Errorf("a plain server needs no synthetic panel; point -plain-roots at a directory instead")
+		}
+		var roots []string
+		for _, root := range strings.Split(cfg.plainRoots, ",") {
+			if root = strings.TrimSpace(root); root != "" {
+				roots = append(roots, root)
+			}
+		}
+		if len(roots) == 0 {
+			return nil, fmt.Errorf("a plain server needs at least one root in -plain-roots")
+		}
+		log.Warn("the plain provider is new", "detail", plain.Provisional)
+		return &plain.Provider{Roots: roots, Log: log}, nil
+	}
 	if cfg.panelName != "" && cfg.panelName != "cpanel" {
-		return nil, fmt.Errorf("unknown panel %q: cpanel or directadmin", cfg.panelName)
+		return nil, fmt.Errorf("unknown panel %q: cpanel, directadmin or plain", cfg.panelName)
 	}
 	if cfg.fakeRoot == "" {
 		// The provider writes only at debug, so this costs nothing until

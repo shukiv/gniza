@@ -22,7 +22,10 @@ curl -fsSL https://github.com/shukiv/gniza/releases/latest/download/get.sh | sh
 ```
 
 One command. It fetches the newest release, checks it against the checksums
-published beside it, and runs the installer inside it. To read the script
+published beside it, and runs the installer inside it. The same command on
+a DirectAdmin server installs the DirectAdmin plugin, and on a server with
+no panel at all, a LAMP box or a container host, installs the plain
+package: see [A server without a panel](plain-server.md). To read the script
 before a root shell does, download it with its checksums first:
 
 ```bash

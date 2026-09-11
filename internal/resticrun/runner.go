@@ -344,6 +344,11 @@ func safeURI(uri string) string {
 	return uri[:scheme+1] + "[credentials]@" + uri[at+1:]
 }
 
+// ErrOptionConflict says two repositories cannot be opened in one restic
+// process: restic applies "-o" globally, and they disagree about one of
+// the options.
+var ErrOptionConflict = errors.New("resticrun: conflicting backend option")
+
 // mergeOptions combines two sets of restic extended options. Restic applies
 // "-o" globally rather than per repository, so two repositories in one
 // invocation cannot disagree about the same key.
@@ -355,8 +360,8 @@ func mergeOptions(primary, extra map[string]string) (map[string]string, error) {
 	for key, value := range extra {
 		if existing, clash := merged[key]; clash && existing != value {
 			return nil, fmt.Errorf(
-				"resticrun: conflicting backend option %q; restic applies -o globally, "+
-					"so these two repositories cannot be used in one invocation", key)
+				"%w %q; restic applies -o globally, "+
+					"so these two repositories cannot be used in one invocation", ErrOptionConflict, key)
 		}
 		merged[key] = value
 	}

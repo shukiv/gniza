@@ -51,15 +51,45 @@ func (e *Engine) EnsureProvisioned(ctx context.Context) (int, error) {
 			return created, err
 		}
 
+		// Matching chunker parameters make copies between repositories
+		// cheaper. They are not worth a destination that never gets a
+		// repository: a source that was removed before this one was
+		// created, or one that cannot be opened in the same restic
+		// process, is let go of, and the repository is created on its
+		// own. Seen on a live server: a destination added beside the old
+		// one with a key of its own, "conflicting backend option
+		// sftp.args" on every backup, and then the old destination
+		// removed, "open chunker source: nodestore: not found" after it.
 		var source *resticrun.Repository
 		if repo.ChunkerSourceRepoID != "" {
 			opened, err := e.OpenRepository(repo.ChunkerSourceRepoID, false)
-			if err != nil {
+			switch {
+			case errors.Is(err, nodestore.ErrNotFound):
+				e.log.Warn("the repository this one copies its chunker parameters from "+
+					"has been removed, so it is created on its own",
+					"repository_id", repo.ID, "chunker_source", repo.ChunkerSourceRepoID)
+				repo, err = e.forgetChunkerSource(repo)
+				if err != nil {
+					return created, err
+				}
+			case err != nil:
 				return created, fmt.Errorf("node: open chunker source: %w", err)
+			default:
+				source = &opened
 			}
-			source = &opened
 		}
-		if err := e.runner.Init(ctx, target, source); err != nil {
+		err = e.runner.Init(ctx, target, source)
+		if source != nil && errors.Is(err, resticrun.ErrOptionConflict) {
+			e.log.Warn("the repository this one copies its chunker parameters from "+
+				"cannot be opened in the same restic process, so it is created on its own",
+				"repository_id", repo.ID, "chunker_source", repo.ChunkerSourceRepoID,
+				"error", err)
+			if repo, err = e.forgetChunkerSource(repo); err != nil {
+				return created, err
+			}
+			err = e.runner.Init(ctx, target, nil)
+		}
+		if err != nil {
 			if repositoryAlreadyThere(err) {
 				// The password for that repository was made a moment ago
 				// and is not the one it was created with, so there is
@@ -86,6 +116,17 @@ func (e *Engine) EnsureProvisioned(ctx context.Context) (int, error) {
 		created++
 	}
 	return created, nil
+}
+
+// forgetChunkerSource records that the repository copies its chunker
+// parameters from nothing, and returns it as stored.
+func (e *Engine) forgetChunkerSource(repo nodestore.Repository) (nodestore.Repository, error) {
+	repo.ChunkerSourceRepoID = ""
+	stored, err := e.store.PutRepository(repo)
+	if err != nil {
+		return repo, fmt.Errorf("node: forget chunker source: %w", err)
+	}
+	return stored, nil
 }
 
 // repositoryAlreadyThere reports whether restic refused to create a

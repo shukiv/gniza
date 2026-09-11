@@ -382,3 +382,46 @@ names the old flag still starts. What settled it was a third server, on
 v0.3.5 without the flag, refusing its administrator's account for 57.2
 GiB of staging -- twice a 28.6 GiB account -- on a disk with 16.7 GiB
 free, for a backup this shape writes in a few hundred megabytes.
+
+## The drill from nothing — 2026-09-11
+
+Run on `182.54.236.10` against a throwaway account made for it,
+`gzdrill0911`, seeded with a database of three rows, a mailbox with two
+messages and a send limit, a forwarder, an autoresponder, an FTP login,
+a cron job, a subdomain, a TXT record, a webmail contact, a 300,000-byte
+file under `public_html`, a dotfile and a private directory. Backed up
+by Gniza, then three restores: over the live account with every seed
+changed in place; over the live account after the messages were moved
+aside; and after the account was deleted through DirectAdmin, from the
+backup alone. The last is what a backup exists for, and it found four
+things, each fixed the same day and each carried by the dist build the
+fleet runs:
+
+1. `Apply` refused an account the server did not have. DirectAdmin's own
+   restore creates the account from the archive's `user.conf`; it is
+   handed the archive now, and an account that is on the server is
+   still overwritten only when asked for twice.
+2. DirectAdmin reads the archive as the account -- for one it is
+   creating, as the user it has just made, whose group did not exist
+   when the workspace was. A 0710 workspace stopped it with "File does
+   not exist or you don't have access to file ... File being read as
+   'gzdrill0911'". An account not on the server gets a 0711 workspace.
+3. DirectAdmin inherits the service umask, 077, so every file it
+   generates into an archive -- the zone file, `user.db` -- was 0600
+   where its own backups give 0644, and the created account's zone was
+   unreadable to named. DirectAdmin runs under 022 now. This one was in
+   every archive Gniza had ever asked DirectAdmin for, in both shapes,
+   and showed only on a restore that created the account.
+4. A restore that creates an account runs the server's
+   `user_create_post.sh` and `user_restore_post.sh` afterwards, and
+   they outlive the task by a second or two. They were taken for a
+   detached writer, killed with the task, and the restore reported as
+   failed after DirectAdmin had said "has been restored". A task that
+   said it finished is given time to be rid of them.
+
+After the four, the account came back with everything on the list but
+one: the webmail contact. DirectAdmin's own archive of the same account,
+deleted and restored the same way, did not bring it back either -- its
+`restore_roundcube.php` is not reached on a restore that creates the
+account -- so that is DirectAdmin's, recorded as `cprest-8vb`. Over a
+live account the contact is restored, added beside what is there.

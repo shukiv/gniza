@@ -24,15 +24,15 @@
 
 <section class="cpr:grid cpr:gap-3 cpr:sm:grid-cols-3" aria-label="Backup summary">
   <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:rounded-box cpr:border cpr:border-base-300 cpr:bg-base-100 cpr:p-3">
-    <svg class="cpr:size-6 cpr:text-primary cpr:shrink-0 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg>
+    <svg class="cpr:size-6 cpr:text-primary cpr:shrink-0 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h2"/><path d="M20 8v11a2 2 0 0 1-2 2h-2"/><path d="m9 15 3-3 3 3"/><path d="M12 12v9"/></svg>
     <div><p class="cpr:text-lg cpr:font-semibold cpr:mono cpr:leading-tight">{{$data.TotalPoints}}</p><p class="cpr:text-xs cpr:text-base-content/60">restore points</p></div>
   </div>
   <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:rounded-box cpr:border cpr:border-base-300 cpr:bg-base-100 cpr:p-3">
-    <svg class="cpr:size-6 cpr:text-primary cpr:shrink-0 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+    <svg class="cpr:size-6 cpr:text-primary cpr:shrink-0 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
     <div><p class="cpr:text-lg cpr:font-semibold cpr:mono cpr:leading-tight">{{if $data.TotalPoints}}{{agoTime $data.Latest}}{{else}}—{{end}}</p><p class="cpr:text-xs cpr:text-base-content/60">latest backup</p></div>
   </div>
   <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:rounded-box cpr:border cpr:border-base-300 cpr:bg-base-100 cpr:p-3">
-    <svg class="cpr:size-6 cpr:text-primary cpr:shrink-0 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+    <svg class="cpr:size-6 cpr:text-primary cpr:shrink-0 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
     <div><p class="cpr:text-lg cpr:font-semibold cpr:mono cpr:leading-tight">{{$data.Ready}}</p><p class="cpr:text-xs cpr:text-base-content/60">ready to download</p></div>
   </div>
 </section>
@@ -89,7 +89,7 @@
   <div class="cpr:px-4 cpr:py-6 cpr:text-center cpr:text-base-content/70"><p>No recovery packages have been requested.</p></div>
   {{end}}
   <div class="cpr:flex cpr:items-start cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-t cpr:border-base-300 cpr:bg-base-200 cpr:text-xs cpr:text-base-content/70 cpr:rounded-b-box">
-    <svg class="cpr:size-5 cpr:shrink-0 cpr:fill-none cpr:stroke-success cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-2.9 8-7 10-4.1-2-7-5.4-7-10V6zM9 12l2 2 4-4"/></svg>
+    <svg class="cpr:size-5 cpr:shrink-0 cpr:fill-none cpr:stroke-success cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
     <p><b class="cpr:text-base-content">You choose what happens.</b> Files, mail, databases and their users can be put straight
     back into the account, replacing what is there now. Everything else is prepared as a copy to
     download, and nothing is changed until you ask for it.</p>

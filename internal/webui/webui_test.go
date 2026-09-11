@@ -2168,8 +2168,13 @@ func TestTheBrandIsOnThePageInItsOwnColour(t *testing.T) {
 			t.Errorf("the interface does not carry the name: %s is missing", want)
 		}
 	}
-	if !strings.Contains(page, `cpr:bg-primary cpr:text-primary-content" aria-hidden="true" data-brand-mark>`) {
+	// The mark stands on the page in the primary colour, with no badge
+	// behind it: a tile around a glyph read as an app icon, not a brand.
+	if !strings.Contains(page, `cpr:text-primary" aria-hidden="true" data-brand-mark>`) {
 		t.Error("the mark is not in its own colour")
+	}
+	if strings.Contains(page, `cpr:bg-primary cpr:text-primary-content" aria-hidden="true" data-brand-mark>`) {
+		t.Error("the mark sits on a tile again")
 	}
 }
 

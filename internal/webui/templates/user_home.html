@@ -5,7 +5,7 @@
 <section class="cpr:panel cpr:border-l-4 {{if $data.TotalPoints}}cpr:border-l-success{{else}}cpr:border-l-warning{{end}}" data-user-heading>
   <div class="cpr:pad cpr:flex cpr:flex-col cpr:gap-3 cpr:md:flex-row cpr:md:items-center">
     <div class="cpr:min-w-0 cpr:flex-1 cpr:flex cpr:flex-col cpr:gap-1">
-      <p class="cpr:k">{{if $data.TotalPoints}}Your account is protected{{else}}Account backup{{end}}</p>
+      <p class="cpr:k">Account backup</p>
       {{if $data.TotalPoints}}
       <h1 class="cpr:page-title">Last backup {{agoTime $data.Latest}}. {{$data.TotalPoints}} restore point{{if ne $data.TotalPoints 1}}s{{end}} to choose from.</h1>
       <p class="cpr:text-base-content/70">Browse the restore points for <b class="cpr:text-base-content">{{$data.Account}}</b>, put back what was lost, or download a copy.</p>

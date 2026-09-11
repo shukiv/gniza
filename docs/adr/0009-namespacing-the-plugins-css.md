@@ -1,6 +1,8 @@
 # 0009 — Namespacing the plugin's CSS
 
-Status: accepted
+Status: accepted; the prefix is `cpr:` since ADR 0023 (daisyUI), and the
+stylesheet is compiled rather than written, but the invariant and the
+reason for it are unchanged.
 Date: 2026-08-31
 
 ## Context

@@ -131,6 +131,11 @@ func TestNativeCommandProcess(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(task.Get("local_path"), task.Get("select0"))); err != nil {
 			os.Exit(2)
 		}
+		// What the account DirectAdmin reads the archive as would meet on
+		// the way to it: the mode of the directory above the output.
+		if info, err := os.Stat(filepath.Dir(task.Get("local_path"))); err == nil {
+			_ = os.WriteFile(os.Getenv("GNIZA_NATIVE_CAPTURE")+".mode", []byte(fmt.Sprintf("%o", info.Mode().Perm())), 0o600)
+		}
 		// DirectAdmin's restore creates the account when the server does
 		// not have it, from the user.conf in the archive.
 		if dataDir := os.Getenv("GNIZA_NATIVE_DATADIR"); dataDir != "" {
@@ -766,6 +771,28 @@ func TestARestoreOfAnAccountTheServerNoLongerHasCreatesIt(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(r.DataDir, "studio", "user.conf")); err != nil {
 		t.Fatalf("the account is not on the server afterwards: %v", err)
+	}
+	// DirectAdmin reads the archive as the user it has just created,
+	// whose group did not exist when the workspace was made, so the way
+	// to the archive is open to pass through. On 2026-09-11 a 0710
+	// workspace stopped the restore with "File does not exist or you
+	// don't have access to file ... File being read as 'gzdrill0911'".
+	if mode, _ := os.ReadFile(os.Getenv("GNIZA_NATIVE_CAPTURE") + ".mode"); string(mode) != "711" {
+		t.Errorf("the workspace is mode %s, and the account DirectAdmin creates cannot reach the archive through it; want 711", mode)
+	}
+}
+
+// An account that is on the server has a group, and the workspace is
+// passable by that group alone.
+func TestTheWorkspaceOfAnAccountTheServerHasIsPassableByItsGroupAlone(t *testing.T) {
+	r := nativeHost(t)
+	archive := filepath.Join(t.TempDir(), "user.admin.studio.tar.zst")
+	writeNativeArchive(t, archive, "studio")
+	if _, err := r.Apply(t.Context(), archive, panel.ApplyOptions{Overwrite: true, Unrestricted: true}); err != nil {
+		t.Fatal(err)
+	}
+	if mode, _ := os.ReadFile(os.Getenv("GNIZA_NATIVE_CAPTURE") + ".mode"); string(mode) != "710" {
+		t.Errorf("the workspace is mode %s, want 710", mode)
 	}
 }
 

@@ -133,13 +133,23 @@ func (r *Real) nativeWorkspace(account string) (_ *nativeWorkspace, err error) {
 	// DirectAdmin writes into it as the account can be read. An account
 	// that is not on the server yet -- a restore is about to create it --
 	// has no group, and the workspace is the administrator's alone.
-	accountGID := adminGID
+	// DirectAdmin reads the archive as the account -- for an account it
+	// is creating, as the user it has just made, whose group did not
+	// exist when this directory was -- so an account not on the server
+	// gets a directory anyone may pass through and nobody else may list.
+	// The archive inside stays the administrator's, mode 0600, and the
+	// directory's name is random under a root nobody else can list.
+	// Measured on 1.709, 2026-09-11: "File does not exist or you don't
+	// have access to file ... File being read as 'gzdrill0911'".
+	accountGID, pathMode := adminGID, os.FileMode(0o710)
 	var unknown user.UnknownUserError
 	if selected, err := lookup(account); err == nil {
 		if accountGID, err = strconv.Atoi(selected.Gid); err != nil {
 			return nil, err
 		}
-	} else if !errors.As(err, &unknown) {
+	} else if errors.As(err, &unknown) {
+		pathMode = 0o711
+	} else {
 		return nil, fmt.Errorf("directadmin: resolve account identity: %w", err)
 	}
 	root := r.nativeRoot()
@@ -199,7 +209,7 @@ func (r *Real) nativeWorkspace(account string) (_ *nativeWorkspace, err error) {
 		mode     os.FileMode
 	}{
 		{w.destination, adminUID, adminGID, 0o711},
-		{w.path, adminUID, accountGID, 0o710},
+		{w.path, adminUID, accountGID, pathMode},
 	} {
 		if err := os.Chown(entry.path, entry.uid, entry.gid); err != nil {
 			return nil, err

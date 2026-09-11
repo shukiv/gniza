@@ -62,12 +62,34 @@ func TestEveryPageAnswersAsData(t *testing.T) {
 		}
 	}
 
+	// The verdicts the templates get from methods are fields here: a
+	// reader of data sees no methods.
 	var overview struct {
 		Hostname string
+		Sentence string
+		Severity string
 	}
 	_, page := getJSON(t, client, "/")
 	if err := json.Unmarshal(page.Data, &overview); err != nil || overview.Hostname == "" {
 		t.Errorf("the overview's data has no hostname: %v %s", err, page.Data)
+	}
+	if overview.Sentence != "Nothing is being backed up: this server has no destination." ||
+		overview.Severity != "bad" {
+		t.Errorf("the overview's data has no verdict: %+v", overview)
+	}
+	var accounts struct {
+		Accounts []struct {
+			User      string
+			Condition string
+			Because   string
+		}
+	}
+	_, page = getJSON(t, client, "/accounts")
+	if err := json.Unmarshal(page.Data, &accounts); err != nil || len(accounts.Accounts) == 0 {
+		t.Fatalf("the accounts' data has no accounts: %v %s", err, page.Data)
+	}
+	if got := accounts.Accounts[0]; got.Condition != "never" || got.Because == "" {
+		t.Errorf("an account that was never backed up says %+v", got)
 	}
 }
 

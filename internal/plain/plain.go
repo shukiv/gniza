@@ -44,9 +44,9 @@ var ErrUnverified = errors.New("plain: a server without a panel has no native re
 // Provisional is said once where the service starts, so a server set up
 // today knows what has and has not been proved of this provider.
 const Provisional = "backups of the directories under the roots and of the databases named " +
-	"after them have been exercised against a fake MySQL; a restore of files and databases " +
-	"has not yet been run on a live server, and there is no terminal interface yet: " +
-	"the service is configured over its socket (see ADR 0022)"
+	"after them have been exercised against a fake MySQL and driven from the terminal " +
+	"interface; a restore of files and databases has not yet been run on a live server " +
+	"(see ADR 0022)"
 
 func unverified(what string) error {
 	return fmt.Errorf("%w: %s (see ADR 0022)", ErrUnverified, what)

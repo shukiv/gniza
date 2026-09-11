@@ -101,6 +101,10 @@ type dashboardView struct {
 	// Now is when this page was drawn, so the template can say how old
 	// each stored reading is without asking the clock itself.
 	Now time.Time
+	// Sentence and Severity are Verdict and Band written down, for a
+	// reader of the page as data.
+	Sentence string
+	Severity string
 }
 
 // Verdict is the first line of the page: whether this server's accounts
@@ -206,6 +210,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	view.NextRun, view.NextRunPolicy, view.NextRunIn = nextRun(policies, time.Now())
+	view.Sentence, view.Severity = view.Verdict(), view.Band()
 	view.Now = time.Now()
 	view.Held = holdingsOf(destinations, view.Now)
 
@@ -1634,6 +1639,11 @@ type accountView struct {
 	// written rather than what survives: retention prunes old snapshots
 	// in the repository, and nothing tells this server when it does.
 	Copies []copyCount
+	// Condition and Because are State and Why written down, for a reader
+	// of the page as data, which sees fields and not methods. They are
+	// set once the view is complete and read by nothing in this package.
+	Condition State
+	Because   string
 }
 
 // copyCount is one destination's share of an account's backups.
@@ -2146,6 +2156,7 @@ func (s *Server) accountViews(r *http.Request) ([]accountView, []string, error) 
 				}
 			}
 		}
+		view.Condition, view.Because = view.State(), view.Why()
 		views = append(views, view)
 	}
 	sort.Slice(views, func(i, j int) bool { return views[i].User < views[j].User })

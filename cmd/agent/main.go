@@ -30,6 +30,7 @@ import (
 	"github.com/shukiv/gniza/internal/plain"
 	"github.com/shukiv/gniza/internal/resticrun"
 	"github.com/shukiv/gniza/internal/staging"
+	"github.com/shukiv/gniza/internal/tui"
 )
 
 type config struct {
@@ -71,6 +72,9 @@ type config struct {
 	certifyArchive      string
 	certifyUser         string
 	certifyIsolatedHost bool
+	// tui opens the terminal interface over the admin socket and exits
+	// when it is left. It touches no state of its own.
+	tui bool
 	// level is the running log level, shared with the handler the logger
 	// was built on so the interface can move it.
 	level *slog.LevelVar
@@ -80,6 +84,15 @@ func main() {
 	cfg := parseFlags()
 	log, logLevel := newLogger(cfg.logLevel)
 	cfg.level = logLevel
+	if cfg.tui {
+		// Before anything opens the state database, the master key or a
+		// socket: the service holds those, and this is a client of it.
+		if err := tui.Run(cfg.socketPath); err != nil {
+			fmt.Fprintln(os.Stderr, "gniza:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if cfg.cpanelHookDescribe {
 		if err := writeCPanelHookDescription(os.Stdout); err != nil {
 			log.Error("describe cPanel lifecycle hooks", "error", err)
@@ -221,6 +234,8 @@ func parseFlags() config {
 	flag.StringVar(&cfg.fakeRoot, "fake-cpanel-root", "",
 		"use a synthetic cPanel provider rooted here, for development without cPanel")
 	flag.BoolVar(&cfg.preflightOnly, "preflight", false, "check local prerequisites and exit")
+	flag.BoolVar(&cfg.tui, "tui", false,
+		"open the terminal interface over the admin socket (-socket) instead of running the service")
 	flag.BoolVar(&cfg.standalone, "standalone", false,
 		"run this server on its own, with local state and the WHM interface, and no controller")
 	flag.StringVar(&cfg.statePath, "state", "/var/lib/gniza/state.db",

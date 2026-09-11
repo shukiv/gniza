@@ -4,12 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/shukiv/gniza/internal/human"
 )
 
 // The pages' views, as much of each as the screens read. A field the
@@ -263,23 +260,6 @@ func (m Model) rowCount(which screen) int {
 	return 0
 }
 
-// screenKeys names the keys this screen answers to.
-func (m Model) screenKeys() string {
-	switch m.screen {
-	case screenDestinations:
-		return "a add · t test · K show recovery key · n noted · d remove"
-	case screenSchedules:
-		return "a add · e edit · R run now · d remove"
-	case screenAccounts:
-		return "b back up · B back up every account"
-	case screenLogs:
-		return "t next tab"
-	case screenSettings:
-		return "u check for an update · i install it"
-	}
-	return ""
-}
-
 func (m Model) screenKey(key string) (tea.Model, tea.Cmd) {
 	switch m.screen {
 	case screenDestinations:
@@ -307,7 +287,7 @@ func (m Model) screenKey(key string) (tea.Model, tea.Cmd) {
 
 func (m Model) screenView() string {
 	if !m.loaded[m.screen] {
-		return styleDim.Render("Reading…")
+		return sMuted.Render("Reading…")
 	}
 	switch m.screen {
 	case screenOverview:
@@ -330,87 +310,7 @@ func (m Model) screenView() string {
 
 // --- overview ---
 
-func (m Model) overviewView() string {
-	v := decode[overview](m, screenOverview)
-	var b strings.Builder
-	style := styleOK
-	switch v.Severity {
-	case "warn":
-		style = styleWarn
-	case "bad":
-		style = styleBad
-	}
-	b.WriteString(style.Render(v.Sentence) + "\n\n")
-	fmt.Fprintf(&b, "%-18s %s\n", "Server", v.Hostname)
-	fmt.Fprintf(&b, "%-18s %s · %s · %s\n", "Configured",
-		plural(len(v.Accounts), "account"), plural(len(v.Destinations), "destination"), plural(len(v.Policies), "schedule"))
-	fmt.Fprintf(&b, "%-18s %d protected · %d stale · %d never backed up · %d failing\n", "Coverage",
-		v.Protected, v.Stale, v.Unprotected, v.Failed)
-	if v.NextRun != "" {
-		fmt.Fprintf(&b, "%-18s %s, %s (%s)\n", "Next run", v.NextRunPolicy, v.NextRun, v.NextRunIn)
-	} else {
-		fmt.Fprintf(&b, "%-18s %s\n", "Next run", "nothing is scheduled")
-	}
-	staging := human.Bytes(v.StagingFree) + " free"
-	if v.SpaceTight {
-		staging = styleWarn.Render(staging + " · tight")
-	}
-	fmt.Fprintf(&b, "%-18s %s\n", "Staging space", staging)
-	if v.Held.Copies > 0 {
-		fmt.Fprintf(&b, "%-18s %d backups, %s after deduplication\n", "Destinations hold", v.Held.Copies, human.Bytes(v.Held.Stored))
-	}
-	if run := v.LastRun; run != nil {
-		took := ""
-		if !run.StartedAt.IsZero() && !run.FinishedAt.IsZero() {
-			took = ", took " + since(run.FinishedAt.Sub(run.StartedAt))
-		}
-		fmt.Fprintf(&b, "%-18s %s: %d of %d accounts succeeded, %d failed, %s added%s\n", "Last run",
-			run.Policy, run.Succeeded, run.Accounts, run.Failed, human.Bytes(run.BytesAdded), took)
-	}
-	if len(v.Attention) > 0 {
-		b.WriteString("\n" + styleTitle.Render("Needs attention") + "\n")
-		for _, a := range v.Attention {
-			fmt.Fprintf(&b, "  %-24s %s\n", a.User, a.Because)
-		}
-	}
-	return strings.TrimRight(b.String(), "\n")
-}
-
 // --- destinations ---
-
-func (m Model) destinationsView() string {
-	v := decode[destinationsPage](m, screenDestinations)
-	if len(v.Destinations) == 0 {
-		return "No destination yet. Nothing is backed up until there is one.\n\nPress a to add one."
-	}
-	rows := make([][]string, 0, len(v.Destinations))
-	for _, d := range v.Destinations {
-		key := "saved"
-		if d.Repository.RecoveryNotedAt == nil {
-			key = "NOT SAVED"
-		}
-		status := d.Status
-		if d.LastCheckError != "" {
-			status += ": " + d.LastCheckError
-		}
-		space := ""
-		switch {
-		case d.Space.Unsupported:
-			space = "n/a"
-		case d.Space.TotalBytes > 0:
-			space = human.Bytes(d.Space.FreeBytes) + " free"
-		}
-		rows = append(rows, []string{d.Name, d.Type, key, space, d.Endpoint, status})
-	}
-	out := table(m.width, m.cursor[screenDestinations],
-		[]string{"Name", "Type", "Recovery key", "Space", "Where", "Status"}, rows)
-	if len(v.Unnoted) > 0 {
-		out += "\n\n" + styleBad.Render(fmt.Sprintf(
-			"The recovery key for %s exists nowhere but this server. Press K to read it, then n once it is written down.",
-			strings.Join(v.Unnoted, ", ")))
-	}
-	return out
-}
 
 func (m Model) currentDestination() (destinationRow, bool) {
 	v := decode[destinationsPage](m, screenDestinations)
@@ -457,14 +357,15 @@ func (m Model) destinationsKey(key string) (tea.Model, tea.Cmd) {
 
 func destinationForm(hostname string) *form {
 	types := []choice{
-		{"local", "Local disk or mounted NAS"},
-		{"sftp", "Another Linux server (SFTP)"},
-		{"s3", "S3 or S3-compatible"},
-		{"rest", "Backup server (restic REST)"},
+		{"local", "Local disk"},
+		{"sftp", "SFTP server"},
+		{"s3", "S3"},
+		{"rest", "REST server"},
 	}
 	return newForm("Add a destination", "/destinations/add",
 		textField("name", "Name", "", "What to call it on these screens."),
-		choiceField("type", "Type", types, "local"),
+		withHelp(choiceField("type", "Type", types, "local"),
+			"A local disk or mounted NAS; another Linux server over SFTP; an S3 or S3-compatible bucket; a restic REST server."),
 		withWhen(textField("root", "Directory", "", "An absolute path on this server, or a mounted share. Created if missing."), whenType("local")),
 		withWhen(textField("host", "Host", "", "The server's address."), whenType("sftp")),
 		withWhen(textField("port", "Port", "22", ""), whenType("sftp")),
@@ -489,48 +390,12 @@ func withWhen(f field, when func(*form) bool) field {
 	return f
 }
 
-// --- schedules ---
-
-func (m Model) schedulesView() string {
-	v := decode[schedulesPage](m, screenSchedules)
-	if len(v.Policies) == 0 {
-		return "No schedule yet. A schedule is what makes backups happen on their own.\n\nPress a to add one."
-	}
-	names := map[string]string{}
-	for _, d := range v.Destinations {
-		names[d.Repository.ID] = d.Name
-	}
-	rows := make([][]string, 0, len(v.Policies))
-	for _, p := range v.Policies {
-		state := "on"
-		if !p.Enabled {
-			state = "off"
-		}
-		var to []string
-		for _, id := range p.RepositoryIDs {
-			if name, known := names[id]; known {
-				to = append(to, name)
-			} else {
-				to = append(to, id)
-			}
-		}
-		covers := "every account"
-		if len(p.Accounts) > 0 {
-			covers = fmt.Sprintf("%d accounts", len(p.Accounts))
-		}
-		if p.IncludeSystem {
-			covers += " + server"
-		}
-		next := ""
-		if !p.Next.IsZero() {
-			next = "in " + since(time.Until(p.Next))
-		}
-		keeps := fmt.Sprintf("%d/%d/%d", p.Retention.KeepDaily, p.Retention.KeepWeekly, p.Retention.KeepMonthly)
-		rows = append(rows, []string{p.Name, state, p.ScheduleCron, next, covers, keeps, strings.Join(to, ", ")})
-	}
-	return table(m.width, m.cursor[screenSchedules],
-		[]string{"Name", "On", "When (cron)", "Next", "Covers", "Keep d/w/m", "Writes to"}, rows)
+func withHelp(f field, help string) field {
+	f.help = help
+	return f
 }
+
+// --- schedules ---
 
 func (m Model) currentPolicy() (policyRow, bool) {
 	v := decode[schedulesPage](m, screenSchedules)
@@ -587,7 +452,8 @@ func scheduleForm(destinations []destinationRow, editing *policyRow) *form {
 	fields := []field{
 		textField("name", "Name", p.Name, ""),
 		textField("cron", "When (cron)", p.ScheduleCron, "Five fields: minute hour day month weekday. 0 2 * * * is two in the morning, every day."),
-		choiceField("mode", "Shape", []choice{{"split", "split (files read in place)"}, {"monolithic", "monolithic (one archive)"}}, p.PayloadMode),
+		withHelp(choiceField("mode", "Shape", []choice{{"split", "split"}, {"monolithic", "monolithic"}}, p.PayloadMode),
+			"split reads the files where they lie and keeps the dumps beside them; monolithic makes one archive first. A server with no panel has only split."),
 		toggleField("enabled", "Enabled", "1", p.Enabled),
 		toggleField("include_system", "Back up the server's own configuration too", "1", p.IncludeSystem),
 		textField("keep_daily", "Keep daily", fmt.Sprint(p.Retention.KeepDaily), "How many of the last daily backups to keep."),
@@ -615,32 +481,6 @@ func scheduleForm(destinations []destinationRow, editing *policyRow) *form {
 
 // --- accounts ---
 
-func (m Model) accountsView() string {
-	v := decode[accountsPage](m, screenAccounts)
-	if len(v.Accounts) == 0 {
-		return "No accounts were found. On a server with no panel, an account is a directory under one of the roots in /etc/gniza/plain.env."
-	}
-	rows := make([][]string, 0, len(v.Accounts))
-	for _, a := range v.Accounts {
-		state := a.Condition
-		if a.Running {
-			state = "running"
-		}
-		record := ""
-		if a.Runs > 0 {
-			record = fmt.Sprintf("%d/%d ok", a.Succeeded, a.Runs)
-		}
-		rows = append(rows, []string{a.User, state, ago(a.LastBackup), human.Bytes(a.SizeBytes),
-			fmt.Sprint(len(a.Databases)), record, a.Because})
-	}
-	out := table(m.width, m.cursor[screenAccounts],
-		[]string{"Account", "State", "Last backup", "Size", "DBs", "Record", "Why"}, rows)
-	for _, warning := range v.Warnings {
-		out += "\n" + styleWarn.Render(pad(warning, m.width-2))
-	}
-	return out
-}
-
 func (m Model) accountsKey(key string) (tea.Model, tea.Cmd) {
 	v := decode[accountsPage](m, screenAccounts)
 	switch key {
@@ -665,166 +505,9 @@ func (m Model) accountsKey(key string) (tea.Model, tea.Cmd) {
 
 // --- logs ---
 
-func (m Model) logsView() string {
-	v := decode[logsPage](m, screenLogs)
-	var tabs []string
-	for _, tab := range logTabs {
-		label := tab
-		if n, counted := v.Counts[tab]; counted && n > 0 {
-			label = fmt.Sprintf("%s (%d)", tab, n)
-		}
-		if tab == m.logTab {
-			label = styleActive.Render(" " + label + " ")
-		} else {
-			label = " " + label + " "
-		}
-		tabs = append(tabs, label)
-	}
-	out := strings.Join(tabs, "") + "\n\n"
-	switch m.logTab {
-	case "backups", "system":
-		jobs := v.Jobs
-		if m.logTab == "system" {
-			jobs = v.System
-		}
-		if len(jobs) == 0 {
-			return out + "Nothing has run yet."
-		}
-		rows := make([][]string, 0, len(jobs))
-		for _, j := range jobs {
-			var added uint64
-			var secs float64
-			problem := j.StagingErr
-			var to []string
-			for _, t := range j.Targets {
-				added += t.BytesAdded
-				secs += t.DurationSecs
-				if t.Error != "" && problem == "" {
-					problem = t.Error
-				}
-				if name, known := v.Destination[t.RepositoryID]; known {
-					to = append(to, name)
-				}
-			}
-			if problem == "" && len(j.Warnings) > 0 {
-				problem = j.Warnings[0]
-			}
-			took := ""
-			if secs > 0 {
-				took = since(time.Duration(secs * float64(time.Second)))
-			}
-			started := j.StartedAt
-			if started == nil {
-				started = &j.QueuedAt
-			}
-			rows = append(rows, []string{when(started), j.Account, j.Status, human.Bytes(added), took, strings.Join(to, ", "), problem})
-		}
-		return out + table(m.width, m.cursor[screenLogs],
-			[]string{"Started", "Account", "Status", "Added", "Took", "To", "Problem"}, rows)
-	case "restores":
-		return out + restoreTable(m.width, m.cursor[screenLogs], v.Restores)
-	case "lifecycle":
-		if len(v.Lifecycle) == 0 {
-			return out + "No account has been created, changed or removed since Gniza was installed."
-		}
-		rows := make([][]string, 0, len(v.Lifecycle))
-		for _, e := range v.Lifecycle {
-			ok := "ok"
-			if !e.OK {
-				ok = "failed"
-			}
-			rows = append(rows, []string{when(&e.At), e.Event, e.Account, ok, e.Detail})
-		}
-		return out + table(m.width, m.cursor[screenLogs], []string{"At", "Event", "Account", "Result", "Detail"}, rows)
-	case "service":
-		if v.Service.Error != "" {
-			return out + styleWarn.Render(v.Service.Error)
-		}
-		lines := strings.Split(strings.TrimRight(v.Service.Text, "\n"), "\n")
-		keep := max(m.height-10, 5)
-		if len(lines) > keep {
-			lines = lines[len(lines)-keep:]
-		}
-		for i, line := range lines {
-			lines[i] = pad(line, m.width-2)
-		}
-		return out + strings.Join(lines, "\n")
-	}
-	return out
-}
-
-func restoreTable(width, cursor int, restores []restoreRow) string {
-	if len(restores) == 0 {
-		return "No restore has been asked for yet."
-	}
-	rows := make([][]string, 0, len(restores))
-	for _, r := range restores {
-		what := r.Kind
-		if r.ItemKind != "" {
-			what = r.ItemKind
-			if len(r.ItemNames) > 0 {
-				what += ": " + strings.Join(r.ItemNames, ", ")
-			}
-		}
-		where := r.RestoredTo
-		if r.Error != "" {
-			where = r.Error
-		}
-		rows = append(rows, []string{when(&r.QueuedAt), r.Account, what, r.Status, human.Bytes(r.BytesRestored), where})
-	}
-	return table(width, cursor, []string{"Asked", "Account", "What", "Status", "Size", "Where / problem"}, rows)
-}
-
 // --- restore ---
 
-func (m Model) restoreView() string {
-	v := decode[restorePage](m, screenRestore)
-	out := restoreTable(m.width, m.cursor[screenRestore], v.Restores)
-	return out + "\n\n" + styleDim.Render(
-		"Asking for a restore from the terminal is not written yet. Until it is, the restore "+
-			"forms are posted with curl as docs/guide/plain-server.md shows; what they do shows here.")
-}
-
 // --- settings ---
-
-func (m Model) settingsView() string {
-	v := decode[settingsPage](m, screenSettings)
-	var b strings.Builder
-	row := func(label, value string) { fmt.Fprintf(&b, "%-22s %s\n", label, value) }
-	row("Version", v.Version)
-	switch {
-	case v.Update.Installing:
-		row("Update", styleWarn.Render("installing "+v.Update.Latest+"…"))
-	case v.Update.Error != "":
-		row("Update", styleBad.Render(v.Update.Error))
-	case v.Update.Newer:
-		row("Update", styleWarn.Render(v.Update.Latest+" is published; press i to install it"))
-	case v.Update.Latest != "":
-		row("Update", "none: "+v.Update.Latest+" is the newest")
-	}
-	if v.LastChecked != "" {
-		checked := v.LastChecked
-		if v.CheckError != "" {
-			checked += " · " + v.CheckError
-		}
-		row("Last checked", checked)
-	}
-	b.WriteString("\n")
-	row("Hostname", v.Settings.Hostname)
-	row("Staging directory", fmt.Sprintf("%s (%s free)", v.Settings.StagingRoot, human.Bytes(v.StagingFree)))
-	row("Accounts at once", fmt.Sprint(v.Settings.MaxConcurrent))
-	row("restic", v.Settings.ResticBinary)
-	row("restic cache", v.Settings.ResticCache)
-	row("Configuration", v.Settings.ConfigDir)
-	if v.Settings.LogLevel != "" {
-		row("Log level", v.Settings.LogLevel)
-	}
-	if v.Settings.UpdateChannel != "" {
-		row("Update channel", v.Settings.UpdateChannel)
-	}
-	b.WriteString("\n" + styleDim.Render("Changing these from the terminal is not written yet; the settings form is posted with curl as the guide shows."))
-	return strings.TrimRight(b.String(), "\n")
-}
 
 func (m Model) settingsKey(key string) (tea.Model, tea.Cmd) {
 	v := decode[settingsPage](m, screenSettings)

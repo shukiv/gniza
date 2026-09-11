@@ -15,19 +15,19 @@
 <style>{{.Fonts}}
 {{.Assets.CSS}}</style>
 
-<div class="gniza cpr:text-base-content cpr:max-w-[1260px] cpr:mx-auto cpr:px-5 cpr:pb-18 cpr:max-md:px-3" dir="ltr" data-user>
+<div class="gniza cpr:text-base-content cpr:max-w-[1320px] cpr:mx-auto cpr:px-4 cpr:pb-16 cpr:max-md:px-3" dir="ltr" data-user>
   <a class="cpr:skip" href="#gniza-user-main">Skip to content</a>
-  <header class="cpr:navbar cpr:min-h-16 cpr:gap-6 cpr:mb-6 cpr:px-4 cpr:bg-base-100 cpr:border cpr:border-base-300 cpr:rounded-box cpr:shadow-sm cpr:max-md:flex-wrap cpr:max-md:gap-x-4 cpr:max-md:gap-y-2 cpr:max-md:px-3 cpr:max-md:py-2" data-userbar>
-    <a class="cpr:flex cpr:items-center cpr:gap-2.5 cpr:shrink-0 cpr:min-h-10 cpr:text-[17px] cpr:font-bold cpr:tracking-tight" href="index.live.php" aria-label="Gniza overview" data-brand>
-      <span class="cpr:grid cpr:size-8.5 cpr:shrink-0 cpr:place-items-center cpr:rounded-lg cpr:bg-primary cpr:text-primary-content" aria-hidden="true" data-brand-mark><svg class="cpr:h-[62%] cpr:w-auto cpr:fill-current cpr:[fill-rule:evenodd]" viewBox="1.25 0.14 10.22 12.48" focusable="false"><g transform="translate(-97.367 -139.17)"><path transform="matrix(.23378 0 0 -.23378 50.654 216.38)" d="m219.89 325.53h14.261v2.3h-14.261zm0-16.189h14.261v2.3h-14.261zm-14.721 4.14h43.703v-12.881h-43.703zm14.721-18.029h14.261v-2.3h-14.261zm7.13-19.157 2.663 4.609 2.024 3.507h17.165v12.881h-43.703v-12.881h17.166l2.023-3.507zm-21.851 53.375h43.703v-12.881h-43.703z"/></g></svg></span>
+  <header class="cpr:navbar cpr:min-h-0 cpr:gap-4 cpr:mb-4 cpr:px-4 cpr:py-2.5 cpr:bg-base-100 cpr:border cpr:border-base-300 cpr:rounded-box cpr:max-md:flex-wrap cpr:max-md:gap-x-3 cpr:max-md:gap-y-2 cpr:max-md:px-3 cpr:max-md:py-2" data-userbar>
+    <a class="cpr:flex cpr:items-center cpr:gap-2.5 cpr:shrink-0 cpr:min-h-8 cpr:text-[15px] cpr:font-semibold" href="index.live.php" aria-label="Gniza overview" data-brand>
+      <span class="cpr:grid cpr:size-7 cpr:shrink-0 cpr:place-items-center cpr:rounded-md cpr:bg-primary cpr:text-primary-content" aria-hidden="true" data-brand-mark><svg class="cpr:h-[62%] cpr:w-auto cpr:fill-current cpr:[fill-rule:evenodd]" viewBox="1.25 0.14 10.22 12.48" focusable="false"><g transform="translate(-97.367 -139.17)"><path transform="matrix(.23378 0 0 -.23378 50.654 216.38)" d="m219.89 325.53h14.261v2.3h-14.261zm0-16.189h14.261v2.3h-14.261zm-14.721 4.14h43.703v-12.881h-43.703zm14.721-18.029h14.261v-2.3h-14.261zm7.13-19.157 2.663 4.609 2.024 3.507h17.165v12.881h-43.703v-12.881h17.166l2.023-3.507zm-21.851 53.375h43.703v-12.881h-43.703z"/></g></svg></span>
       <span>Gniza backups</span>
     </a>
-    <nav class="cpr:tabs cpr:tabs-border cpr:self-stretch cpr:flex-nowrap cpr:overflow-x-auto cpr:max-md:order-3 cpr:max-md:w-full cpr:max-md:min-h-11" aria-label="Backup pages" data-usernav>
-      <a class="cpr:tab cpr:h-full cpr:font-medium cpr:whitespace-nowrap {{if eq .Nav "overview"}}cpr:tab-active{{end}}" href="index.live.php" {{if eq .Nav "overview"}}aria-current="page"{{end}}>Overview</a>
-      <a class="cpr:tab cpr:h-full cpr:font-medium cpr:whitespace-nowrap {{if eq .Nav "restore"}}cpr:tab-active{{end}}" href="browse.live.php" {{if eq .Nav "restore"}}aria-current="page"{{end}}>Restore &amp; download</a>
-      <a class="cpr:tab cpr:h-full cpr:font-medium cpr:whitespace-nowrap {{if eq .Nav "logs"}}cpr:tab-active{{end}}" href="logs.live.php" {{if eq .Nav "logs"}}aria-current="page"{{end}}>Logs</a>
+    <nav class="cpr:tabs cpr:tabs-border cpr:tabs-sm cpr:self-stretch cpr:flex-nowrap cpr:overflow-x-auto cpr:ml-2 cpr:max-md:order-3 cpr:max-md:w-full cpr:max-md:ml-0" aria-label="Backup pages" data-usernav>
+      <a class="cpr:tab cpr:whitespace-nowrap {{if eq .Nav "overview"}}cpr:tab-active{{end}}" href="index.live.php" {{if eq .Nav "overview"}}aria-current="page"{{end}}>Overview</a>
+      <a class="cpr:tab cpr:whitespace-nowrap {{if eq .Nav "restore"}}cpr:tab-active{{end}}" href="browse.live.php" {{if eq .Nav "restore"}}aria-current="page"{{end}}>Restore &amp; download</a>
+      <a class="cpr:tab cpr:whitespace-nowrap {{if eq .Nav "logs"}}cpr:tab-active{{end}}" href="logs.live.php" {{if eq .Nav "logs"}}aria-current="page"{{end}}>Logs</a>
     </nav>
-    <span class="cpr:badge cpr:badge-ghost cpr:badge-sm cpr:max-w-44 cpr:ml-auto cpr:overflow-hidden cpr:text-ellipsis cpr:whitespace-nowrap cpr:block cpr:font-mono cpr:text-xs cpr:text-base-content/70" title="Signed-in {{$.Panel}} account" data-user-account>{{.Data.Account}}</span>
+    <span class="cpr:badge cpr:badge-ghost cpr:badge-sm cpr:mono cpr:max-w-44 cpr:ml-auto cpr:overflow-hidden cpr:text-ellipsis cpr:whitespace-nowrap cpr:block" title="Signed-in {{$.Panel}} account" data-user-account>{{.Data.Account}}</span>
     <div class="cpr:join cpr:max-md:hidden" id="theme" hidden aria-label="Colour theme">
       <button type="button" class="cpr:btn cpr:btn-xs cpr:btn-square cpr:btn-ghost cpr:join-item cpr:aria-pressed:btn-active cpr:aria-pressed:btn-neutral" data-theme-choice="system" aria-pressed="false" aria-label="Use system theme" title="Match system">
         <svg class="cpr:size-3.5 cpr:fill-none cpr:stroke-current cpr:stroke-2" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M8 21h8"/></svg>
@@ -41,13 +41,13 @@
     </div>
   </header>
 
-  <main id="gniza-user-main" tabindex="-1" class="cpr:flex cpr:flex-col cpr:gap-5.5">
-    {{with .Flash}}<div class="cpr:alert cpr:alert-soft {{if eq .Kind "ok"}}cpr:alert-success{{else if eq .Kind "warn"}}cpr:alert-warning{{else}}cpr:alert-error{{end}} cpr:text-sm" role="status">
+  <main id="gniza-user-main" tabindex="-1" class="cpr:flex cpr:flex-col cpr:gap-4">
+    {{with .Flash}}<div class="cpr:alert cpr:alert-soft {{if eq .Kind "ok"}}cpr:alert-success{{else if eq .Kind "warn"}}cpr:alert-warning{{else}}cpr:alert-error{{end}}" role="status">
       <div>{{.Message}}</div>
     </div>{{end}}
     <div data-live="cpr-running">
     {{if .Running}}
-    <div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:text-sm" role="status" data-running="1">
+    <div class="cpr:alert cpr:alert-soft cpr:alert-info" role="status" data-running="1">
       <div class="cpr:min-w-0">
         {{template "runningnow" .Running}}
         <span class="cpr:hint cpr:block cpr:mt-1">This page keeps itself up to date while it runs.</span>

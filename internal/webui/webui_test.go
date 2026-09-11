@@ -2292,12 +2292,13 @@ func TestTablesCarrySortKeysOnCellsThatNeedThem(t *testing.T) {
 // across four lines. Where the backups are is one question — the
 // repository, the machine it sits on, and whether that machine answered —
 // so it is one column.
-// Five buttons per row read as five equally likely things to do, one of
-// which deletes the destination. Test stays out -- it is the one asked
-// again and again, and the one that creates a repository that has not
-// been created yet -- and the rest are behind a menu that still works
-// with no JavaScript, because every page here does.
-func TestDestinationRowKeepsOneButtonAndAMenu(t *testing.T) {
+// A destination is a card, and every action on it sits on the card: Test
+// first, because it is the one asked again and again and the one that
+// creates a repository that has not been created yet; Remove last and
+// quiet, because it is the one that should take a moment. Every action is
+// a form or a link that works with no JavaScript, because every page here
+// does.
+func TestDestinationCardCarriesItsActions(t *testing.T) {
 	client, _, engine := newUI(t)
 
 	if _, err := engine.Store().PutDestination(nodestore.Destination{
@@ -2307,29 +2308,27 @@ func TestDestinationRowKeepsOneButtonAndAMenu(t *testing.T) {
 	}
 
 	_, page := get(t, client, "/destinations")
-	if !strings.Contains(page, `<details class="cpr:dropdown cpr:dropdown-end" data-menu>`) {
-		t.Error("the row actions are not behind a menu")
+	// Test is the first action on the card, and the only plain one.
+	if !strings.Contains(page, `<button class="cpr:btn cpr:btn-xs">Test</button>`) {
+		t.Error("Test is not on the card")
 	}
-	if !strings.Contains(page, `aria-label="More actions for test"`) {
-		t.Error("the menu does not say whose actions it holds")
-	}
-	// Test is the one that stays out, as a button of its own on the row.
-	if !strings.Contains(page, `<button class="cpr:btn cpr:btn-sm cpr:btn-ghost">Test</button>`) {
-		t.Error("Test is not on the row")
-	}
-	// The rest are still reachable, and still carry their token.
+	// The rest are there too, and still carry their token.
 	for _, want := range []string{
-		`<a class="cpr:menu-item" href="?p=destinations&amp;edit=`,
+		`<a class="cpr:btn cpr:btn-xs cpr:btn-ghost" href="?p=destinations&amp;edit=`,
 		`data-dialog-title="Edit “test”"`,
 		`action="?p=destinations/delete"`,
 		`data-confirm="Remove this destination`,
+		`<button class="cpr:btn cpr:btn-xs cpr:btn-ghost cpr:text-error">Remove</button>`,
 	} {
 		if !strings.Contains(page, want) {
-			t.Errorf("the menu lost %q", want)
+			t.Errorf("the card lost %q", want)
 		}
 	}
 	if strings.Contains(page, `<button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline">Remove</button>`) {
-		t.Error("Remove is still a button on the row")
+		t.Error("Remove is drawn as loudly as the rest")
+	}
+	if strings.Contains(page, `<details class="cpr:dropdown cpr:dropdown-end" data-menu>`) {
+		t.Error("the actions are still behind a menu")
 	}
 }
 
@@ -2347,19 +2346,16 @@ func TestDestinationsKeepWhereTheBackupsAreInOneColumn(t *testing.T) {
 	}
 
 	_, page := get(t, client, "/destinations")
-	head := `<thead><tr><th>Name</th><th>Repository</th><th>Space</th>`
-	if !strings.Contains(page, head) {
-		t.Error("the destinations table still spreads one question over several columns")
-	}
-	for _, gone := range []string{"<th>Address</th>", "<th>State</th>"} {
+	// Where the backups are is one card: the repository, the machine it sits
+	// on, and whether that machine answered, with nothing spread over columns.
+	for _, gone := range []string{"<th>Address</th>", "<th>State</th>", "<th>Repository</th>"} {
 		if strings.Contains(page, gone) {
 			t.Errorf("%s is still its own column", gone)
 		}
 	}
-	// The content itself has to survive the move.
 	for _, want := range []string{"182.54.236.26", "Reachable", "checked"} {
 		if !strings.Contains(page, want) {
-			t.Errorf("merging the columns lost %q", want)
+			t.Errorf("the card does not say %q", want)
 		}
 	}
 }
@@ -2394,7 +2390,7 @@ func TestDestinationsShowTheRoomTheyHaveLeft(t *testing.T) {
 		}
 	}
 	// Nearly full reads as nearly full, not as a healthy bar.
-	if !strings.Contains(page, `<i class="cpr:block cpr:bg-error"`) {
+	if !strings.Contains(page, `<progress class="cpr:progress cpr:progress-error`) {
 		t.Error("a destination at 90% is not marked as one")
 	}
 }
@@ -2420,8 +2416,8 @@ func TestSeveralAccountsCanBeRestoredAtOnce(t *testing.T) {
 
 	_, page := get(t, client, "/restore")
 	for _, want := range []string{
-		`<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="account" value="gone1"`,
-		`<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="account" value="gone2"`,
+		`<input type="checkbox" class="cpr:checkbox cpr:checkbox-xs" name="account" value="gone1"`,
+		`<input type="checkbox" class="cpr:checkbox cpr:checkbox-xs" name="account" value="gone2"`,
 		`data-check-all`,
 		`action="?p=recover/accounts"`,
 		// One list, with the state on the row rather than in a tab.
@@ -2483,7 +2479,7 @@ func TestRestoreCarriesItsThreeViewsAsTabs(t *testing.T) {
 
 	_, account := get(t, client, "/restore")
 	for _, want := range []string{
-		`<nav class="cpr:tabs cpr:tabs-border cpr:mb-4" aria-label="Restore views">`,
+		`<nav class="cpr:tabs cpr:tabs-border cpr:tabs-sm cpr:mb-3" aria-label="Restore views">`,
 		`href="?p=restore" aria-current="page"`,
 		`href="?p=restore&amp;tab=server"`,
 		// The page restores accounts, one or several, and the third tab

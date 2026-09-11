@@ -10,7 +10,7 @@
 </div>
 
 {{with $data.Err}}
-<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm"><div>{{.}}</div></div>
+<div class="cpr:alert cpr:alert-soft cpr:alert-error"><div>{{.}}</div></div>
 {{end}}
 
 {{/* ---- destinations ---- */}}
@@ -25,9 +25,9 @@
         <td class="cpr:font-semibold">{{.Name}}<div class="cpr:sublabel">{{.TypeName}}</div></td>
         <td class="cpr:mono">{{.Endpoint}}</td>
         <td class="cpr:mono">{{.Repository.Path}}</td>
-        <td class="cpr:text-right"><div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
+        <td class="cpr:text-right"><div class="cpr:join cpr:justify-end">
           {{if .Repository.ID}}
-          <a class="cpr:btn cpr:btn-sm" href="?p=browse&amp;repository={{.Repository.ID}}">Open</a>
+          <a class="cpr:btn cpr:btn-xs cpr:join-item" href="?p=browse&amp;repository={{.Repository.ID}}">Open</a>
           {{else}}<span class="cpr:text-base-content/70">no repository yet</span>{{end}}
         </div></td>
       </tr>
@@ -35,7 +35,7 @@
     </tbody>
   </table></div>
   {{else}}
-  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p><b>No destination yet.</b><br>There is nothing stored to look at.</p></div>
+  <div class="cpr:px-4 cpr:py-6 cpr:text-center cpr:text-base-content/70"><p><b>No destination yet.</b><br>There is nothing stored to look at.</p></div>
   {{end}}
 </div>
 
@@ -48,7 +48,7 @@
   {{if $data.SystemBackup}}
   <div class="cpr:pad cpr:border-b cpr:border-base-300">
     <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3">
-      <span class="cpr:pill cpr:badge-success"><span class="cpr:dot"></span>Server settings</span>
+      <span class="cpr:pill cpr:badge-success">Server settings</span>
       <span class="cpr:hint cpr:mt-0">EasyApache, tweak settings, packages and the rest.</span>
       <span class="cpr:flex-1"></span>
       <a class="cpr:btn cpr:btn-sm" href="?p=browse&amp;repository={{$data.Repository}}&amp;account=%40system">Open</a>
@@ -62,17 +62,17 @@
       {{range $data.Accounts}}
       <tr>
         <td class="cpr:font-semibold">{{.Account}}</td>
-        <td class="cpr:tabular-nums">{{.Snapshots}}</td>
-        <td>{{stamp .Latest}}<div class="cpr:sublabel">{{ago .Latest}}</div></td>
-        <td class="cpr:text-right"><div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
-          <a class="cpr:btn cpr:btn-sm" href="?p=browse&amp;repository={{$data.Repository}}&amp;account={{.Account}}">Open</a>
+        <td class="cpr:mono">{{.Snapshots}}</td>
+        <td class="cpr:mono cpr:whitespace-nowrap">{{stamp .Latest}}<div class="cpr:sublabel">{{ago .Latest}}</div></td>
+        <td class="cpr:text-right"><div class="cpr:join cpr:justify-end">
+          <a class="cpr:btn cpr:btn-xs cpr:join-item" href="?p=browse&amp;repository={{$data.Repository}}&amp;account={{.Account}}">Open</a>
         </div></td>
       </tr>
       {{end}}
     </tbody>
   </table></div>
   {{else if not $data.Err}}
-  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p>Nothing has been backed up to this destination yet.</p></div>
+  <div class="cpr:px-4 cpr:py-6 cpr:text-center cpr:text-base-content/70"><p>Nothing has been backed up to this destination yet.</p></div>
   {{end}}
 </div>
 
@@ -88,27 +88,27 @@
     <tbody>
       {{range $data.Snapshots}}
       <tr>
-        <td>{{stamp .Time}}<div class="cpr:sublabel">{{ago .Time}}</div></td>
+        <td class="cpr:mono cpr:whitespace-nowrap">{{stamp .Time}}<div class="cpr:sublabel">{{ago .Time}}</div></td>
         <td class="cpr:mono cpr:tabular-nums">{{bytes .Summary.TotalBytesProcessed}}</td>
         <td class="cpr:mono cpr:tabular-nums">{{if .Summary.DataAdded}}{{bytes .Summary.DataAdded}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
         <td class="cpr:mono">{{short .ID}}</td>
-        <td class="cpr:text-right"><div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
-          <a class="cpr:btn cpr:btn-sm" href="?p=browse&amp;repository={{$data.Repository}}&amp;account={{$data.Account}}&amp;snapshot={{.ID}}">Look inside</a>
-          <a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=restore&amp;account={{$data.Account}}&amp;repository={{$data.Repository}}">Restore from it</a>
+        <td class="cpr:text-right"><div class="cpr:join cpr:justify-end">
+          <a class="cpr:btn cpr:btn-xs cpr:join-item" href="?p=browse&amp;repository={{$data.Repository}}&amp;account={{$data.Account}}&amp;snapshot={{.ID}}">Look inside</a>
+          <a class="cpr:btn cpr:btn-xs cpr:join-item cpr:btn-ghost" href="?p=restore&amp;account={{$data.Account}}&amp;repository={{$data.Repository}}">Restore from it</a>
         </div></td>
       </tr>
       {{end}}
     </tbody>
   </table></div>
   {{else if not $data.Err}}
-  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p>No backups of {{$data.Account}} in this destination.</p></div>
+  <div class="cpr:px-4 cpr:py-6 cpr:text-center cpr:text-base-content/70"><p>No backups of {{$data.Account}} in this destination.</p></div>
   {{end}}
 </div>
 
 {{/* ---- inside one backup ---- */}}
 {{else}}
 <div class="cpr:panel">
-  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-center cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
     <h2 class="cpr:section-title">{{$data.Account}} · {{short $data.Snapshot}}</h2>
     <span class="cpr:hint cpr:mt-0">taken {{stamp $data.SnapshotAt}}</span>
   </div>
@@ -129,15 +129,15 @@
           {{if .Dir}}<a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=browse&amp;repository={{$data.Repository}}&amp;account={{$data.Account}}&amp;snapshot={{$data.Snapshot}}&amp;path={{.Path}}">{{.Name}}/</a>
           {{else}}{{.Name}}{{end}}</td>
         <td class="cpr:mono cpr:tabular-nums">{{if .Size}}{{bytes .Size}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
-        <td class="cpr:text-right"><div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
-          <form method="post" action="?p=restore/items" class="cpr:inline-block cpr:align-middle">
+        <td class="cpr:text-right"><div class="cpr:join cpr:justify-end">
+          <form method="post" action="?p=restore/items" class="cpr:contents">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="account" value="{{$data.Account}}">
             <input type="hidden" name="repository" value="{{$data.Repository}}">
             <input type="hidden" name="snapshot" value="{{$data.Snapshot}}">
             <input type="hidden" name="item" value="files">
             <input type="hidden" name="name" value="{{.Path}}">
-            <button class="cpr:btn cpr:btn-sm">Restore this</button>
+            <button class="cpr:btn cpr:btn-xs cpr:join-item">Restore this</button>
           </form>
         </div></td>
       </tr>
@@ -149,7 +149,7 @@
     directory, with a download beside it in the restores log. Nothing is written back into the account.</p>
   </div>
   {{else if not $data.Err}}
-  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p>Nothing here.</p></div>
+  <div class="cpr:px-4 cpr:py-6 cpr:text-center cpr:text-base-content/70"><p>Nothing here.</p></div>
   {{end}}
 </div>
 {{end}}

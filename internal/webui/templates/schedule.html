@@ -17,20 +17,20 @@
         {{else}}<span class="cpr:mono">{{.ScheduleCron}}</span>{{end}}</td>
       <td>{{.Covers}}{{if .CoversDetail}}<div class="cpr:sublabel">{{.CoversDetail}}</div>{{end}}</td>
       <td>{{.Retention.KeepDaily}} daily · {{.Retention.KeepWeekly}} weekly · {{.Retention.KeepMonthly}} monthly</td>
-      <td>{{if .LastRunAt}}{{ago .LastRunAt}}{{else}}never{{end}}
+      <td class="cpr:mono">{{if .LastRunAt}}{{ago .LastRunAt}}{{else}}never{{end}}
         {{if .NextIn}}<div class="cpr:sublabel">{{.NextIn}}</div>{{end}}</td>
-      <td class="cpr:text-right"><div class="cpr:flex cpr:justify-end cpr:gap-2">
-        <form method="post" action="?p=schedule/run" class="cpr:inline-block cpr:align-middle">
+      <td class="cpr:text-right"><div class="cpr:join cpr:justify-end">
+        <form method="post" action="?p=schedule/run" class="cpr:contents">
           <input type="hidden" name="csrf" value="{{$.CSRF}}">
           <input type="hidden" name="id" value="{{.ID}}">
-          <button class="cpr:btn cpr:btn-sm cpr:btn-primary">Run now</button>
+          <button class="cpr:btn cpr:btn-xs cpr:join-item cpr:btn-primary">Run now</button>
         </form>
-        <a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=schedule&amp;edit={{.ID}}">Edit</a>
-        <form method="post" action="?p=schedule/delete" class="cpr:inline-block cpr:align-middle"
+        <a class="cpr:btn cpr:btn-xs cpr:join-item cpr:btn-ghost" href="?p=schedule&amp;edit={{.ID}}">Edit</a>
+        <form method="post" action="?p=schedule/delete" class="cpr:contents"
               data-confirm="Delete this schedule? Backups already taken are kept.">
           <input type="hidden" name="csrf" value="{{$.CSRF}}">
           <input type="hidden" name="id" value="{{.ID}}">
-          <button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline">Delete</button>
+          <button class="cpr:btn cpr:btn-xs cpr:join-item cpr:btn-ghost cpr:text-error">Delete</button>
         </form>
       </div></td>
     </tr>
@@ -38,7 +38,7 @@
     </tbody>
   </table></div>
   {{else}}
-  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p><b>No schedule yet.</b><br>Nothing is backed up automatically until you add one.</p></div>
+  <div class="cpr:px-4 cpr:py-6 cpr:text-center cpr:text-base-content/70"><p><b>No schedule yet.</b><br>Nothing is backed up automatically until you add one.</p></div>
   {{end}}
 </div>
 
@@ -56,12 +56,12 @@
     <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2">
       <div>
         <label class="cpr:field-label" for="name">Name</label>
-        <input type="text" class="cpr:input cpr:w-full" id="name" name="name" placeholder="Nightly" required
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="name" name="name" placeholder="Nightly" required
                value="{{with $data.Editing}}{{.Name}}{{end}}">
       </div>
       <div>
         <label class="cpr:field-label" for="cron">When (cron)</label>
-        <input type="text" class="cpr:input cpr:w-full" id="cron" name="cron" required
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="cron" name="cron" required
                value="{{if $data.Editing}}{{$data.Editing.ScheduleCron}}{{else}}0 2 * * *{{end}}">
         <small class="cpr:help">Five fields, server local time. <span class="cpr:mono">0 2 * * *</span> is 02:00 every day.</small>
       </div>
@@ -94,23 +94,23 @@
     <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
       <div>
         <label class="cpr:field-label" for="keep_daily">Keep daily</label>
-        <input type="number" class="cpr:input cpr:w-full" id="keep_daily" name="keep_daily" min="0"
+        <input type="number" class="cpr:input cpr:input-sm cpr:w-full" id="keep_daily" name="keep_daily" min="0"
                value="{{if $data.Editing}}{{$data.Editing.Retention.KeepDaily}}{{else}}7{{end}}">
       </div>
       <div>
         <label class="cpr:field-label" for="keep_weekly">Keep weekly</label>
-        <input type="number" class="cpr:input cpr:w-full" id="keep_weekly" name="keep_weekly" min="0"
+        <input type="number" class="cpr:input cpr:input-sm cpr:w-full" id="keep_weekly" name="keep_weekly" min="0"
                value="{{if $data.Editing}}{{$data.Editing.Retention.KeepWeekly}}{{else}}4{{end}}">
       </div>
       <div>
         <label class="cpr:field-label" for="keep_monthly">Keep monthly</label>
-        <input type="number" class="cpr:input cpr:w-full" id="keep_monthly" name="keep_monthly" min="0"
+        <input type="number" class="cpr:input cpr:input-sm cpr:w-full" id="keep_monthly" name="keep_monthly" min="0"
                value="{{if $data.Editing}}{{$data.Editing.Retention.KeepMonthly}}{{else}}6{{end}}">
       </div>
       <div>
         <label class="cpr:field-label" for="mode">Payload</label>
         {{$mode := "split"}}{{with $data.Editing}}{{$mode = .PayloadMode}}{{end}}
-        <select class="cpr:select cpr:w-full" id="mode" name="mode">
+        <select class="cpr:select cpr:select-sm cpr:w-full" id="mode" name="mode">
           <option value="split" {{if eq $mode "split"}}selected{{end}}>Split (recommended)</option>
           <option value="monolithic" {{if eq $mode "monolithic"}}selected{{end}}>Single archive</option>
         </select>
@@ -166,7 +166,7 @@
 
     <h2 class="cpr:section-title cpr:mt-6">Directories and files to exclude</h2>
     <label class="cpr:field-label cpr:mt-3" for="excludes">One path or pattern per line</label>
-    <textarea class="cpr:textarea cpr:w-full cpr:font-mono cpr:text-xs" id="excludes" name="excludes" rows="4" data-excludes
+    <textarea class="cpr:textarea cpr:textarea-sm cpr:w-full cpr:font-mono cpr:text-xs" id="excludes" name="excludes" rows="4" data-excludes
               placeholder="/home/*/public_html/wp-content/cache">{{with $edit}}{{join .Excludes "\n"}}{{end}}</textarea>
     <small class="cpr:help">restic's exclude patterns. A cache directory backed up nightly costs
     storage every night and is of no use in a restore.</small>
@@ -177,7 +177,7 @@
            entity here joins the patterns with its six characters
            instead: the escaper turns the ampersand into &amp;, and the
            operator gets one line with "&#10;" in it. */}}
-      <button type="button" class="cpr:btn cpr:btn-sm" data-exclude-preset="{{join $paths "\n"}}">{{$name}}</button>
+      <button type="button" class="cpr:btn cpr:btn-xs" data-exclude-preset="{{join $paths "\n"}}">{{$name}}</button>
       {{end}}
     </div>
 
@@ -192,13 +192,13 @@
     <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
       <div>
         <label class="cpr:field-label" for="alert_no_backup_days">Warn if an account has no backup for</label>
-        <input type="number" class="cpr:input cpr:w-full" id="alert_no_backup_days" name="alert_no_backup_days" min="0"
+        <input type="number" class="cpr:input cpr:input-sm cpr:w-full" id="alert_no_backup_days" name="alert_no_backup_days" min="0"
                value="{{with $edit}}{{.AlertNoBackupDays}}{{end}}" placeholder="two runs">
         <small class="cpr:help">Days. Empty follows this schedule: two runs missed.</small>
       </div>
       <div>
         <label class="cpr:field-label" for="alert_run_hours">Warn if a run takes longer than</label>
-        <input type="number" class="cpr:input cpr:w-full" id="alert_run_hours" name="alert_run_hours" min="0"
+        <input type="number" class="cpr:input cpr:input-sm cpr:w-full" id="alert_run_hours" name="alert_run_hours" min="0"
                value="{{with $edit}}{{.AlertRunHours}}{{end}}" placeholder="6">
         <small class="cpr:help">Hours. A run still going after this is stuck more often than slow.</small>
       </div>

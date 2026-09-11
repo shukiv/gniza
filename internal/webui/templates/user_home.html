@@ -1,36 +1,46 @@
 {{define "content"}}
 {{$data := .Data}}
-<section class="cpr:flex cpr:items-end cpr:justify-between cpr:gap-6 cpr:px-0.5 cpr:max-md:flex-col cpr:max-md:items-start" data-user-heading>
-  <div>
-    <p class="cpr:k cpr:text-primary cpr:mb-1">Account backup</p>
-    <h1 class="cpr:page-title cpr:text-[28px] cpr:max-md:text-2xl">Your recovery centre</h1>
-    <p class="cpr:page-sub">Browse restore points for <b>{{$data.Account}}</b>, put back what was lost, or download a copy.</p>
+{{/* The verdict first: whether this account has a backup to come back to,
+     in one sentence, with the one thing to do next beside it. */}}
+<section class="cpr:panel cpr:border-l-4 {{if $data.TotalPoints}}cpr:border-l-success{{else}}cpr:border-l-warning{{end}}" data-user-heading>
+  <div class="cpr:pad cpr:flex cpr:flex-col cpr:gap-3 cpr:md:flex-row cpr:md:items-center">
+    <div class="cpr:min-w-0 cpr:flex-1 cpr:flex cpr:flex-col cpr:gap-1">
+      <p class="cpr:k">{{if $data.TotalPoints}}Your account is protected{{else}}Account backup{{end}}</p>
+      {{if $data.TotalPoints}}
+      <h1 class="cpr:page-title">Last backup {{agoTime $data.Latest}}. {{$data.TotalPoints}} restore point{{if ne $data.TotalPoints 1}}s{{end}} to choose from.</h1>
+      <p class="cpr:text-base-content/70">Browse the restore points for <b class="cpr:text-base-content">{{$data.Account}}</b>, put back what was lost, or download a copy.</p>
+      {{else}}
+      <h1 class="cpr:page-title">No backup of your account is available yet.</h1>
+      <p class="cpr:text-base-content/70">Your host sets up where and when <b class="cpr:text-base-content">{{$data.Account}}</b> is backed up. Once one has run, its restore points appear here.</p>
+      {{end}}
+    </div>
+    {{if $data.TotalPoints}}<a class="cpr:btn cpr:btn-sm cpr:btn-primary cpr:shrink-0" href="browse.live.php">Choose a restore point</a>{{end}}
   </div>
-  {{if $data.TotalPoints}}<a class="cpr:btn cpr:btn-primary" href="browse.live.php">Choose a restore point</a>{{end}}
 </section>
 
 {{with $data.Err}}
-<div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:text-sm"><div>{{.}}</div></div>
+<div class="cpr:alert cpr:alert-soft cpr:alert-warning"><div>{{.}}</div></div>
 {{end}}
 
-<section class="cpr:grid cpr:gap-3.5 cpr:md:grid-cols-3" aria-label="Backup summary">
-  <div class="cpr:panel cpr:flex-row cpr:items-center cpr:gap-4 cpr:min-h-24 cpr:px-5 cpr:py-4">
-    <svg class="cpr:size-7.5 cpr:shrink-0 cpr:fill-none cpr:stroke-primary cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v12H4zM7 4h10v3M8 11h8M8 15h5"/></svg>
-    <div><span class="cpr:k cpr:block cpr:mb-0.5">Restore points</span><strong class="cpr:block cpr:text-[27px] cpr:font-bold cpr:tracking-tight cpr:leading-tight cpr:tabular-nums">{{$data.TotalPoints}}</strong></div>
+<section class="cpr:grid cpr:gap-3 cpr:sm:grid-cols-3" aria-label="Backup summary">
+  <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:rounded-box cpr:border cpr:border-base-300 cpr:bg-base-100 cpr:p-3">
+    <svg class="cpr:size-6 cpr:text-primary cpr:shrink-0 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/></svg>
+    <div><p class="cpr:text-lg cpr:font-semibold cpr:mono cpr:leading-tight">{{$data.TotalPoints}}</p><p class="cpr:text-xs cpr:text-base-content/60">restore points</p></div>
   </div>
-  <div class="cpr:panel cpr:flex-row cpr:items-center cpr:gap-4 cpr:min-h-24 cpr:px-5 cpr:py-4">
-    <svg class="cpr:size-7.5 cpr:shrink-0 cpr:fill-none cpr:stroke-primary cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-    <div><span class="cpr:k cpr:block cpr:mb-0.5">Latest backup</span><strong class="cpr:block cpr:text-[17px] cpr:font-bold">{{if $data.TotalPoints}}{{agoTime $data.Latest}}{{else}}Not available{{end}}</strong></div>
+  <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:rounded-box cpr:border cpr:border-base-300 cpr:bg-base-100 cpr:p-3">
+    <svg class="cpr:size-6 cpr:text-primary cpr:shrink-0 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+    <div><p class="cpr:text-lg cpr:font-semibold cpr:mono cpr:leading-tight">{{if $data.TotalPoints}}{{agoTime $data.Latest}}{{else}}—{{end}}</p><p class="cpr:text-xs cpr:text-base-content/60">latest backup</p></div>
   </div>
-  <div class="cpr:panel cpr:flex-row cpr:items-center cpr:gap-4 cpr:min-h-24 cpr:px-5 cpr:py-4">
-    <svg class="cpr:size-7.5 cpr:shrink-0 cpr:fill-none cpr:stroke-primary cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M8 11l4 4 4-4M5 19h14"/></svg>
-    <div><span class="cpr:k cpr:block cpr:mb-0.5">Ready to download</span><strong class="cpr:block cpr:text-[27px] cpr:font-bold cpr:tracking-tight cpr:leading-tight cpr:tabular-nums">{{$data.Ready}}</strong></div>
+  <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:rounded-box cpr:border cpr:border-base-300 cpr:bg-base-100 cpr:p-3">
+    <svg class="cpr:size-6 cpr:text-primary cpr:shrink-0 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+    <div><p class="cpr:text-lg cpr:font-semibold cpr:mono cpr:leading-tight">{{$data.Ready}}</p><p class="cpr:text-xs cpr:text-base-content/60">ready to download</p></div>
   </div>
 </section>
 
 <section class="cpr:panel">
-  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
-    <div><h2 class="cpr:text-[15px] cpr:font-semibold">Available restore points</h2><p class="cpr:hint">Your host controls the schedule and retention period.</p></div>
+  <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">Available restore points</h2>
+    <span class="cpr:text-xs cpr:text-base-content/60 cpr:ml-auto">Your host controls the schedule and retention period.</span>
   </div>
   {{if $data.Repositories}}
   <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
@@ -39,50 +49,46 @@
       {{range $data.Repositories}}
       <tr class="{{if .Snapshots}}cpr:stripe-ok{{else}}cpr:stripe-bad{{end}}">
         <td class="cpr:font-semibold">{{.Name}}</td>
-        <td class="cpr:tabular-nums">{{.Snapshots}}</td>
-        <td>{{if .Snapshots}}{{stamp .Latest}}<div class="cpr:sublabel">{{agoTime .Latest}}</div>{{else}}<span class="cpr:text-base-content/70">Nothing yet</span>{{end}}</td>
-        <td class="cpr:text-right"><div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
-          {{if .Snapshots}}<a class="cpr:btn cpr:btn-sm cpr:btn-primary" href="browse.live.php?repository={{.ID}}">Browse backups</a>{{end}}
+        <td class="cpr:mono">{{.Snapshots}}</td>
+        <td class="cpr:whitespace-nowrap">{{if .Snapshots}}<span class="cpr:mono">{{stamp .Latest}}</span><div class="cpr:sublabel">{{agoTime .Latest}}</div>{{else}}<span class="cpr:text-base-content/70">Nothing yet</span>{{end}}</td>
+        <td class="cpr:text-right cpr:whitespace-nowrap"><div class="cpr:join">
+          {{if .Snapshots}}<a class="cpr:btn cpr:btn-xs cpr:btn-primary cpr:join-item" href="browse.live.php?repository={{.ID}}">Browse backups</a>{{end}}
         </div></td>
       </tr>
       {{end}}
     </tbody>
   </table></div>
   {{else}}
-  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p><b>No backup destination is available yet.</b><br>Your host sets up where account backups are kept.</p></div>
+  <div class="cpr:px-4 cpr:py-6 cpr:text-center cpr:text-base-content/70"><p><b>No backup destination is available yet.</b><br>Your host sets up where account backups are kept.</p></div>
   {{end}}
 </section>
 
 <section class="cpr:panel">
-  <div class="cpr:pad cpr:border-b cpr:border-base-300">
-    <h2 class="cpr:text-[15px] cpr:font-semibold">Recovery activity</h2>
-    <p class="cpr:hint">Everything here belongs to this {{$.Panel}} account and nobody else can see it.</p>
+  <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">Recovery activity</h2>
+    <span class="cpr:text-xs cpr:text-base-content/60 cpr:ml-auto">Everything here belongs to this {{$.Panel}} account and nobody else can see it.</span>
   </div>
   {{if $data.Restores}}
-  <div class="cpr:overflow-x-auto" data-tablewrap data-live="user-restores"><table class="cpr:table cpr:table-sm">
-    <thead><tr><th>Requested</th><th>Contents</th><th>What was done</th><th>Status</th><th class="cpr:text-right"><span class="cpr:sr-only">Download</span></th></tr></thead>
-    <tbody>
-      {{range $data.Restores}}
-      <tr class="{{template "runstripe" .Status}}" {{if not .Status.Terminal}}data-running="1"{{end}}>
-        <td class="cpr:whitespace-nowrap">{{stamp .QueuedAt}}<div class="cpr:sublabel">{{agoTime .QueuedAt}}</div></td>
-        <td class="cpr:font-semibold">{{$data.RestoreTitle .}}</td>
-        <td>{{if .Apply}}Restore into the account{{else}}Copy to download{{end}}
-          {{if and .Applied .Detail}}<div class="cpr:sublabel">{{.Detail}}</div>{{end}}</td>
-        <td>{{template "runstate" .Status}}</td>
-        <td class="cpr:text-right"><div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
-          {{if .Collectable}}<a class="cpr:btn cpr:btn-sm cpr:btn-primary" href="download.live.php?id={{.ID}}">Download package</a>
-          {{else if .Applied}}<span class="cpr:sublabel">Nothing to download: it is in your account.</span>
-          {{else if .Error}}<span class="cpr:sublabel">{{.Error}}</span>{{end}}
-
-        </div></td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table></div>
+  <ul class="cpr:flex cpr:flex-col cpr:divide-y cpr:divide-base-300 cpr:px-4" data-live="user-restores">
+    {{range $data.Restores}}
+    {{$s := printf "%s" .Status}}
+    <li class="cpr:flex cpr:gap-3 cpr:py-2.5" {{if not .Status.Terminal}}data-running="1"{{end}}>
+      <span class="cpr:status {{if eq $s "success"}}cpr:status-success{{else if eq $s "failed"}}cpr:status-error{{else if eq $s "partial_success"}}cpr:status-warning{{else}}cpr:status-info{{end}} cpr:mt-1.5 cpr:shrink-0" aria-hidden="true"></span>
+      <span class="cpr:min-w-0 cpr:flex-1">
+        <span class="cpr:mono cpr:text-xs cpr:text-base-content/60">{{stamp .QueuedAt}} · {{agoTime .QueuedAt}}</span>
+        <span class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-2"><b>{{$data.RestoreTitle .}}</b> <span class="cpr:text-base-content/70">{{if .Apply}}restored into the account{{else}}copied to download{{end}}</span> {{template "runstate" .Status}}</span>
+        {{if and .Applied .Detail}}<span class="cpr:block cpr:text-xs cpr:text-base-content/70">{{.Detail}}</span>{{end}}
+        {{if .Collectable}}{{else if .Applied}}<span class="cpr:block cpr:text-xs cpr:text-base-content/60">Nothing to download: it is in your account.</span>
+        {{else if .Error}}<span class="cpr:block cpr:text-xs cpr:text-error">{{.Error}}</span>{{end}}
+      </span>
+      {{if .Collectable}}<a class="cpr:btn cpr:btn-xs cpr:btn-primary cpr:shrink-0 cpr:self-center" href="download.live.php?id={{.ID}}">Download package</a>{{end}}
+    </li>
+    {{end}}
+  </ul>
   {{else}}
-  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p>No recovery packages have been requested.</p></div>
+  <div class="cpr:px-4 cpr:py-6 cpr:text-center cpr:text-base-content/70"><p>No recovery packages have been requested.</p></div>
   {{end}}
-  <div class="cpr:pad cpr:flex cpr:items-start cpr:gap-3 cpr:border-t cpr:border-base-300 cpr:bg-base-200 cpr:text-[13px] cpr:text-base-content/70 cpr:rounded-b-box">
+  <div class="cpr:flex cpr:items-start cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-t cpr:border-base-300 cpr:bg-base-200 cpr:text-xs cpr:text-base-content/70 cpr:rounded-b-box">
     <svg class="cpr:size-5 cpr:shrink-0 cpr:fill-none cpr:stroke-success cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-2.9 8-7 10-4.1-2-7-5.4-7-10V6zM9 12l2 2 4-4"/></svg>
     <p><b class="cpr:text-base-content">You choose what happens.</b> Files, mail, databases and their users can be put straight
     back into the account, replacing what is there now. Everything else is prepared as a copy to

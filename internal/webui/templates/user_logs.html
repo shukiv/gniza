@@ -1,23 +1,23 @@
 {{define "content"}}
 {{$data := .Data}}
-<section class="cpr:flex cpr:items-end cpr:justify-between cpr:gap-6 cpr:px-0.5 cpr:max-md:flex-col cpr:max-md:items-start" data-user-heading>
-  <div>
-    <p class="cpr:k cpr:text-primary cpr:mb-1">Account backup</p>
-    <h1 class="cpr:page-title cpr:text-[28px] cpr:max-md:text-2xl">What has happened</h1>
+<section class="cpr:flex cpr:flex-wrap cpr:items-end cpr:gap-3" data-user-heading>
+  <div class="cpr:mr-auto">
+    <p class="cpr:k cpr:mb-1">Account backup</p>
+    <h1 class="cpr:page-title">What has happened</h1>
     <p class="cpr:page-sub">Every backup taken of <b>{{$data.Account}}</b>, and every recovery asked for
     from it. This is your account's own record and nobody else can see it.</p>
   </div>
-  {{if $data.TotalPoints}}<a class="cpr:btn" href="browse.live.php">Choose a restore point</a>{{end}}
+  {{if $data.TotalPoints}}<a class="cpr:btn cpr:btn-sm" href="browse.live.php">Choose a restore point</a>{{end}}
 </section>
 
 {{with $data.Err}}
-<div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:text-sm"><div>{{.}}</div></div>
+<div class="cpr:alert cpr:alert-soft cpr:alert-warning"><div>{{.}}</div></div>
 {{end}}
 
 <section class="cpr:panel">
-  <div class="cpr:pad cpr:border-b cpr:border-base-300">
-    <h2 class="cpr:text-[15px] cpr:font-semibold">Backups of your account</h2>
-    <p class="cpr:hint">Your host controls when these run and how long they are kept.</p>
+  <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">Backups of your account</h2>
+    <span class="cpr:text-xs cpr:text-base-content/60 cpr:ml-auto">Your host controls when these run and how long they are kept.</span>
   </div>
   {{if $data.Backups}}
   <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
@@ -25,7 +25,7 @@
     <tbody>
       {{range $data.Backups}}
       <tr class="{{if .Bad}}cpr:stripe-bad{{else if .Missing}}cpr:stripe-warn{{else}}cpr:stripe-ok{{end}}">
-        <td class="cpr:whitespace-nowrap">{{stamp .When}}<div class="cpr:sublabel">{{agoTime .When}}</div></td>
+        <td class="cpr:whitespace-nowrap"><span class="cpr:mono">{{stamp .When}}</span><div class="cpr:sublabel">{{agoTime .When}}</div></td>
         <td>{{.Outcome}}{{if .Kept}}<div class="cpr:sublabel">A restore point for the whole account.</div>{{end}}</td>
         <td>
           {{if .Missing}}
@@ -38,14 +38,14 @@
     </tbody>
   </table></div>
   {{else}}
-  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p><b>No backup has run for this account yet.</b><br>Your host sets the schedule.</p></div>
+  <div class="cpr:px-4 cpr:py-6 cpr:text-center cpr:text-base-content/70"><p><b>No backup has run for this account yet.</b><br>Your host sets the schedule.</p></div>
   {{end}}
 </section>
 
-<section class="cpr:panel cpr:mt-4">
-  <div class="cpr:pad cpr:border-b cpr:border-base-300">
-    <h2 class="cpr:text-[15px] cpr:font-semibold">Recovery activity</h2>
-    <p class="cpr:hint">What you asked to be put back or prepared for download.</p>
+<section class="cpr:panel">
+  <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">Recovery activity</h2>
+    <span class="cpr:text-xs cpr:text-base-content/60 cpr:ml-auto">What you asked to be put back or prepared for download.</span>
   </div>
   {{if $data.Restores}}
   <div class="cpr:overflow-x-auto" data-tablewrap data-live="user-restores"><table class="cpr:table cpr:table-sm">
@@ -53,22 +53,22 @@
     <tbody>
       {{range $data.Restores}}
       <tr class="{{template "runstripe" .Status}}" {{if not .Status.Terminal}}data-running="1"{{end}}>
-        <td class="cpr:whitespace-nowrap">{{stamp .QueuedAt}}<div class="cpr:sublabel">{{agoTime .QueuedAt}}</div></td>
+        <td class="cpr:whitespace-nowrap"><span class="cpr:mono">{{stamp .QueuedAt}}</span><div class="cpr:sublabel">{{agoTime .QueuedAt}}</div></td>
         <td class="cpr:font-semibold">{{$data.RestoreTitle .}}</td>
         <td>{{if .Apply}}Restore into the account{{else}}Copy to download{{end}}
           {{if and .Applied .Detail}}<div class="cpr:sublabel">{{.Detail}}</div>{{end}}</td>
         <td>{{template "runstate" .Status}}</td>
-        <td class="cpr:text-right"><div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
-          {{if .Collectable}}<a class="cpr:btn cpr:btn-sm cpr:btn-primary" href="download.live.php?id={{.ID}}">Download package</a>
+        <td class="cpr:text-right cpr:whitespace-nowrap">
+          {{if .Collectable}}<a class="cpr:btn cpr:btn-xs cpr:btn-primary" href="download.live.php?id={{.ID}}">Download package</a>
           {{else if .Applied}}<span class="cpr:sublabel">Nothing to download: it is in your account.</span>
-          {{else if .Error}}<span class="cpr:sublabel">{{.Error}}</span>{{end}}
-        </div></td>
+          {{else if .Error}}<span class="cpr:sublabel cpr:text-error">{{.Error}}</span>{{end}}
+        </td>
       </tr>
       {{end}}
     </tbody>
   </table></div>
   {{else}}
-  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p>No recovery has been asked for from this account.</p></div>
+  <div class="cpr:px-4 cpr:py-6 cpr:text-center cpr:text-base-content/70"><p>No recovery has been asked for from this account.</p></div>
   {{end}}
 </section>
 {{end}}

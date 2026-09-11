@@ -15,10 +15,84 @@
 @import "tailwindcss/utilities.css" layer(utilities) prefix(cpr);
 
 @plugin "daisyui" {
-  themes: light --default, dark --prefersdark;
+  /* The two themes below are Gniza's own; daisyUI's stock ones are off. */
+  themes: false;
   /* The document is the host's: nothing that paints :root, its scrollbar or
      its scroll gutter. color-scheme stays, so native controls follow the theme. */
   exclude: rootcolor, rootscrollgutter, rootscrolllock, scrollbar;
+}
+
+/* The themes, named `light` and `dark` so the switch in the rail, app.js and
+   the viewer's own `data-theme` stamp all keep working. Cool greys with a
+   blue bias, a marine-ink primary, teal as the accent; success, warning and
+   error stay their own colours so state never borrows the accent. Flat:
+   no depth, no noise, small radii. */
+@plugin "daisyui/theme" {
+  name: "light";
+  default: true;
+  color-scheme: light;
+  --color-base-100: #ffffff;
+  --color-base-200: #eef2f6;
+  --color-base-300: #d5dde7;
+  --color-base-content: #111c2b;
+  --color-primary: #1f3d5c;
+  --color-primary-content: #ffffff;
+  --color-secondary: #5a6b80;
+  --color-secondary-content: #ffffff;
+  --color-accent: #0e7c86;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1b2736;
+  --color-neutral-content: #eef2f6;
+  --color-info: #1d4ed8;
+  --color-info-content: #ffffff;
+  --color-success: #15803d;
+  --color-success-content: #ffffff;
+  --color-warning: #b45309;
+  --color-warning-content: #ffffff;
+  --color-error: #b91c1c;
+  --color-error-content: #ffffff;
+  --radius-selector: 0.375rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@plugin "daisyui/theme" {
+  name: "dark";
+  prefersdark: true;
+  color-scheme: dark;
+  --color-base-100: #151b24;
+  --color-base-200: #0e131a;
+  --color-base-300: #28323f;
+  --color-base-content: #e4eaf2;
+  --color-primary: #8fb8e8;
+  --color-primary-content: #0b1726;
+  --color-secondary: #9aabbf;
+  --color-secondary-content: #0b1220;
+  --color-accent: #4fc1c9;
+  --color-accent-content: #04262a;
+  --color-neutral: #232d3a;
+  --color-neutral-content: #e4eaf2;
+  --color-info: #7aa2f7;
+  --color-info-content: #061029;
+  --color-success: #4ade80;
+  --color-success-content: #05240f;
+  --color-warning: #fbbf24;
+  --color-warning-content: #2a1a00;
+  --color-error: #f87171;
+  --color-error-content: #2b0606;
+  --radius-selector: 0.375rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
 }
 
 @source "../templates/*.html";
@@ -42,7 +116,7 @@
    component and utility wins. What Tailwind's preflight would do, scoped. */
 @layer gniza {
   .gniza {
-    font-family: var(--cpr-font-sans); font-size: 0.875rem; line-height: 1.5;
+    font-family: var(--cpr-font-sans); font-size: 13px; line-height: 1.45;
     color: var(--color-base-content); -webkit-font-smoothing: antialiased;
     box-sizing: border-box;
   }
@@ -84,41 +158,48 @@
 /* ---- project utilities (rendered as cpr:<name>) ------------------------ */
 
 /* Surfaces */
-@utility panel { @apply cpr:card cpr:bg-base-100 cpr:border cpr:border-base-300 cpr:shadow-sm; }
-@utility pad { @apply cpr:px-6 cpr:py-4; }
+@utility panel { @apply cpr:card cpr:bg-base-100 cpr:border cpr:border-base-300; }
+@utility pad { @apply cpr:px-4 cpr:py-3; }
 
 /* Type */
-@utility page-title { @apply cpr:text-2xl cpr:font-semibold cpr:tracking-tight cpr:text-balance; }
-@utility page-sub { @apply cpr:text-sm cpr:text-base-content/70 cpr:mt-1; }
-@utility section-title { @apply cpr:text-xs cpr:font-semibold cpr:uppercase cpr:tracking-wider cpr:text-base-content/60; }
-@utility hint { @apply cpr:text-[13px] cpr:text-base-content/70 cpr:mt-2; }
+@utility page-title { @apply cpr:text-xl cpr:font-semibold cpr:leading-tight cpr:text-balance; }
+@utility page-sub { @apply cpr:text-base-content/70 cpr:mt-0.5; }
+@utility section-title { @apply cpr:font-semibold; }
+@utility hint { @apply cpr:text-xs cpr:text-base-content/70 cpr:mt-2; }
 @utility help { @apply cpr:block cpr:text-xs cpr:text-base-content/65 cpr:mt-1; }
 @utility sublabel { @apply cpr:text-xs cpr:text-base-content/60 cpr:mt-px; }
-@utility k { @apply cpr:text-[11px] cpr:font-semibold cpr:uppercase cpr:tracking-widest cpr:text-base-content/55; }
-@utility n { @apply cpr:text-2xl cpr:font-bold cpr:tracking-tight cpr:leading-tight cpr:tabular-nums; }
-@utility mono { @apply cpr:font-mono cpr:text-[0.85em]; }
+@utility k { @apply cpr:text-[11px] cpr:font-semibold cpr:uppercase cpr:tracking-[0.08em] cpr:text-base-content/60; }
+@utility n { @apply cpr:text-2xl cpr:font-semibold cpr:font-mono cpr:leading-tight cpr:tabular-nums; }
+@utility mono { @apply cpr:font-mono cpr:tabular-nums cpr:text-[0.92em]; }
 @utility log { @apply cpr:bg-base-200 cpr:border cpr:border-base-300 cpr:rounded-box cpr:p-3 cpr:font-mono cpr:text-xs cpr:leading-relaxed cpr:whitespace-pre-wrap cpr:break-words cpr:max-h-52 cpr:overflow-auto cpr:text-base-content/75; }
 @utility logbox { @apply cpr:bg-base-200 cpr:border cpr:border-base-300 cpr:rounded-box cpr:p-3 cpr:font-mono cpr:text-xs cpr:leading-relaxed cpr:whitespace-pre cpr:max-h-[60vh] cpr:overflow-auto; tab-size: 4; }
 
 /* State */
-@utility pill { @apply cpr:badge cpr:badge-soft cpr:badge-sm cpr:gap-1.5 cpr:whitespace-nowrap cpr:font-medium; }
+@utility pill { @apply cpr:badge cpr:badge-soft cpr:badge-sm cpr:gap-1.5 cpr:whitespace-nowrap cpr:font-medium cpr:text-xs; }
 @utility dot { @apply cpr:inline-block cpr:size-1.5 cpr:rounded-full cpr:bg-current cpr:shrink-0; }
 @utility wait { @apply cpr:inline-block cpr:size-2.5 cpr:rounded-full cpr:border-[1.5px] cpr:border-current cpr:opacity-45 cpr:shrink-0; }
 @utility runline { @apply cpr:flex cpr:items-center cpr:gap-2 cpr:font-medium; }
 /* Severity on a row's leading edge, readable without colour alone: an
    inset shadow on the first cell, because a border on a <tr> only paints
    with collapsed borders and daisyUI's table keeps them separate. */
-@utility stripe-ok { & > :first-child { box-shadow: inset 4px 0 0 var(--color-success); } }
-@utility stripe-warn { & > :first-child { box-shadow: inset 4px 0 0 var(--color-warning); } }
-@utility stripe-bad { & > :first-child { box-shadow: inset 4px 0 0 var(--color-error); } }
+@utility stripe-ok { & > :first-child { box-shadow: inset 3px 0 0 var(--color-success); } }
+@utility stripe-warn { & > :first-child { box-shadow: inset 3px 0 0 var(--color-warning); } }
+@utility stripe-bad { & > :first-child { box-shadow: inset 3px 0 0 var(--color-error); } }
+@utility stripe-run { & > :first-child { box-shadow: inset 3px 0 0 var(--color-info); } }
+/* The same lead on a block that is not a table row. */
+@utility lead { @apply cpr:relative cpr:pl-3; &::before { content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 3px; border-radius: 2px; background: var(--lead, var(--color-base-300)); } }
+@utility lead-ok { --lead: var(--color-success); }
+@utility lead-warn { --lead: var(--color-warning); }
+@utility lead-bad { --lead: var(--color-error); }
+@utility lead-run { --lead: var(--color-info); }
 @utility row-gone { @apply cpr:bg-base-200/70 cpr:text-base-content/70; }
 
 /* Controls */
-@utility field-label { @apply cpr:block cpr:text-sm cpr:font-medium cpr:mb-1; }
+@utility field-label { @apply cpr:block cpr:text-xs cpr:font-semibold cpr:mb-1; }
 @utility check { @apply cpr:flex cpr:items-start cpr:gap-2 cpr:my-3 cpr:text-sm cpr:font-normal cpr:cursor-pointer; }
 @utility chip {
-  @apply cpr:btn cpr:btn-sm cpr:btn-outline cpr:rounded-full cpr:font-medium cpr:border-base-300 cpr:text-base-content/70;
-  &[aria-pressed="true"] { @apply cpr:btn-primary cpr:btn-soft cpr:border-primary; }
+  @apply cpr:btn cpr:btn-xs cpr:join-item cpr:font-medium;
+  &[aria-pressed="true"] { @apply cpr:btn-active; }
 }
 @utility sortbtn { @apply cpr:flex cpr:w-full cpr:min-h-8 cpr:items-center cpr:gap-1.5 cpr:cursor-pointer cpr:text-left; font: inherit; letter-spacing: inherit; text-transform: inherit; }
 @utility skip { @apply cpr:sr-only cpr:focus:not-sr-only cpr:focus:fixed cpr:focus:top-2 cpr:focus:left-2 cpr:focus:z-[1000] cpr:focus:btn cpr:focus:btn-neutral cpr:focus:btn-sm; }
@@ -126,7 +207,7 @@
 /* Row menu: a details element that works with no script; app.js pins the
    open panel to the viewport so no scroll container clips it. */
 @utility menu-panel { @apply cpr:flex cpr:flex-col cpr:gap-0.5 cpr:min-w-44 cpr:mt-1.5 cpr:p-1 cpr:bg-base-100 cpr:border cpr:border-base-300 cpr:rounded-box cpr:shadow-md cpr:text-left cpr:z-30; }
-@utility menu-item { @apply cpr:flex cpr:w-full cpr:min-h-9 cpr:items-center cpr:rounded-field cpr:px-2.5 cpr:text-sm cpr:text-left cpr:whitespace-nowrap cpr:cursor-pointer cpr:hover:bg-base-200; }
+@utility menu-item { @apply cpr:flex cpr:w-full cpr:min-h-8 cpr:items-center cpr:rounded-field cpr:px-2.5 cpr:text-left cpr:whitespace-nowrap cpr:cursor-pointer cpr:hover:bg-base-200; }
 
 /* A fold: one summary line with a chevron that turns when it is open. */
 @utility fold {
@@ -136,7 +217,7 @@
 }
 
 /* Side sheet: a modal-box that fills the right edge. */
-@utility sheet { @apply cpr:h-full cpr:max-h-none cpr:w-[min(520px,94vw)] cpr:max-w-none cpr:rounded-none cpr:p-0 cpr:flex cpr:flex-col cpr:border-l cpr:border-base-300; }
+@utility sheet { @apply cpr:h-full cpr:max-h-none cpr:w-[min(560px,calc(100vw-2rem))] cpr:max-w-none cpr:rounded-none cpr:p-0 cpr:flex cpr:flex-col cpr:border-l cpr:border-base-300; }
 
 /* ---- last word ---------------------------------------------------------- */
 

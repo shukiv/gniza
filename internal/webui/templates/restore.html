@@ -14,7 +14,7 @@
     <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2">
       <div>
         <label class="cpr:field-label" for="account">Account</label>
-        <select class="cpr:select cpr:w-full" id="account" name="account" onchange="this.form.submit()">
+        <select class="cpr:select cpr:select-sm cpr:w-full" id="account" name="account" onchange="this.form.submit()">
           <option value="">Choose an account…</option>
           <optgroup label="On this server">
             {{range $data.Accounts}}
@@ -38,7 +38,7 @@
       </div>
       <div>
         <label class="cpr:field-label" for="repository">Restore from</label>
-        <select class="cpr:select cpr:w-full" id="repository" name="repository" onchange="this.form.submit()">
+        <select class="cpr:select cpr:select-sm cpr:w-full" id="repository" name="repository" onchange="this.form.submit()">
           {{range $data.Repositories}}
             {{if .Repository.InitialisedAt}}
             <option value="{{.Repository.ID}}" {{if eq .Repository.ID $data.RepositoryID}}selected{{end}}>{{.Name}}</option>
@@ -53,7 +53,7 @@
 </div>
 
 {{if $data.AccountDeleted}}
-<div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:text-sm">
+<div class="cpr:alert cpr:alert-soft cpr:alert-warning">
   <div>
     <strong>{{$data.Account}} is not on this server any more.</strong>
     Its backups are still here. Restoring the whole account hands the archive to {{$.Panel}}'s own
@@ -66,7 +66,7 @@
 {{if eq $data.Tab "account"}}
 {{if $data.Forgetting}}
 <div class="cpr:panel"><div class="cpr:pad">
-    <div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm cpr:items-start"><div class="cpr:min-w-0">
+    <div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:items-start"><div class="cpr:min-w-0">
       <strong>Forget {{$data.Forgetting}}?</strong>
       <p class="cpr:mt-2">This deletes every backup of {{$data.Forgetting}} from every
       destination, and this server's record that the account ever existed — its backup and restore
@@ -87,13 +87,13 @@
 {{end}}
 
 {{if $data.ContentsErr}}
-<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm"><div>Could not read that destination: {{$data.ContentsErr}}
+<div class="cpr:alert cpr:alert-soft cpr:alert-error"><div>Could not read that destination: {{$data.ContentsErr}}
 {{if $data.Contents}} What follows is what this server remembers, which is less than the
 destination knows.{{end}}</div></div>
 {{end}}
 {{if $data.Contents}}
 <div class="cpr:panel">
-  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-center cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
     <h2 class="cpr:section-title">Accounts in this destination</h2>
     <span class="cpr:hint cpr:mt-0">Read from the backups themselves, so it includes
     accounts this server no longer has &mdash; those rows are shaded and say so.</span>
@@ -103,20 +103,20 @@ destination knows.{{end}}</div></div>
     <input type="hidden" name="repository" value="{{$data.RepositoryID}}">
     <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-sortable>
       <thead><tr>
-        <th class="cpr:w-8" data-nosort><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-check-all
+        <th class="cpr:w-8" data-nosort><input type="checkbox" class="cpr:checkbox cpr:checkbox-xs" data-check-all
           aria-label="Choose every account here"></th>
         <th>Account</th><th>Backups</th><th>Most recent</th>
         <th class="cpr:text-right" data-nosort>&nbsp;</th></tr></thead>
       <tbody>
         {{range $data.Contents}}
         <tr {{if .Gone}}class="cpr:row-gone"{{end}}>
-          <td><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="account" value="{{.Account}}"
+          <td><input type="checkbox" class="cpr:checkbox cpr:checkbox-xs" name="account" value="{{.Account}}"
             aria-label="Choose {{.Account}}"></td>
           <td class="cpr:font-semibold">{{.Account}}
-            {{if .Gone}}<span class="cpr:pill cpr:badge-ghost" title="{{if eq .State "deleted"}}Removed from this server. Its backups are still here.{{else}}This server has never had this account: its backups were made by another server writing to the same destination.{{end}}"><span class="cpr:dot"></span>{{.StateTitle}}</span>{{end}}</td>
-          <td class="cpr:tabular-nums">{{if .Snapshots}}{{.Snapshots}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
-          <td data-sort="{{unix .Latest}}">{{stamp .Latest}}<div class="cpr:sublabel">{{ago .Latest}}</div></td>
-          <td class="cpr:text-right">{{if eq .State "deleted"}}<a class="cpr:btn cpr:btn-sm cpr:btn-ghost"
+            {{if .Gone}}<span class="cpr:pill cpr:badge-ghost" title="{{if eq .State "deleted"}}Removed from this server. Its backups are still here.{{else}}This server has never had this account: its backups were made by another server writing to the same destination.{{end}}">{{.StateTitle}}</span>{{end}}</td>
+          <td class="cpr:mono">{{if .Snapshots}}{{.Snapshots}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
+          <td class="cpr:mono cpr:whitespace-nowrap" data-sort="{{unix .Latest}}">{{stamp .Latest}}<div class="cpr:sublabel">{{ago .Latest}}</div></td>
+          <td class="cpr:text-right">{{if eq .State "deleted"}}<a class="cpr:btn cpr:btn-xs cpr:btn-ghost"
             href="?p=restore&amp;forget={{.Account}}">Forget…</a>{{end}}</td>
         </tr>
         {{end}}
@@ -146,7 +146,7 @@ destination knows.{{end}}</div></div>
 {{end}}
 
 {{if $data.LookupError}}
-<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm"><div>Could not read that destination: {{$data.LookupError}}</div></div>
+<div class="cpr:alert cpr:alert-soft cpr:alert-error"><div>Could not read that destination: {{$data.LookupError}}</div></div>
 {{end}}
 
 {{if $data.Account}}
@@ -171,13 +171,13 @@ destination knows.{{end}}</div></div>
            parameters of its own. */}}
       {{range $index, $snapshot := $data.Snapshots}}
       <tr>
-        <td><input type="radio" class="cpr:radio cpr:radio-sm" name="snapshot" value="{{$snapshot.ID}}"
+        <td><input type="radio" class="cpr:radio cpr:radio-xs" name="snapshot" value="{{$snapshot.ID}}"
           {{if $data.FileSnapshot}}{{if eq $snapshot.ID $data.FileSnapshot}}checked{{end}}
           {{else if eq $index 0}}checked{{end}}></td>
-        <td>{{stamp $snapshot.Time}}</td>
-        <td>{{bytes $snapshot.Summary.TotalBytesProcessed}}</td>
+        <td class="cpr:mono cpr:whitespace-nowrap">{{stamp $snapshot.Time}}</td>
+        <td class="cpr:mono">{{bytes $snapshot.Summary.TotalBytesProcessed}}</td>
         <td class="cpr:mono">{{short $snapshot.ID}}</td>
-        <td class="cpr:text-right"><a class="cpr:btn cpr:btn-sm cpr:btn-ghost"
+        <td class="cpr:text-right"><a class="cpr:btn cpr:btn-xs cpr:btn-ghost"
           href="?p=restore&amp;account={{$data.Account}}&amp;repository={{$data.RepositoryID}}&amp;files={{$snapshot.ID}}">Pick files from it</a></td>
       </tr>
       {{end}}
@@ -187,19 +187,19 @@ destination knows.{{end}}</div></div>
     <h2 class="cpr:section-title cpr:mt-6 cpr:mb-3">What to restore</h2>
 
     {{if $data.FileErr}}
-    <div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm"><div>{{$data.FileErr}}</div></div>
+    <div class="cpr:alert cpr:alert-soft cpr:alert-error"><div>{{$data.FileErr}}</div></div>
     {{end}}
 
     {{if $data.FileEntries}}
 
-    <div class="cpr:panel cpr:shadow-none cpr:mb-4">
-      <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
-        <span class="cpr:mono cpr:text-[13px]">{{$data.FilePath}}</span>
+    <div class="cpr:panel cpr:mb-4">
+      <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-center cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+        <span class="cpr:mono cpr:text-xs">{{$data.FilePath}}</span>
         <span class="cpr:hint cpr:mt-0"><span data-chosen-count>0</span> chosen</span>
       </div>
       <div class="cpr:overflow-auto cpr:max-h-[340px]" data-tablewrap><table class="cpr:table cpr:table-sm">
         <thead><tr>
-          <th class="cpr:w-8"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-choose-all aria-label="Choose everything here"></th>
+          <th class="cpr:w-8"><input type="checkbox" class="cpr:checkbox cpr:checkbox-xs" data-choose-all aria-label="Choose everything here"></th>
           <th>Name</th><th>Size</th><th class="cpr:text-right">&nbsp;</th>
         </tr></thead>
         <tbody>
@@ -209,7 +209,7 @@ destination knows.{{end}}</div></div>
           {{end}}
           {{range $data.FileEntries}}
           <tr>
-            <td><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-choose="{{.Path}}" aria-label="Choose {{.Name}}"></td>
+            <td><input type="checkbox" class="cpr:checkbox cpr:checkbox-xs" data-choose="{{.Path}}" aria-label="Choose {{.Name}}"></td>
             <td class="cpr:font-semibold">
               {{if .Dir}}<a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=restore&amp;account={{$data.Account}}&amp;repository={{$data.RepositoryID}}&amp;files={{$data.FileSnapshot}}&amp;path={{.Path}}">{{.Name}}/</a>
               {{else}}{{.Name}}{{end}}</td>
@@ -229,14 +229,14 @@ destination knows.{{end}}</div></div>
 
     <label class="cpr:field-label cpr:mt-4" for="paths">Files and folders to restore{{if not $data.FileEntries}}
       <span class="cpr:text-base-content/70 cpr:font-normal">(one path per line)</span>{{end}}</label>
-    <textarea class="cpr:textarea cpr:w-full cpr:font-mono cpr:text-xs" id="paths" name="paths" rows="4" data-chosen-paths
+    <textarea class="cpr:textarea cpr:textarea-sm cpr:w-full cpr:font-mono cpr:text-xs" id="paths" name="paths" rows="4" data-chosen-paths
               data-chosen-key="{{$data.Account}}:{{$data.FileSnapshot}}"
               placeholder="/home/{{$data.Account}}/public_html/index.php"></textarea>
     <small class="cpr:help">Leave empty to rebuild the whole account.{{if not $data.FileEntries}}
       Choose a backup above and press <b>Pick files from it</b> to browse what is in there.{{end}}</small>
 
     <label class="cpr:field-label cpr:mt-4" for="target">Put recovered files in</label>
-    <input type="text" class="cpr:input cpr:w-full" id="target" name="target" placeholder="/root/recovered">
+    <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="target" name="target" placeholder="/root/recovered">
     <small class="cpr:help">Only used when restoring specific files. They keep their original paths inside it.</small>
 
     <h2 class="cpr:section-title cpr:mt-6">Whole-account restore</h2>
@@ -302,7 +302,7 @@ destination knows.{{end}}</div></div>
         <tbody>
           {{range $data.BasketRows}}
           <tr>
-            <td class="cpr:font-semibold">{{.Title}}{{if not .Applies}} <span class="cpr:pill cpr:badge-warning"><span class="cpr:dot"></span>copy only</span>{{end}}</td>
+            <td class="cpr:font-semibold">{{.Title}}{{if not .Applies}} <span class="cpr:pill cpr:badge-warning">copy only</span>{{end}}</td>
             <td>{{if .Names}}{{range $i, $name := .Names}}{{if $i}}, {{end}}{{$name}}{{end}}{{else}}<span class="cpr:text-base-content/70">all of them</span>{{end}}</td>
             <td class="cpr:text-right">
               <form method="post" action="?p=restore/items" class="cpr:inline-block cpr:align-middle">
@@ -311,7 +311,7 @@ destination knows.{{end}}</div></div>
                 <input type="hidden" name="repository" value="{{$data.RepositoryID}}">
                 <input type="hidden" name="snapshot" value="{{$data.SnapshotID}}">
                 <input type="hidden" name="item" value="{{.Kind}}">
-                <button class="cpr:btn cpr:btn-sm" name="action" value="remove">Remove</button>
+                <button class="cpr:btn cpr:btn-xs" name="action" value="remove">Remove</button>
               </form>
             </td>
           </tr>
@@ -341,7 +341,7 @@ destination knows.{{end}}</div></div>
     </div>
     {{end}}
 
-    <div class="cpr:flex cpr:flex-wrap cpr:gap-2">
+    <div class="cpr:join cpr:flex-wrap">
       {{range $data.Kinds}}
       <a class="cpr:chip" aria-pressed="{{if $data.Selected .}}true{{else}}false{{end}}"
          href="?p=restore&amp;account={{$data.Account}}&amp;repository={{$data.RepositoryID}}&amp;snapshot={{$data.SnapshotID}}&amp;item={{.}}">{{$data.KindTitle .}}</a>
@@ -365,7 +365,7 @@ destination knows.{{end}}</div></div>
     </div>
 
     {{if $data.BrowseErr}}
-    <div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm cpr:mt-4">
+    <div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:mt-4">
       <div>{{$data.BrowseErr}}</div>
     </div>
     {{else if $data.Entries}}
@@ -383,17 +383,17 @@ destination knows.{{end}}</div></div>
               href="?p=restore&amp;account={{$data.Account}}&amp;repository={{$data.RepositoryID}}&amp;snapshot={{$data.SnapshotID}}&amp;item={{$data.Kind}}&amp;path={{.Path}}">{{.Name}}/</a>
             {{else}}{{.Name}}{{end}}</td>
           <td class="cpr:mono cpr:tabular-nums">{{if .Size}}{{bytes .Size}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
-          <td class="cpr:text-right">{{if .Item}}<div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
-            <form method="post" action="?p=restore/items" class="cpr:inline-block cpr:align-middle">
+          <td class="cpr:text-right">{{if .Item}}<div class="cpr:join cpr:justify-end">
+            <form method="post" action="?p=restore/items" class="cpr:contents">
               <input type="hidden" name="csrf" value="{{$.CSRF}}">
               <input type="hidden" name="account" value="{{$data.Account}}">
               <input type="hidden" name="repository" value="{{$data.RepositoryID}}">
               <input type="hidden" name="snapshot" value="{{$data.SnapshotID}}">
               <input type="hidden" name="item" value="{{$data.Kind}}">
               <input type="hidden" name="name" value="{{.Item}}">
-              <button class="cpr:btn cpr:btn-sm" name="action" value="append" title="Choose it now, restore it with the rest">Add to basket</button>
-              <button class="cpr:btn cpr:btn-sm">Copy it out</button>
-              {{if $data.Kind.CanApply}}<button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline" name="apply" value="1"
+              <button class="cpr:btn cpr:btn-xs cpr:join-item" name="action" value="append" title="Choose it now, restore it with the rest">Add to basket</button>
+              <button class="cpr:btn cpr:btn-xs cpr:join-item">Copy it out</button>
+              {{if $data.Kind.CanApply}}<button class="cpr:btn cpr:btn-xs cpr:join-item cpr:btn-ghost cpr:text-error" name="apply" value="1"
                 title="Replaces this in the live account">Put it back…</button>{{end}}
             </form>
           </div>{{end}}</td>
@@ -413,13 +413,13 @@ destination knows.{{end}}</div></div>
       {{if $data.Items}}
       <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
         <thead><tr>
-          {{if $data.PicksItems}}<th class="cpr:w-px"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-checkall hidden aria-label="Select everything listed"><span class="cpr:sr-only">Select</span></th>{{end}}
+          {{if $data.PicksItems}}<th class="cpr:w-px"><input type="checkbox" class="cpr:checkbox cpr:checkbox-xs" data-checkall hidden aria-label="Select everything listed"><span class="cpr:sr-only">Select</span></th>{{end}}
           <th>In this backup</th><th>Detail</th>
         </tr></thead>
         <tbody>
           {{range $data.Items}}
           <tr>
-            {{if $data.PicksItems}}<td>{{if .Name}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="name" value="{{.Name}}" aria-label="Select {{.Label}}">{{end}}</td>{{end}}
+            {{if $data.PicksItems}}<td>{{if .Name}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-xs" name="name" value="{{.Name}}" aria-label="Select {{.Label}}">{{end}}</td>{{end}}
             <td class="cpr:font-semibold">{{.Label}}</td>
             <td class="cpr:sublabel">{{if .Detail}}{{.Detail}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
           </tr>

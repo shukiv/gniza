@@ -15,34 +15,34 @@
     <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2">
       <div>
         <label class="cpr:field-label" for="hostname">This server's name</label>
-        <input type="text" class="cpr:input cpr:w-full" id="hostname" name="hostname" value="{{$data.Settings.Hostname}}">
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="hostname" name="hostname" value="{{$data.Settings.Hostname}}">
         <small class="cpr:help">Recorded on every backup, so you can tell whose it is.</small>
       </div>
       <div>
         <label class="cpr:field-label" for="max_concurrent">Accounts backed up at once</label>
-        <input type="number" class="cpr:input cpr:w-full" id="max_concurrent" name="max_concurrent"
+        <input type="number" class="cpr:input cpr:input-sm cpr:w-full" id="max_concurrent" name="max_concurrent"
                value="{{$data.Settings.MaxConcurrent}}" min="1">
         <small class="cpr:help">Each one needs staging space of about its own size.</small>
       </div>
       <div>
         <label class="cpr:field-label" for="restic">restic binary</label>
-        <input type="text" class="cpr:input cpr:w-full" id="restic" name="restic" value="{{$data.Settings.ResticBinary}}">
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="restic" name="restic" value="{{$data.Settings.ResticBinary}}">
       </div>
       <div>
         <label class="cpr:field-label" for="restic_cacert">Extra CA bundle for restic</label>
-        <input type="text" class="cpr:input cpr:w-full" id="restic_cacert" name="restic_cacert" value="{{$data.Settings.ResticCACert}}">
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="restic_cacert" name="restic_cacert" value="{{$data.Settings.ResticCACert}}">
         <small class="cpr:help">Only for a backup server with a private certificate authority.</small>
       </div>
       <div>
         <label class="cpr:field-label" for="keep_output_days">Keep restored files for</label>
-        <input type="number" class="cpr:input cpr:w-full" id="keep_output_days" name="keep_output_days"
+        <input type="number" class="cpr:input cpr:input-sm cpr:w-full" id="keep_output_days" name="keep_output_days"
                value="{{$data.KeepDays}}" min="-1">
         <small class="cpr:help">Days. A restore leaves its files here to be collected;
         after this they are swept. −1 keeps them until you delete them.</small>
       </div>
       <div>
         <label class="cpr:field-label" for="log_level">Log level</label>
-        <select class="cpr:select cpr:w-full" id="log_level" name="log_level">
+        <select class="cpr:select cpr:select-sm cpr:w-full" id="log_level" name="log_level">
           {{range $data.LogLevels}}<option value="{{.}}" {{if eq . $data.Settings.LogLevel}}selected{{end}}>{{.}}</option>{{end}}
         </select>
         <small class="cpr:help">How much the service writes to its own log, readable under
@@ -52,7 +52,7 @@
       </div>
       <div>
         <label class="cpr:field-label" for="deleted_account_days">Keep a deleted account's backups for</label>
-        <select class="cpr:select cpr:w-full" id="deleted_account_days" name="deleted_account_days">
+        <select class="cpr:select cpr:select-sm cpr:w-full" id="deleted_account_days" name="deleted_account_days">
           <option value="-1" {{if eq $data.DeletedPreset "-1"}}selected{{end}}>Until I remove them</option>
           <option value="30" {{if eq $data.DeletedPreset "30"}}selected{{end}}>30 days</option>
           <option value="90" {{if eq $data.DeletedPreset "90"}}selected{{end}}>90 days</option>
@@ -60,7 +60,7 @@
           <option value="365" {{if eq $data.DeletedPreset "365"}}selected{{end}}>A year</option>
           <option value="custom" {{if eq $data.DeletedPreset "custom"}}selected{{end}}>Some other number of days…</option>
         </select>
-        <input type="number" class="cpr:input cpr:w-full cpr:mt-2" name="deleted_account_days_custom" min="1"
+        <input type="number" class="cpr:input cpr:input-sm cpr:w-full cpr:mt-2" name="deleted_account_days_custom" min="1"
                aria-label="Days to keep a deleted account's backups"
                value="{{$data.DeletedDays}}">
         <small class="cpr:help">When a {{$.Panel}} account has been gone this long, its backups are
@@ -114,7 +114,7 @@
 {{$update := $data.Update}}
 {{if eq $tab "version"}}
 <div class="cpr:panel">
-  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-center cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
     <div>
       <h2 class="cpr:section-title">This copy of Gniza</h2>
       <p class="cpr:hint cpr:mt-1" data-live="gniza-version">Version
@@ -127,13 +127,13 @@
   </div>
   <div class="cpr:pad" data-live="upgrade">
     {{if $update.Installing}}
-    <div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:text-sm" role="status" data-running="1"><div>
+    <div class="cpr:alert cpr:alert-soft cpr:alert-warning" role="status" data-running="1"><div>
       <b>{{$update.Stage}}.</b>
       <span class="cpr:hint cpr:block cpr:mt-1">This page keeps itself
       current, including over the restart. Nothing else on this server is stopped.</span>
     </div></div>
     {{else if $update.Failed}}
-    <div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm"><div class="cpr:min-w-0">
+    <div class="cpr:alert cpr:alert-soft cpr:alert-error"><div class="cpr:min-w-0">
       <b>{{$update.Upgrade.Version}} was not installed.</b> {{$update.Upgrade.Error}}
       This server still runs {{$update.Running}} and nothing was changed.
       {{with $update.Upgrade.Log}}<div class="cpr:log cpr:mt-2">{{.}}</div>{{end}}
@@ -143,7 +143,7 @@
       </form>
     </div></div>
     {{else if $update.Installed}}
-    <div class="cpr:alert cpr:alert-soft cpr:alert-success cpr:text-sm"><div>
+    <div class="cpr:alert cpr:alert-soft cpr:alert-success"><div>
       <b>{{$update.Upgrade.Version}} is installed.</b> It was {{$update.Upgrade.From}} before.
       <form method="post" action="?p=settings/update/dismiss" class="cpr:mt-2">
         <input type="hidden" name="csrf" value="{{$.CSRF}}">
@@ -215,7 +215,7 @@
      it stops. This is how the server speaks first. */}}
 {{if eq $tab "alerts"}}
 <div class="cpr:panel">
-  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-center cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
     <div>
       <h2 class="cpr:section-title">Where problems are reported</h2>
       <p class="cpr:hint cpr:mt-1">A backup that fails quietly is the same
@@ -249,20 +249,20 @@
           {{else if .LastSent}}{{stamp .LastSent}}<div class="cpr:sublabel">{{ago .LastSent}}</div>
           {{else}}<span class="cpr:hint cpr:mt-0">Nothing sent yet</span>{{end}}
         </td>
-        <td class="cpr:text-right"><div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
-          <form method="post" action="?p=settings/channels/test" class="cpr:inline-block cpr:align-middle">
+        <td class="cpr:text-right"><div class="cpr:join cpr:justify-end">
+          <form method="post" action="?p=settings/channels/test" class="cpr:contents">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="id" value="{{.ID}}">
-            <button class="cpr:btn cpr:btn-sm">Send a test</button>
+            <button class="cpr:btn cpr:btn-xs cpr:join-item">Send a test</button>
           </form>
-          <a class="cpr:btn cpr:btn-sm" href="?p=settings&amp;channel={{.ID}}"
+          <a class="cpr:btn cpr:btn-xs cpr:join-item" href="?p=settings&amp;channel={{.ID}}"
              data-dialog="add-channel" data-dialog-fetch
              data-dialog-title="Edit &ldquo;{{.Name}}&rdquo;">Edit</a>
-          <form method="post" action="?p=settings/channels/delete" class="cpr:inline-block cpr:align-middle"
+          <form method="post" action="?p=settings/channels/delete" class="cpr:contents"
                 data-confirm="Remove this channel? Nothing will be sent there.">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="id" value="{{.ID}}">
-            <button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline">Remove</button>
+            <button class="cpr:btn cpr:btn-xs cpr:join-item cpr:btn-ghost cpr:text-error">Remove</button>
           </form>
         </div></td>
       </tr>
@@ -270,7 +270,7 @@
     </tbody>
   </table></div>
   {{else}}
-  <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70">
+  <div class="cpr:px-4 cpr:py-6 cpr:text-center cpr:text-base-content/70">
     <p class="cpr:mb-4"><b>Nothing is being told.</b><br>If a backup fails tonight, this page is the only place
     it will say so.</p>
     <a class="cpr:btn cpr:btn-sm cpr:btn-primary" href="?p=settings&amp;addchannel=1"
@@ -281,7 +281,7 @@
 
 {{if $data.Editing}}
 <div class="cpr:panel">
-  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-center cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
     <h2 class="cpr:section-title">Edit &ldquo;{{$data.Editing.Name}}&rdquo;</h2>
     <a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=settings">Cancel</a>
   </div>
@@ -289,7 +289,7 @@
 </div>
 {{else if $data.Adding}}
 <div class="cpr:panel">
-  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-center cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
     <h2 class="cpr:section-title">Add a channel</h2>
     <a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=settings">Cancel</a>
   </div>
@@ -298,11 +298,11 @@
 {{else}}
 <dialog id="add-channel" class="cpr:modal cpr:modal-end" data-sheet aria-label="Add a channel">
   <div class="cpr:modal-box cpr:sheet">
-    <div class="cpr:flex cpr:items-center cpr:justify-between cpr:gap-3 cpr:px-6 cpr:py-4 cpr:border-b cpr:border-base-300 cpr:shrink-0">
+    <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-5 cpr:py-4 cpr:border-b cpr:border-base-300 cpr:shrink-0">
       <h2 class="cpr:text-lg cpr:font-semibold" data-drawer-title>Add a channel</h2>
-      <button type="button" class="cpr:btn cpr:btn-sm cpr:btn-ghost cpr:btn-square" data-dialog-close aria-label="Close">&#10005;</button>
+      <button type="button" class="cpr:btn cpr:btn-sm cpr:btn-ghost cpr:btn-square cpr:ml-auto" data-dialog-close aria-label="Close"><svg class="cpr:size-4 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
-    <div class="cpr:p-6 cpr:overflow-auto cpr:grow" data-drawer-body>
+    <div class="cpr:flex-1 cpr:overflow-y-auto cpr:px-5 cpr:py-4" data-drawer-body>
       {{template "channelform" .}}
     </div>
   </div>
@@ -323,7 +323,7 @@
 </div>
 
 <div class="cpr:panel">
-  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-center cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
     <h2 class="cpr:section-title">Restored files waiting to be collected</h2>
     <span class="cpr:hint cpr:mt-0">{{bytes $data.OutputBytes}} in <span class="cpr:mono">{{$data.Settings.StagingRoot}}</span></span>
   </div>
@@ -335,20 +335,20 @@
       <tr>
         <td class="cpr:font-semibold">{{.Key}}</td>
         <td class="cpr:mono cpr:tabular-nums">{{bytes .Bytes}}</td>
-        <td>{{stamp .At}}<div class="cpr:sublabel">{{ago .At}}</div></td>
-        <td class="cpr:text-right"><div class="cpr:flex cpr:flex-wrap cpr:justify-end cpr:gap-2">
-          <form method="post" action="?p=settings/output/delete" class="cpr:inline-block cpr:align-middle"
+        <td class="cpr:mono cpr:whitespace-nowrap">{{stamp .At}}<div class="cpr:sublabel">{{ago .At}}</div></td>
+        <td class="cpr:text-right"><div class="cpr:join cpr:justify-end">
+          <form method="post" action="?p=settings/output/delete" class="cpr:contents"
                 data-confirm="Delete these restored files? The backups they came from are untouched.">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="key" value="{{.Key}}">
-            <button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline">Delete</button>
+            <button class="cpr:btn cpr:btn-xs cpr:join-item cpr:btn-ghost cpr:text-error">Delete</button>
           </form>
         </div></td>
       </tr>
       {{end}}
     </tbody>
   </table></div>
-  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-t cpr:border-base-300">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-center cpr:justify-between cpr:gap-3 cpr:border-t cpr:border-base-300">
     <p class="cpr:hint cpr:mt-0">A restore leaves what it recovered here so you can
     collect it. Deleting it here removes only the recovered copy.</p>
     <form method="post" action="?p=settings/output/clear" class="cpr:inline-block cpr:align-middle"
@@ -394,7 +394,7 @@
   </table></div>
   <div class="cpr:pad cpr:border-t cpr:border-base-300">
     {{if $data.Monolithic}}
-    <div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:text-sm"><div>
+    <div class="cpr:alert cpr:alert-soft cpr:alert-warning"><div>
       {{$data.Monolithic}} schedule{{if ne $data.Monolithic 1}}s{{end}} use the single-archive
       payload, which stores a full copy of the account every night. Split is the default and
       costs a fraction of it.
@@ -412,7 +412,7 @@
   {{if $data.Settings.PkgacctFlags}}
   <div class="cpr:pad cpr:border-t cpr:border-base-300">
     <details>
-      <summary class="cpr:cursor-pointer cpr:py-2 cpr:text-[13px] cpr:text-primary cpr:link-hover">How Gniza gets pkgacct to do that</summary>
+      <summary class="cpr:fold cpr:text-xs cpr:text-primary">How Gniza gets pkgacct to do that</summary>
       <p class="cpr:hint">Flag names have moved between cPanel
       releases, so they are probed when the service starts rather than assumed. Each one asks
       pkgacct to leave a part out of <em>its</em> archive, because Gniza is storing that part
@@ -424,7 +424,7 @@
         <tr>
           <td class="cpr:font-semibold">{{$name}}</td>
           <td class="cpr:mono">{{$flag}}</td>
-          <td class="cpr:text-[13px] cpr:text-base-content/70">{{pkgacctMeaning $name}}</td>
+          <td class="cpr:text-xs cpr:text-base-content/70">{{pkgacctMeaning $name}}</td>
         </tr>
         {{end}}
         </tbody>
@@ -476,7 +476,7 @@
 {{$data := .Data}}
 {{$editing := $data.Editing}}
 {{with $data.FormError}}
-<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm cpr:mb-4"><div>{{.}}</div></div>
+<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:mb-4"><div>{{.}}</div></div>
 {{end}}
 <form method="post" action="?p=settings/channels/save">
   <input type="hidden" name="csrf" value="{{.CSRF}}">
@@ -484,18 +484,18 @@
   <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2">
     <div>
       <label class="cpr:field-label" for="channel_name">Name</label>
-      <input type="text" class="cpr:input cpr:w-full" id="channel_name" name="name" required
+      <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="channel_name" name="name" required
              placeholder="On call, Ops channel, &hellip;" value="{{$data.Field "name"}}">
       <small class="cpr:help">Yours, so you can tell two of them apart.</small>
     </div>
     <div>
       <label class="cpr:field-label" for="kind">How to reach you</label>
       {{if $editing}}
-      <input type="text" class="cpr:input cpr:w-full" value="{{kindTitle $editing.Kind}}" disabled>
+      <input type="text" class="cpr:input cpr:input-sm cpr:w-full" value="{{kindTitle $editing.Kind}}" disabled>
       <input type="hidden" name="kind" value="{{$editing.Kind}}">
       <small class="cpr:help">A channel's type cannot change. Remove it and add a new one instead.</small>
       {{else}}
-      <select class="cpr:select cpr:w-full" id="kind" name="kind" data-type-toggle>
+      <select class="cpr:select cpr:select-sm cpr:w-full" id="kind" name="kind" data-type-toggle>
         {{range $data.Kinds}}
         <option value="{{.}}" {{if eq (printf "%s" .) $data.Kind}}selected{{end}}>{{.Title}}</option>
         {{end}}
@@ -508,31 +508,31 @@
     <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
       <div>
         <label class="cpr:field-label" for="host">Mail server</label>
-        <input type="text" class="cpr:input cpr:w-full" id="host" name="host" placeholder="smtp.example.com" value="{{$data.Field "host"}}">
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="host" name="host" placeholder="smtp.example.com" value="{{$data.Field "host"}}">
       </div>
       <div>
         <label class="cpr:field-label" for="port">Port</label>
-        <input type="text" class="cpr:input cpr:w-full" id="port" name="port" placeholder="587" value="{{$data.Field "port"}}">
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="port" name="port" placeholder="587" value="{{$data.Field "port"}}">
         <small class="cpr:help">587 for STARTTLS, 465 for TLS, 25 for a local relay.</small>
       </div>
       <div>
         <label class="cpr:field-label" for="from">From</label>
-        <input type="text" class="cpr:input cpr:w-full" id="from" name="from" placeholder="gniza@example.com" value="{{$data.Field "from"}}">
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="from" name="from" placeholder="gniza@example.com" value="{{$data.Field "from"}}">
       </div>
       <div>
         <label class="cpr:field-label" for="to">To</label>
-        <input type="text" class="cpr:input cpr:w-full" id="to" name="to" placeholder="ops@example.com" value="{{$data.Field "to"}}">
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="to" name="to" placeholder="ops@example.com" value="{{$data.Field "to"}}">
         <small class="cpr:help">Several addresses, separated by commas, if more than one person
         should know.</small>
       </div>
       <div>
         <label class="cpr:field-label" for="username">Username</label>
-        <input type="text" class="cpr:input cpr:w-full" id="username" name="username" autocomplete="off" value="{{$data.Field "username"}}">
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="username" name="username" autocomplete="off" value="{{$data.Field "username"}}">
         <small class="cpr:help">Leave both blank for a relay that does not ask.</small>
       </div>
       <div>
         <label class="cpr:field-label" for="password">Password</label>
-        <input type="password" class="cpr:input cpr:w-full" id="password" name="password" autocomplete="new-password">
+        <input type="password" class="cpr:input cpr:input-sm cpr:w-full" id="password" name="password" autocomplete="new-password">
         {{if $editing}}<small class="cpr:help">Blank leaves the stored one alone.</small>
         {{else}}<small class="cpr:help">Sent only over an encrypted connection; Gniza will not
         hand it to a server that refuses one.</small>{{end}}
@@ -544,18 +544,18 @@
     <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
       <div>
         <label class="cpr:field-label" for="topic">Topic</label>
-        <input type="text" class="cpr:input cpr:w-full" id="topic" name="topic" placeholder="my-server-backups" value="{{$data.Field "topic"}}">
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="topic" name="topic" placeholder="my-server-backups" value="{{$data.Field "topic"}}">
         <small class="cpr:help">Anyone who knows a topic on the public server can read it.
         Choose one nobody would guess.</small>
       </div>
       <div>
         <label class="cpr:field-label" for="server">Server</label>
-        <input type="text" class="cpr:input cpr:w-full" id="server" name="server" placeholder="https://ntfy.sh" value="{{$data.Field "server"}}">
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="server" name="server" placeholder="https://ntfy.sh" value="{{$data.Field "server"}}">
         <small class="cpr:help">Blank uses ntfy.sh. Put your own here if you run one.</small>
       </div>
       <div>
         <label class="cpr:field-label" for="ntfy_token">Access token</label>
-        <input type="password" class="cpr:input cpr:w-full" id="ntfy_token" name="token" autocomplete="new-password">
+        <input type="password" class="cpr:input cpr:input-sm cpr:w-full" id="ntfy_token" name="token" autocomplete="new-password">
         <small class="cpr:help">{{if $editing}}Blank leaves the stored one alone. {{end}}Only for
         a topic that is protected.</small>
       </div>
@@ -566,13 +566,13 @@
     <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
       <div>
         <label class="cpr:field-label" for="telegram_token">Bot token</label>
-        <input type="password" class="cpr:input cpr:w-full" id="telegram_token" name="token" autocomplete="new-password">
+        <input type="password" class="cpr:input cpr:input-sm cpr:w-full" id="telegram_token" name="token" autocomplete="new-password">
         <small class="cpr:help">{{if $editing}}Blank leaves the stored one alone. {{end}}From
         BotFather, in the form <span class="cpr:mono">123456:ABC-DEF&hellip;</span></small>
       </div>
       <div>
         <label class="cpr:field-label" for="chat_id">Chat</label>
-        <input type="text" class="cpr:input cpr:w-full" id="chat_id" name="chat_id" placeholder="-1001234567890" value="{{$data.Field "chat_id"}}">
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="chat_id" name="chat_id" placeholder="-1001234567890" value="{{$data.Field "chat_id"}}">
         <small class="cpr:help">The chat the bot should write in. Message the bot once first,
         or it cannot start the conversation.</small>
       </div>
@@ -583,13 +583,13 @@
     <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
       <div>
         <label class="cpr:field-label" for="url">URL</label>
-        <input type="text" class="cpr:input cpr:w-full" id="url" name="url" placeholder="https://hooks.slack.com/services/&hellip;" value="{{$data.Field "url"}}">
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="url" name="url" placeholder="https://hooks.slack.com/services/&hellip;" value="{{$data.Field "url"}}">
         <small class="cpr:help">A Slack or Discord incoming webhook works as it is; anything
         else receives the same JSON.</small>
       </div>
       <div>
         <label class="cpr:field-label" for="webhook_token">Bearer token</label>
-        <input type="password" class="cpr:input cpr:w-full" id="webhook_token" name="token" autocomplete="new-password">
+        <input type="password" class="cpr:input cpr:input-sm cpr:w-full" id="webhook_token" name="token" autocomplete="new-password">
         <small class="cpr:help">{{if $editing}}Blank leaves the stored one alone. {{end}}Sent as
         an Authorization header, for an endpoint that wants one.</small>
       </div>

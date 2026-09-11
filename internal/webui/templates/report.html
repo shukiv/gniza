@@ -2,7 +2,7 @@
 {{$data := .Data}}
 <div>
   <h1 class="cpr:page-title">Report a problem</h1>
-  <p class="cpr:hint">What went wrong, in your words. <b>File it</b> opens
+  <p class="cpr:page-sub">What went wrong, in your words. <b>File it</b> opens
   <a class="cpr:link cpr:link-primary cpr:link-hover" href="{{$data.ReportURL}}" target="_blank" rel="noopener noreferrer">{{$data.ReportURL}}</a>
   in a new tab with the whole report already in the form — what you typed and what this server
   knows — and you press the tracker's own button to send it. Nothing leaves this server on its
@@ -11,7 +11,7 @@
 </div>
 
 {{if $data.Error}}
-<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm" role="alert"><div>{{$data.Error}}</div></div>
+<div class="cpr:alert cpr:alert-soft cpr:alert-error" role="alert"><div>{{$data.Error}}</div></div>
 {{end}}
 
 <div class="cpr:panel">
@@ -24,12 +24,12 @@
     <div class="cpr:pad cpr:grid cpr:gap-4">
       <div>
         <label class="cpr:field-label" for="report_subject">Subject</label>
-        <input type="text" class="cpr:input cpr:w-full" id="report_subject" name="subject" required maxlength="200"
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="report_subject" name="subject" required maxlength="200"
                value="{{$data.Subject}}" placeholder="What went wrong, in a line">
       </div>
       <div>
         <label class="cpr:field-label" for="report_body">What happened</label>
-        <textarea class="cpr:textarea cpr:w-full cpr:leading-relaxed cpr:resize-y" id="report_body" name="body" rows="8" required maxlength="20000"
+        <textarea class="cpr:textarea cpr:textarea-sm cpr:w-full cpr:leading-relaxed cpr:resize-y" id="report_body" name="body" rows="8" required maxlength="20000"
                   placeholder="What you did, what you expected, what happened instead.">{{$data.Body}}</textarea>
         <small class="cpr:help">Filed with it: versions, this server's recent failures, its
         settings without credentials, and the last 200 lines the service logged, cut down to what
@@ -50,13 +50,13 @@
 
 {{if $data.Preview}}
 <div class="cpr:panel cpr:mt-4">
-  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-center cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
     <h2 class="cpr:section-title">The report</h2>
     <button class="cpr:btn cpr:btn-sm cpr:btn-primary" type="submit" name="file" value="1"
             form="report-form" formtarget="_blank">File it</button>
   </div>
   <div class="cpr:pad">
-    <textarea rows="18" readonly class="cpr:textarea cpr:w-full cpr:font-mono cpr:text-xs" aria-label="The whole report">{{$data.Preview}}</textarea>
+    <textarea rows="18" readonly class="cpr:textarea cpr:textarea-sm cpr:w-full cpr:font-mono cpr:text-xs" aria-label="The whole report">{{$data.Preview}}</textarea>
     <small class="cpr:help">This is what <b>File it</b> carries, uncut. A long log is trimmed to
     fit in a link, so attach this file to the issue when the log matters.</small>
   </div>

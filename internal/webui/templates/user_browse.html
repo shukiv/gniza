@@ -1,36 +1,36 @@
 {{define "content"}}
 {{$data := .Data}}
-<section class="cpr:flex cpr:items-end cpr:justify-between cpr:gap-6 cpr:px-0.5 cpr:max-md:flex-col cpr:max-md:items-start" data-user-heading>
-  <div>
-    <div class="cpr:text-sm cpr:text-base-content/70 cpr:mb-2 cpr:flex cpr:items-center cpr:gap-1.5"><a class="cpr:link cpr:link-primary cpr:link-hover" href="index.live.php">Overview</a><span aria-hidden="true">›</span><span>Restore &amp; download</span></div>
-    <h1 class="cpr:page-title cpr:text-[28px] cpr:max-md:text-2xl">Restore &amp; download</h1>
+<section class="cpr:flex cpr:flex-wrap cpr:items-end cpr:gap-3" data-user-heading>
+  <div class="cpr:mr-auto">
+    <div class="cpr:text-xs cpr:text-base-content/70 cpr:mb-1 cpr:flex cpr:items-center cpr:gap-1.5"><a class="cpr:link cpr:link-primary cpr:link-hover" href="index.live.php">Overview</a><span aria-hidden="true">›</span><span>Restore &amp; download</span></div>
+    <h1 class="cpr:page-title">Restore &amp; download</h1>
     <p class="cpr:page-sub">Choose a restore point, then choose what to put back or download.</p>
   </div>
 </section>
 
 {{with $data.Err}}
-<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm" role="alert"><div>{{.}}</div></div>
+<div class="cpr:alert cpr:alert-soft cpr:alert-error" role="alert"><div>{{.}}</div></div>
 {{end}}
 
 {{if $data.Snapshots}}
 <section class="cpr:panel" data-restore-point>
   <div class="cpr:pad">
-    <form method="get" class="cpr:grid cpr:items-end cpr:gap-5.5 cpr:md:grid-cols-[minmax(250px,420px)_minmax(180px,1fr)_auto]">
+    <form method="get" class="cpr:grid cpr:items-end cpr:gap-4 cpr:md:grid-cols-[minmax(250px,420px)_minmax(180px,1fr)_auto]">
       <input type="hidden" name="repository" value="{{$data.Repository}}">
       {{if $data.Kind}}<input type="hidden" name="item" value="{{$data.Kind}}">{{end}}
       <div>
         <label class="cpr:field-label" for="snapshot">Restore point</label>
-        <select class="cpr:select cpr:w-full cpr:min-h-10" id="snapshot" name="snapshot" onchange="this.form.submit()">
+        <select class="cpr:select cpr:select-sm cpr:w-full cpr:mono" id="snapshot" name="snapshot" onchange="this.form.submit()">
           {{range $data.Snapshots}}
           <option value="{{.ID}}" {{if eq .ID $data.Snapshot}}selected{{end}}>{{stamp .Time}} · {{agoTime .Time}}</option>
           {{end}}
         </select>
       </div>
-      <div class="cpr:flex cpr:min-h-10 cpr:flex-col cpr:justify-center cpr:md:ps-5.5 cpr:md:border-s cpr:md:border-base-300">
-        <span class="cpr:k cpr:text-[10px]">Selected backup</span>
-        <strong class="cpr:text-sm">{{stamp $data.SnapshotAt}}</strong>
+      <div class="cpr:flex cpr:min-h-8 cpr:flex-col cpr:justify-center cpr:md:ps-4 cpr:md:border-s cpr:md:border-base-300">
+        <span class="cpr:k">Selected backup</span>
+        <strong class="cpr:mono">{{stamp $data.SnapshotAt}}</strong>
       </div>
-      <noscript><button class="cpr:btn cpr:btn-sm" type="submit">Show restore point</button></noscript>
+      <noscript><button class="cpr:btn cpr:btn-sm cpr:btn-primary" type="submit">Show restore point</button></noscript>
     </form>
   </div>
 </section>
@@ -38,8 +38,8 @@
 {{if not $data.Basket.Empty}}
 <section class="cpr:panel cpr:overflow-hidden" aria-labelledby="basket-title" data-recovery-panel>
   <div class="cpr:pad cpr:border-b cpr:border-base-300">
-    <p class="cpr:k cpr:text-primary cpr:mb-1">Your recovery basket</p>
-    <h2 id="basket-title" class="cpr:text-[15px] cpr:font-semibold">{{$data.BasketCount}} chosen from the backup taken {{stamp $data.SnapshotAt}}</h2>
+    <p class="cpr:k cpr:mb-1">Your recovery basket</p>
+    <h2 id="basket-title" class="cpr:section-title">{{$data.BasketCount}} chosen from the backup taken {{stamp $data.SnapshotAt}}</h2>
     <p class="cpr:hint">These come back in one go, so a database and the users that open it
     arrive together rather than one after the other.</p>
   </div>
@@ -48,15 +48,15 @@
     <tbody>
       {{range $data.BasketRows}}
       <tr>
-        <td class="cpr:font-semibold">{{.Title}}{{if not .Applies}} <span class="cpr:pill cpr:badge-warning"><span class="cpr:dot"></span>download only</span>{{end}}</td>
+        <td class="cpr:font-semibold">{{.Title}}{{if not .Applies}} <span class="cpr:pill cpr:badge-warning">download only</span>{{end}}</td>
         <td>{{if .Names}}{{range $i, $name := .Names}}{{if $i}}, {{end}}{{$name}}{{end}}{{else}}<span class="cpr:text-base-content/70">All of them</span>{{end}}</td>
-        <td class="cpr:text-right">
+        <td class="cpr:text-right cpr:whitespace-nowrap">
           <form method="post" action="restore.live.php" class="cpr:inline-block cpr:align-middle">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="repository" value="{{$data.Repository}}">
             <input type="hidden" name="snapshot" value="{{$data.Snapshot}}">
             <input type="hidden" name="item" value="{{.Kind}}">
-            <button class="cpr:btn cpr:btn-sm" type="submit" name="action" value="remove">Remove</button>
+            <button class="cpr:btn cpr:btn-xs cpr:btn-ghost" type="submit" name="action" value="remove">Remove</button>
           </form>
         </td>
       </tr>
@@ -70,7 +70,7 @@
     <input type="hidden" name="basket" value="1">
     <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-center cpr:justify-end cpr:gap-3 cpr:border-t cpr:border-base-300 cpr:bg-base-200 cpr:max-md:flex-col cpr:max-md:items-stretch">
       {{if $data.BasketCanApply}}
-      <label class="cpr:flex cpr:items-start cpr:gap-3 cpr:flex-[1_1_34ch] cpr:min-w-0 cpr:me-auto cpr:text-[13px] cpr:leading-normal cpr:cursor-pointer cpr:max-md:me-0">
+      <label class="cpr:flex cpr:items-start cpr:gap-3 cpr:flex-[1_1_34ch] cpr:min-w-0 cpr:me-auto cpr:text-xs cpr:leading-normal cpr:cursor-pointer cpr:max-md:me-0">
         <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5 cpr:shrink-0" name="confirm" value="1" required>
         <span><b>Put all of this back into my account.</b> What is there now is replaced by what
         was in the backup, and anything added since is lost. Leave it unticked to download one
@@ -92,17 +92,17 @@
 {{end}}
 
 <section aria-labelledby="recovery-kind-title">
-  <div class="cpr:border-b cpr:border-base-300 cpr:pb-2">
-    <h2 id="recovery-kind-title" class="cpr:text-[15px] cpr:font-semibold">What do you want to recover?</h2>
+  <div class="cpr:pb-1">
+    <h2 id="recovery-kind-title" class="cpr:section-title">What do you want to recover?</h2>
     <p class="cpr:hint">Only data belonging to <b>{{$data.Account}}</b> is available here.</p>
   </div>
-  <div class="cpr:grid cpr:gap-2.5 cpr:mt-3 cpr:grid-cols-3 cpr:max-md:grid-cols-2 cpr:max-sm:grid-cols-1">
+  <div class="cpr:grid cpr:gap-3 cpr:mt-3 cpr:grid-cols-3 cpr:max-md:grid-cols-2 cpr:max-sm:grid-cols-1">
     {{range $data.Kinds}}
-    <a class="cpr:grid cpr:grid-cols-[42px_minmax(0,1fr)_18px] cpr:min-h-24 cpr:items-center cpr:gap-3 cpr:p-3.5 cpr:rounded-box cpr:border cpr:shadow-sm cpr:cursor-pointer cpr:transition cpr:hover:border-primary cpr:hover:-translate-y-px cpr:max-sm:min-h-20 {{if $data.Selected .}}cpr:border-primary cpr:border-l-4 cpr:border-l-primary cpr:bg-primary/10{{else}}cpr:border-base-300 cpr:bg-base-100 cpr:hover:bg-base-200{{end}}"
+    <a class="cpr:grid cpr:grid-cols-[42px_minmax(0,1fr)_18px] cpr:min-h-22 cpr:items-center cpr:gap-3 cpr:p-3.5 cpr:rounded-box cpr:border cpr:cursor-pointer cpr:transition-colors cpr:hover:border-primary cpr:max-sm:min-h-20 {{if $data.Selected .}}cpr:border-primary cpr:bg-primary/5{{else}}cpr:border-base-300 cpr:bg-base-100 cpr:hover:bg-base-200{{end}}"
        href="browse.live.php?repository={{$data.Repository}}&amp;snapshot={{$data.Snapshot}}&amp;item={{.}}"
        {{if $data.Selected .}}aria-current="step"{{end}}>
-      <span class="cpr:grid cpr:size-10.5 cpr:place-items-center cpr:rounded-field cpr:text-primary {{if $data.Selected .}}cpr:bg-base-100{{else}}cpr:bg-base-200{{end}}">
-        <svg class="cpr:size-6 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
+      <span class="cpr:grid cpr:size-10 cpr:place-items-center cpr:rounded-field cpr:text-primary {{if $data.Selected .}}cpr:bg-base-100{{else}}cpr:bg-base-200{{end}}">
+        <svg class="cpr:size-5 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
           {{if eq (printf "%s" .) "account"}}<path d="M4 7h16v12H4zM7 4h10v3M8 11h8M8 15h5"/>
           {{else if eq (printf "%s" .) "files"}}<path d="M3 7h7l2 2h9v10H3z"/>
           {{else if eq (printf "%s" .) "cron"}}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
@@ -115,7 +115,7 @@
           {{else}}<path d="M6 3h10l3 3v15H6zM9 10h6M9 14h6"/>{{end}}
         </svg>
       </span>
-      <span class="cpr:min-w-0"><strong class="cpr:block cpr:mb-0.5 cpr:text-sm">{{$data.KindTitle .}}</strong><small class="cpr:line-clamp-2 cpr:text-xs cpr:leading-snug cpr:text-base-content/70">{{$data.KindDescription .}}</small></span>
+      <span class="cpr:min-w-0"><strong class="cpr:block cpr:mb-0.5">{{$data.KindTitle .}}</strong><small class="cpr:line-clamp-2 cpr:text-xs cpr:leading-snug cpr:text-base-content/70">{{$data.KindDescription .}}</small></span>
       <svg class="cpr:w-4 cpr:h-6 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8] cpr:text-base-content/55" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
     </a>
     {{end}}
@@ -125,8 +125,8 @@
 {{if $data.Kind}}
 <section class="cpr:panel cpr:overflow-hidden" data-recovery-panel>
   <div class="cpr:pad cpr:border-b cpr:border-base-300">
-    <p class="cpr:k cpr:text-primary cpr:mb-1">Selected recovery</p>
-    <h2 class="cpr:text-[15px] cpr:font-semibold">{{$data.KindTitle $data.Kind}}</h2>
+    <p class="cpr:k cpr:mb-1">Selected recovery</p>
+    <h2 class="cpr:section-title">{{$data.KindTitle $data.Kind}}</h2>
     <p class="cpr:hint">{{$data.KindDescription $data.Kind}}</p>
   </div>
 
@@ -138,17 +138,17 @@
     <input type="hidden" name="item" value="{{$data.Kind}}">
 
     {{if $data.Path}}
-    <div class="cpr:flex cpr:min-h-14 cpr:items-center cpr:justify-between cpr:gap-4 cpr:px-5 cpr:py-2.5 cpr:border-b cpr:border-base-300 cpr:bg-base-200">
+    <div class="cpr:flex cpr:min-h-12 cpr:items-center cpr:justify-between cpr:gap-4 cpr:px-4 cpr:py-2 cpr:border-b cpr:border-base-300 cpr:bg-base-200">
       <div class="cpr:min-w-0">
-        <span class="cpr:k cpr:text-[10px]">Browsing</span>
+        <span class="cpr:k">Browsing</span>
         <span class="cpr:mono cpr:block cpr:overflow-hidden cpr:text-ellipsis cpr:whitespace-nowrap cpr:text-base-content/70">{{$data.Here}}</span>
       </div>
-      {{if $data.Up}}<a class="cpr:btn cpr:btn-sm" href="browse.live.php?repository={{$data.Repository}}&amp;snapshot={{$data.Snapshot}}&amp;item={{$data.Kind}}&amp;path={{$data.Up}}">Up one level</a>{{end}}
+      {{if $data.Up}}<a class="cpr:btn cpr:btn-xs" href="browse.live.php?repository={{$data.Repository}}&amp;snapshot={{$data.Snapshot}}&amp;item={{$data.Kind}}&amp;path={{$data.Up}}">Up one level</a>{{end}}
     </div>
     {{end}}
 
     {{if eq (printf "%s" $data.Kind) "files"}}
-    <label class="cpr:flex cpr:items-start cpr:gap-3 cpr:px-5 cpr:py-3 cpr:border-b cpr:border-base-300 cpr:bg-primary/10 cpr:cursor-pointer">
+    <label class="cpr:flex cpr:items-start cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300 cpr:bg-primary/5 cpr:cursor-pointer">
       <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="name" value="{{$data.Path}}">
       <span><b class="cpr:block">Select this whole folder</b><small class="cpr:block cpr:mt-0.5 cpr:text-base-content/70">Includes everything below <span class="cpr:mono">{{$data.Here}}</span>.</small></span>
     </label>
@@ -156,22 +156,22 @@
 
     {{if $data.Entries}}
     <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
-      <thead><tr><th class="cpr:w-12 cpr:text-center"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-checkall hidden aria-label="Select everything listed"><span class="cpr:sr-only">Select</span></th><th>Name</th><th>Type</th><th class="cpr:text-right">Size</th></tr></thead>
+      <thead><tr><th class="cpr:w-10 cpr:text-center"><input type="checkbox" class="cpr:checkbox cpr:checkbox-xs" data-checkall hidden aria-label="Select everything listed"><span class="cpr:sr-only">Select</span></th><th>Name</th><th>Type</th><th class="cpr:text-right">Size</th></tr></thead>
       <tbody>
         {{range $data.Entries}}
         <tr>
-          <td class="cpr:w-12 cpr:text-center">{{if .Item}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="name" value="{{.Item}}" aria-label="Select {{.Name}}">{{end}}</td>
+          <td class="cpr:w-10 cpr:text-center">{{if .Item}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-xs" name="name" value="{{.Item}}" aria-label="Select {{.Name}}">{{end}}</td>
           <td class="cpr:font-semibold">
             {{if .Dir}}<a class="cpr:link cpr:link-primary cpr:link-hover" href="browse.live.php?repository={{$data.Repository}}&amp;snapshot={{$data.Snapshot}}&amp;item={{$data.Kind}}&amp;path={{.Path}}">{{.Name}}/</a>{{else}}{{.Name}}{{end}}
           </td>
           <td>{{if .Dir}}Folder{{else}}Item{{end}}</td>
-          <td class="cpr:text-right cpr:mono cpr:tabular-nums">{{if .Size}}{{bytes .Size}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
+          <td class="cpr:text-right cpr:mono">{{if .Size}}{{bytes .Size}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
         </tr>
         {{end}}
       </tbody>
     </table></div>
     {{else}}
-    <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p><b>No selectable items were found here.</b><br>Try a different restore point or ask your host to inspect this backup.</p></div>
+    <div class="cpr:px-4 cpr:py-6 cpr:text-center cpr:text-base-content/70"><p><b>No selectable items were found here.</b><br>Try a different restore point or ask your host to inspect this backup.</p></div>
     {{end}}
 
     {{template "recoveryactions" $data}}
@@ -182,23 +182,23 @@
     <input type="hidden" name="repository" value="{{$data.Repository}}">
     <input type="hidden" name="snapshot" value="{{$data.Snapshot}}">
     <input type="hidden" name="item" value="{{$data.Kind}}">
-    <div class="cpr:pad cpr:flex cpr:items-start cpr:gap-3 cpr:min-h-[90px]">
-      <svg class="cpr:size-7.5 cpr:shrink-0 cpr:fill-none cpr:stroke-success cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-2.9 8-7 10-4.1-2-7-5.4-7-10V6zM9 12l2 2 4-4"/></svg>
+    <div class="cpr:pad cpr:flex cpr:items-start cpr:gap-3">
+      <svg class="cpr:size-6 cpr:shrink-0 cpr:fill-none cpr:stroke-success cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-2.9 8-7 10-4.1-2-7-5.4-7-10V6zM9 12l2 2 4-4"/></svg>
       <div><b>From the backup taken {{stamp $data.SnapshotAt}}</b><p class="cpr:hint">{{$data.PutBackNote}}</p></div>
     </div>
 
-    {{with $data.ItemsErr}}<div class="cpr:pad"><div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:text-sm"><div>{{.}}</div></div></div>{{end}}
+    {{with $data.ItemsErr}}<div class="cpr:pad"><div class="cpr:alert cpr:alert-soft cpr:alert-warning"><div>{{.}}</div></div></div>{{end}}
 
     {{if $data.Items}}
     <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
       <thead><tr>
-        {{if $data.PicksItems}}<th class="cpr:w-12 cpr:text-center"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-checkall hidden aria-label="Select everything listed"><span class="cpr:sr-only">Select</span></th>{{end}}
+        {{if $data.PicksItems}}<th class="cpr:w-10 cpr:text-center"><input type="checkbox" class="cpr:checkbox cpr:checkbox-xs" data-checkall hidden aria-label="Select everything listed"><span class="cpr:sr-only">Select</span></th>{{end}}
         <th>In this restore point</th><th>Detail</th>
       </tr></thead>
       <tbody>
         {{range $data.Items}}
         <tr>
-          {{if $data.PicksItems}}<td class="cpr:w-12 cpr:text-center">{{if .Name}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="name" value="{{.Name}}" aria-label="Select {{.Label}}">{{end}}</td>{{end}}
+          {{if $data.PicksItems}}<td class="cpr:w-10 cpr:text-center">{{if .Name}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-xs" name="name" value="{{.Name}}" aria-label="Select {{.Label}}">{{end}}</td>{{end}}
           <td class="cpr:font-semibold">{{.Label}}</td>
           <td class="cpr:sublabel">{{if .Detail}}{{.Detail}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
         </tr>
@@ -207,7 +207,7 @@
     </table></div>
     <div class="cpr:pad"><p class="cpr:hint cpr:mt-0">{{$data.ItemsNote}}</p></div>
     {{else if not $data.ItemsErr}}
-    <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70"><p>{{$data.ItemsEmpty}}</p></div>
+    <div class="cpr:px-4 cpr:py-6 cpr:text-center cpr:text-base-content/70"><p>{{$data.ItemsEmpty}}</p></div>
     {{end}}
 
     {{template "recoveryactions" $data}}
@@ -215,7 +215,7 @@
   {{end}}
 </section>
 {{else}}
-<div class="cpr:flex cpr:items-start cpr:gap-3 cpr:px-4 cpr:py-3.5 cpr:rounded-box cpr:border cpr:border-base-300 cpr:bg-base-200 cpr:text-[13px] cpr:text-base-content/70">
+<div class="cpr:flex cpr:items-start cpr:gap-3 cpr:px-4 cpr:py-3 cpr:rounded-box cpr:border cpr:border-base-300 cpr:bg-base-200 cpr:text-xs cpr:text-base-content/70">
   <svg class="cpr:size-5 cpr:shrink-0 cpr:fill-none cpr:stroke-success cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-2.9 8-7 10-4.1-2-7-5.4-7-10V6zM9 12l2 2 4-4"/></svg>
   <p><b class="cpr:text-base-content">Select a category to continue.</b> Everything here is yours alone. Files, mail, databases and their users can be put straight back into the account; anything else is a private copy to download.</p>
 </div>
@@ -226,7 +226,7 @@
 {{define "recoveryactions"}}
 <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-center cpr:justify-end cpr:gap-3 cpr:border-t cpr:border-base-300 cpr:bg-base-200 cpr:max-md:flex-col cpr:max-md:items-stretch">
   {{if .CanApply}}
-  <label class="cpr:flex cpr:items-start cpr:gap-3 cpr:flex-[1_1_34ch] cpr:min-w-0 cpr:me-auto cpr:text-[13px] cpr:leading-normal cpr:cursor-pointer cpr:max-md:me-0">
+  <label class="cpr:flex cpr:items-start cpr:gap-3 cpr:flex-[1_1_34ch] cpr:min-w-0 cpr:me-auto cpr:text-xs cpr:leading-normal cpr:cursor-pointer cpr:max-md:me-0">
     <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5 cpr:shrink-0" name="confirm" value="1" required>
     <span><b>Put this back into my account.</b> What is there now is replaced by what was in
     the backup, and anything added since is lost. Leave it unticked to download a copy instead.</span>

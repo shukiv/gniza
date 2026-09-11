@@ -1,11 +1,17 @@
 {{define "content"}}
 {{$data := .Data}}
-<div>
-  <h1 class="cpr:page-title">Destinations</h1>
-  <p class="cpr:page-sub">Where this server sends its backups.</p>
+<div class="cpr:flex cpr:flex-wrap cpr:items-end cpr:gap-3">
+  <div class="cpr:mr-auto">
+    <h1 class="cpr:page-title">Destinations</h1>
+    <p class="cpr:page-sub">Where this server sends its backups. Two off-server copies keep you safe from one bad day.</p>
+  </div>
+  {{/* A link, so this works with no JavaScript: it opens the same form
+       as its own page. The script turns it into the sheet. */}}
+  <a class="cpr:btn cpr:btn-sm cpr:btn-primary" href="?p=destinations&amp;add=1"
+     data-dialog="add-destination">Add a destination</a>
 </div>
 {{with $data.Revealed}}
-<div class="cpr:panel cpr:border-warning/50">
+<div class="cpr:panel cpr:border-l-4 cpr:border-l-warning">
   <div class="cpr:pad cpr:border-b cpr:border-base-300">
     <h2 class="cpr:section-title">{{if $data.JustCreated}}{{.Destination}} is ready. Take its recovery
     key before you go on{{else}}Recovery key for {{.Destination}}{{end}}</h2>
@@ -20,7 +26,7 @@
     The destination holds nothing but ciphertext, and the key that unlocks it lives on this
     server. If {{.Hostname}} is lost and this is not written down somewhere else, the backups it
     made cannot be read by anyone — including gniza.</p>
-    <div class="cpr:log cpr:text-sm cpr:select-all">{{.Password}}</div>
+    <div class="cpr:log cpr:text-sm cpr:select-all cpr:max-h-none">{{.Password}}</div>
     <p class="cpr:hint">To read this repository from this server:</p>
     <div class="cpr:log">export RESTIC_REPOSITORY='{{.URI}}'
 export RESTIC_PASSWORD='{{.Password}}'
@@ -52,7 +58,7 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
 {{end}}
 
 {{if $data.Unnoted}}
-<div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:text-sm"><div>
+<div class="cpr:alert cpr:alert-soft cpr:alert-warning"><div>
   <b>{{len $data.Unnoted}} backup{{if ne (len $data.Unnoted) 1}}s have{{else}} has{{end}} a
   recovery key that exists only on this server.</b> The backups are encrypted before they leave
   it, so whoever holds the destination cannot read them — and neither can you, without the key.
@@ -62,90 +68,101 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
 </div></div>
 {{end}}
 
-<div class="cpr:panel">
-  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
-    <h2 class="cpr:section-title">Configured</h2>
-    {{/* A link, so this works with no JavaScript: it opens the same form
-         as its own page. The script turns it into the sheet. */}}
-    <a class="cpr:btn cpr:btn-sm cpr:btn-primary" href="?p=destinations&amp;add=1"
-       data-dialog="add-destination">Add a destination</a>
-  </div>
-  {{if $data.Destinations}}
-  <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
-    <thead><tr><th>Name</th><th>Repository</th><th>Space</th><th class="cpr:text-right">&nbsp;</th></tr></thead>
-    <tbody>
-    {{range $data.Destinations}}
-    <tr class="{{.Stripe}}">
-      <td class="cpr:font-semibold">{{.Name}}
-        <div class="cpr:sublabel">{{.TypeName}}{{if .AppendOnly}} · append-only{{end}}</div></td>
-      {{/* Where the backups are, in one column: the repository, the machine
-           it is on, and whether that machine answered. Three narrow columns
-           made every one of them wrap. */}}
-      <td>
-        <div class="cpr:mono">{{.Repository.Path}}</div>
-        <div class="cpr:sublabel cpr:mono">{{.Endpoint}}</div>
-        <div class="cpr:mt-1 cpr:mb-0.5">{{template "deststate" .}}</div>
-        {{if .Repository.InitialisedAt}}<div class="cpr:sublabel">created {{stampPtr .Repository.InitialisedAt}}</div>
-        {{else}}<div class="cpr:sublabel">not created yet — <b>Test</b> creates it,
-        and so does the first backup</div>{{end}}
-      </td>
-      <td>{{template "destspace" .Space}}
-        {{template "repocensus" .Repository.Census}}</td>
-      {{/* Test is the one an operator reaches for: a destination is
-           settled once and asked "is it still there?" every time
-           afterwards, and it is what creates the repository on a
-           destination that has none. Editing one is rarer, so it lives
-           behind the menu with the rest. The menu is a details element
-           rather than a scripted popover, so it opens with the keyboard
-           and still opens with no JavaScript. */}}
-      <td class="cpr:text-right"><div class="cpr:flex cpr:justify-end cpr:gap-2">
-        <form method="post" action="?p=destinations/test">
+{{if $data.Destinations}}
+{{/* One card per destination: whether it answered, where it is, how much
+     room it has, and every action on it. Test is first because it is the
+     one reached for again and again, and the one that creates a repository
+     on a destination that has none. */}}
+<div class="cpr:grid cpr:md:grid-cols-2 cpr:xl:grid-cols-3 cpr:gap-3">
+  {{range $data.Destinations}}
+  <div class="cpr:panel {{if eq .Status "error"}}cpr:border-l-4 cpr:border-l-error{{else if and .Space.Known (ge .Space.UsedPercent 90)}}cpr:border-l-4 cpr:border-l-error{{else if and .Space.Known (ge .Space.UsedPercent 75)}}cpr:border-l-4 cpr:border-l-warning{{end}}">
+    <div class="cpr:p-4 cpr:flex cpr:flex-col cpr:gap-2 cpr:h-full">
+      <div class="cpr:flex cpr:items-center cpr:gap-2 cpr:min-w-0">
+        <span class="cpr:status {{if eq .Status "ok"}}cpr:status-success{{else if eq .Status "error"}}cpr:status-error{{else}}cpr:status-neutral{{end}} cpr:status-md cpr:shrink-0" aria-hidden="true"></span>
+        <h2 class="cpr:font-semibold cpr:truncate" title="{{.Name}}">{{.Name}}</h2>
+        {{if eq .Status "ok"}}<span class="cpr:pill cpr:badge-success cpr:ml-auto">Reachable</span>
+        {{else if eq .Status "error"}}<span class="cpr:pill cpr:badge-error cpr:ml-auto">Unreachable</span>
+        {{else}}<span class="cpr:pill cpr:badge-ghost cpr:ml-auto">Not checked</span>{{end}}
+      </div>
+      <p class="cpr:text-xs cpr:text-base-content/60 cpr:break-words">{{.TypeName}}{{if .AppendOnly}} · append-only{{end}} · <span class="cpr:mono">{{.Endpoint}}</span></p>
+      {{if .Space.Known}}
+      <progress class="cpr:progress {{if ge .Space.UsedPercent 90}}cpr:progress-error{{else if ge .Space.UsedPercent 75}}cpr:progress-warning{{else}}cpr:progress-success{{end}} cpr:h-1.5 cpr:w-full"
+                value="{{.Space.UsedPercent}}" max="100" aria-label="{{.Space.UsedPercent}}% of {{bytes .Space.TotalBytes}} used"></progress>
+      {{end}}
+      <dl class="cpr:grid cpr:grid-cols-[auto_1fr] cpr:gap-x-3 cpr:gap-y-0.5 cpr:text-xs">
+        {{if .Repository.Path}}<dt class="cpr:text-base-content/60">Repository</dt><dd class="cpr:mono cpr:break-all">{{.Repository.Path}}</dd>{{end}}
+        {{if .Space.Known}}
+        <dt class="cpr:text-base-content/60">Free</dt><dd class="cpr:mono">{{bytes .Space.FreeBytes}} free</dd>
+        <dt class="cpr:text-base-content/60">Used</dt><dd class="cpr:mono">{{.Space.UsedPercent}}% of {{bytes .Space.TotalBytes}} used{{with .Space.MeasuredAt}} · {{ago .}}{{end}}</dd>
+        {{else if .Space.Unsupported}}
+        <dt class="cpr:text-base-content/60">Space</dt><dd class="cpr:text-base-content/70" title="An S3 bucket has no size, and a restic REST server does not report the disk underneath it.">this kind does not report space</dd>
+        {{else if .Space.Error}}
+        <dt class="cpr:text-base-content/60">Space</dt><dd class="cpr:text-warning">{{.Space.Error}}</dd>
+        {{else}}
+        <dt class="cpr:text-base-content/60">Space</dt><dd class="cpr:text-base-content/70">not measured yet</dd>
+        {{end}}
+        {{with .Repository.Census}}
+        {{if .Known}}
+        <dt class="cpr:text-base-content/60">Holds</dt><dd class="cpr:mono">{{.Snapshots}} cop{{if eq .Snapshots 1}}y{{else}}ies{{end}}, {{bytes .SizeBytes}}{{with .MeasuredAt}} · measured {{ago .}}{{end}}</dd>
+        {{with .LastError}}<dt class="cpr:text-base-content/60">&nbsp;</dt><dd class="cpr:text-warning">could not be measured since: {{.}}</dd>{{end}}
+        {{else if .LastError}}
+        <dt class="cpr:text-base-content/60">Holds</dt><dd class="cpr:text-warning">could not be measured: {{.LastError}}</dd>
+        {{end}}
+        {{end}}
+        {{if eq .Status "ok"}}
+        {{if .LastCheckedAt}}<dt class="cpr:text-base-content/60">Checked</dt><dd class="cpr:mono">checked {{ago .LastCheckedAt}}</dd>{{end}}
+        {{else if eq .Status "error"}}
+        <dt class="cpr:text-base-content/60">Checked</dt><dd class="cpr:text-error cpr:break-words">{{.LastCheckError}}</dd>
+        {{end}}
+        <dt class="cpr:text-base-content/60">Created</dt>
+        <dd>{{if .Repository.InitialisedAt}}<span class="cpr:mono">{{stampPtr .Repository.InitialisedAt}}</span>{{else}}not created yet — <b>Test</b> creates it, and so does the first backup{{end}}</dd>
+      </dl>
+      <div class="cpr:card-actions cpr:justify-end cpr:mt-auto cpr:pt-1">
+        <form method="post" action="?p=destinations/test" class="cpr:contents">
           <input type="hidden" name="csrf" value="{{$.CSRF}}">
           <input type="hidden" name="id" value="{{.ID}}">
-          <button class="cpr:btn cpr:btn-sm cpr:btn-ghost">Test</button>
+          <button class="cpr:btn cpr:btn-xs">Test</button>
         </form>
-        <details class="cpr:dropdown cpr:dropdown-end" data-menu>
-          <summary class="cpr:btn cpr:btn-sm cpr:btn-ghost cpr:btn-square" title="More for {{.Name}}"
-                   aria-label="More actions for {{.Name}}">
-            <svg class="cpr:size-4 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-          </summary>
-          <div class="cpr:dropdown-content cpr:menu-panel" data-menu-body>
-            <a class="cpr:menu-item" href="?p=destinations&amp;edit={{.ID}}"
-               data-dialog="add-destination" data-dialog-fetch
-               data-dialog-title="Edit “{{.Name}}”">Edit</a>
-            {{if .Repository.ID}}
-            <a class="cpr:menu-item" href="?p=browse&amp;repository={{.Repository.ID}}">Browse</a>
-            <form method="post" action="?p=destinations/recovery" class="cpr:contents">
-              <input type="hidden" name="csrf" value="{{$.CSRF}}">
-              <input type="hidden" name="repository" value="{{.Repository.ID}}">
-              <button class="cpr:menu-item{{if not .Repository.RecoveryNotedAt}} cpr:text-primary cpr:font-semibold{{end}}">Recovery key</button>
-            </form>
-            {{end}}
-            <form method="post" action="?p=destinations/delete" class="cpr:contents"
-                  data-confirm="Remove this destination from Gniza? The backups already stored there are left alone.">
-              <input type="hidden" name="csrf" value="{{$.CSRF}}">
-              <input type="hidden" name="id" value="{{.ID}}">
-              <button class="cpr:menu-item cpr:text-error">Remove</button>
-            </form>
-          </div>
-        </details>
-      </div></td>
-    </tr>
-    {{end}}
-    </tbody>
-  </table></div>
+        <a class="cpr:btn cpr:btn-xs cpr:btn-ghost" href="?p=destinations&amp;edit={{.ID}}"
+           data-dialog="add-destination" data-dialog-fetch
+           data-dialog-title="Edit “{{.Name}}”">Edit</a>
+        {{if .Repository.ID}}
+        <a class="cpr:btn cpr:btn-xs cpr:btn-ghost" href="?p=browse&amp;repository={{.Repository.ID}}">Browse</a>
+        <form method="post" action="?p=destinations/recovery" class="cpr:contents">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <input type="hidden" name="repository" value="{{.Repository.ID}}">
+          <button class="cpr:btn cpr:btn-xs {{if .Repository.RecoveryNotedAt}}cpr:btn-ghost{{else}}cpr:btn-warning cpr:btn-soft{{end}}">Recovery key</button>
+        </form>
+        {{end}}
+        <form method="post" action="?p=destinations/delete" class="cpr:contents"
+              data-confirm="Remove this destination from Gniza? The backups already stored there are left alone.">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <input type="hidden" name="id" value="{{.ID}}">
+          <button class="cpr:btn cpr:btn-xs cpr:btn-ghost cpr:text-error">Remove</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {{end}}
+</div>
 
-  {{range $data.Destinations}}
-    {{if .PublicKey}}
-    <div class="cpr:pad cpr:border-t cpr:border-base-300">
+{{/* Retention and the SSH key, per destination, below the cards: each is a
+     record of its own, and a card that carried it would be a page. */}}
+{{range $data.Destinations}}
+  {{if .PublicKey}}
+  <div class="cpr:panel">
+    <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
+      <h2 class="cpr:section-title">{{.Name}}</h2>
+      <span class="cpr:text-xs cpr:text-base-content/60">{{.TypeName}}</span>
+    </div>
     {{/* Retention: the one thing here that destroys data, so it says what
          it would do before it is allowed to do it. */}}
     {{if .Repository.ID}}
-    <div class="cpr:pad cpr:border-t cpr:border-base-300">
+    <div class="cpr:pad cpr:border-b cpr:border-base-300">
       {{$r := .Repository.Retention}}
       <div class="cpr:flex cpr:flex-wrap cpr:items-start cpr:justify-between cpr:gap-3">
         <div>
-          <h3 class="cpr:text-sm cpr:font-semibold">Keeping backups tidy</h3>
+          <h3 class="cpr:font-semibold">Keeping backups tidy</h3>
           {{if keepsSet .Keeps}}
           <p class="cpr:hint cpr:mt-1">Keeps {{keepsSaid .Keeps}}, per account.
           {{if .KeepsChanged}}
@@ -169,26 +186,26 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
           <form method="post" action="?p=destinations/retention/plan" class="cpr:inline-block cpr:align-middle">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="repository" value="{{.Repository.ID}}">
-            <button class="cpr:btn cpr:btn-sm">{{if $r.PlannedAt}}Check again{{else}}Show what would go{{end}}</button>
+            <button class="cpr:btn cpr:btn-xs">{{if $r.PlannedAt}}Check again{{else}}Show what would go{{end}}</button>
           </form>
           {{if and .Repository.RetentionApprovedAt (not .KeepsChanged)}}
           <form method="post" action="?p=destinations/retention/run" class="cpr:inline-block cpr:align-middle"
                 data-confirm="Remove the backups the policy says to remove? This cannot be undone.">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="repository" value="{{.Repository.ID}}">
-            <button class="cpr:btn cpr:btn-sm">Run it now</button>
+            <button class="cpr:btn cpr:btn-xs">Run it now</button>
           </form>
           <form method="post" action="?p=destinations/retention/withdraw" class="cpr:inline-block cpr:align-middle">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="repository" value="{{.Repository.ID}}">
-            <button class="cpr:btn cpr:btn-sm cpr:btn-ghost">Stop</button>
+            <button class="cpr:btn cpr:btn-xs cpr:btn-ghost">Stop</button>
           </form>
           {{else if .PlanApprovable}}
           <form method="post" action="?p=destinations/retention/approve" class="cpr:inline-block cpr:align-middle"
                 data-confirm="Allow Gniza to delete backups from this destination from now on?">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="repository" value="{{.Repository.ID}}">
-            <button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline">Approve</button>
+            <button class="cpr:btn cpr:btn-xs cpr:btn-error cpr:btn-outline">Approve</button>
           </form>
           {{end}}
           {{end}}
@@ -196,7 +213,7 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
       </div>
 
       {{with $r.LastError}}
-      <div class="cpr:border-l-4 cpr:border-warning cpr:pl-3 cpr:my-3 cpr:text-sm cpr:mt-3">{{.}}</div>
+      <div class="cpr:lead cpr:lead-warn cpr:my-3 cpr:text-xs">{{.}}</div>
       {{end}}
 
       {{if $r.PlannedAt}}
@@ -231,53 +248,54 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
     </div>
     {{end}}
 
+    <div class="cpr:pad">
       <details>
-        <summary class="cpr:fold cpr:text-sm cpr:text-primary cpr:py-2">Public key for {{.Name}}</summary>
+        <summary class="cpr:fold cpr:text-primary cpr:py-1">Public key for {{.Name}}</summary>
         <p class="cpr:hint cpr:mt-2">If backups to this destination fail to
         authenticate, add this line to
         <span class="cpr:mono">{{.RemoteTarget}}:~/.ssh/authorized_keys</span> on the remote
         server. Gniza holds the matching private key; nothing else can use it.</p>
         <div class="cpr:log cpr:mt-2" id="cpr-key-{{.ID}}">{{.PublicKey}}</div>
         <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:mt-2">
-          <button type="button" class="cpr:btn cpr:btn-sm" data-copy="#cpr-key-{{.ID}}">Copy</button>
+          <button type="button" class="cpr:btn cpr:btn-xs" data-copy="#cpr-key-{{.ID}}">Copy</button>
         </div>
       </details>
     </div>
-    {{end}}
-  {{end}}
-
-  {{if gt (len $data.Destinations) 1}}
-  <div class="cpr:pad cpr:border-t cpr:border-base-300">
-    <p class="cpr:hint">Every destination after the first copies the first one's chunker
-    parameters. That is fixed when a repository is created and cannot be changed,
-    so it is done for you.</p>
   </div>
   {{end}}
-  {{else}}
+{{end}}
+
+{{if gt (len $data.Destinations) 1}}
+<p class="cpr:hint cpr:mt-0">Every destination after the first copies the first one's chunker
+parameters. That is fixed when a repository is created and cannot be changed,
+so it is done for you.</p>
+{{end}}
+{{else}}
+<div class="cpr:panel">
   <div class="cpr:px-6 cpr:py-8 cpr:text-center cpr:text-base-content/70">
     <p class="cpr:mb-4"><b>No destination yet.</b><br>Nothing can be backed up until this server has somewhere to send it.</p>
     <a class="cpr:btn cpr:btn-sm cpr:btn-primary" href="?p=destinations&amp;add=1"
        data-dialog="add-destination">Add a destination</a>
   </div>
-  {{end}}
 </div>
+{{end}}
 
 {{if $data.Editing}}
 <div class="cpr:panel">
-  <div class="cpr:pad cpr:border-b cpr:border-base-300">
+  <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
     <h2 class="cpr:section-title">Edit “{{$data.Editing.Name}}”</h2>
   </div>
-  <div class="cpr:pad" data-drawer-content>{{template "destinationform" .}}</div>
+  <div class="cpr:pad cpr:max-w-2xl" data-drawer-content>{{template "destinationform" .}}</div>
 </div>
 {{else if $data.Adding}}
 {{/* Followed the link with no JavaScript, or came here by link: the same
      form, on a page of its own. */}}
 <div class="cpr:panel">
-  <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-baseline cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
+  <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
     <h2 class="cpr:section-title">Add a destination</h2>
-    <a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=destinations">Cancel</a>
+    <a class="cpr:btn cpr:btn-sm cpr:btn-ghost cpr:ml-auto" href="?p=destinations">Cancel</a>
   </div>
-  <div class="cpr:pad" data-drawer-content>{{template "destinationform" .}}</div>
+  <div class="cpr:pad cpr:max-w-2xl" data-drawer-content>{{template "destinationform" .}}</div>
 </div>
 {{else}}
 {{/* The sheet: the list stays the page, and adding happens over it rather
@@ -285,11 +303,13 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
 <dialog id="add-destination" class="cpr:modal cpr:modal-end" data-sheet aria-label="Add a destination"
         {{if $data.FormError}}data-drawer-open{{end}}>
   <div class="cpr:modal-box cpr:sheet">
-    <div class="cpr:flex cpr:items-center cpr:justify-between cpr:gap-3 cpr:px-6 cpr:py-4 cpr:border-b cpr:border-base-300 cpr:shrink-0">
+    <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-5 cpr:py-4 cpr:border-b cpr:border-base-300 cpr:shrink-0">
       <h2 class="cpr:text-lg cpr:font-semibold" data-drawer-title>Add a destination</h2>
-      <button type="button" class="cpr:btn cpr:btn-sm cpr:btn-ghost cpr:btn-square" data-dialog-close aria-label="Close">✕</button>
+      <button type="button" class="cpr:btn cpr:btn-sm cpr:btn-ghost cpr:btn-square cpr:ml-auto" data-dialog-close aria-label="Close">
+        <svg class="cpr:size-4 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
     </div>
-    <div class="cpr:p-6 cpr:overflow-auto cpr:grow" data-drawer-body>
+    <div class="cpr:flex-1 cpr:overflow-y-auto cpr:px-5 cpr:py-4" data-drawer-body>
       {{template "destinationform" .}}
     </div>
   </div>
@@ -304,13 +324,13 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
 {{$data := .Data}}
 {{$editing := $data.Editing}}
 {{with $data.FormError}}
-<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:text-sm cpr:mb-4"><div>{{.}}</div></div>
+<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:mb-4"><div>{{.}}</div></div>
 {{end}}
 {{if $data.ConfirmHost}}
 {{/* The far side has answered and nothing has been sent to it yet. An
      operator who has not looked at the fingerprint has not checked
      anything, so this is a stop rather than a notice. */}}
-<div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:text-sm cpr:mb-4"><div class="cpr:min-w-0">
+<div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:mb-4"><div class="cpr:min-w-0">
   <b>Is this the right server?</b><br>
   <span class="cpr:mono">{{$data.ConfirmHost}}</span> identifies itself with a
   {{$data.HostKeyType}} key:
@@ -328,17 +348,17 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
     <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2">
       <div>
         <label class="cpr:field-label" for="name">Name</label>
-        <input type="text" class="cpr:input cpr:w-full" id="name" name="name" placeholder="Backup server, Wasabi, …" required value="{{$data.Field "name"}}"
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="name" name="name" placeholder="Backup server, Wasabi, …" required value="{{$data.Field "name"}}"
                value="{{with $editing}}{{.Name}}{{end}}">
       </div>
       <div>
         <label class="cpr:field-label" for="type">Type</label>
         {{if $editing}}
-        <input type="text" class="cpr:input cpr:w-full" value="{{$editing.Type}}" disabled>
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" value="{{$editing.Type}}" disabled>
         <small class="cpr:help">A destination's type cannot change. Remove it and add a new one instead.</small>
         {{else}}
         {{$chosen := $data.ChosenType}}
-        <select class="cpr:select cpr:w-full" id="type" name="type" data-type-toggle>
+        <select class="cpr:select cpr:select-sm cpr:w-full" id="type" name="type" data-type-toggle>
           <option value="rest" {{if eq $chosen "rest"}}selected{{end}}>Backup server (restic REST)</option>
           <option value="sftp" {{if eq $chosen "sftp"}}selected{{end}}>Another Linux server (SFTP)</option>
           <option value="s3" {{if eq $chosen "s3"}}selected{{end}}>S3 or S3-compatible</option>
@@ -350,36 +370,36 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
 
     <div {{if $editing}}{{if ne $editing.Type "rest"}}hidden{{end}}{{else}}data-for-type="rest" {{if $data.HiddenFor "rest"}}hidden{{end}}{{end}}>
       <label class="cpr:field-label cpr:mt-4" for="base_url">Server address</label>
-      <input type="text" class="cpr:input cpr:w-full" id="base_url" name="base_url" value="{{$data.Field "base_url"}}" placeholder="https://backup.example.com">
+      <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="base_url" name="base_url" value="{{$data.Field "base_url"}}" placeholder="https://backup.example.com">
       <small class="cpr:help">Must be https. Point it at a rest-server instance.</small>
 
       <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
         <div>
           <label class="cpr:field-label" for="username">Username</label>
-          <input type="text" class="cpr:input cpr:w-full" id="username" name="username" value="{{$data.Field "username"}}">
+          <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="username" name="username" value="{{$data.Field "username"}}">
           {{if $editing}}<small class="cpr:help">Leave empty to keep the stored credentials.</small>{{end}}
         </div>
         <div>
           <label class="cpr:field-label" for="password">Password</label>
-          <input type="password" class="cpr:input cpr:w-full" id="password" name="password">
+          <input type="password" class="cpr:input cpr:input-sm cpr:w-full" id="password" name="password">
         </div>
       </div>
 
-      <label class="cpr:check cpr:mt-4"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="append_only" value="1" {{with $editing}}{{if .AppendOnly}}checked{{end}}{{end}}>
-        <span>The server runs with <span class="cpr:mono">--append-only</span>
-        <small class="cpr:help">Recommended: this server can then add backups but never delete
+      <label class="cpr:flex cpr:items-start cpr:gap-3 cpr:rounded-box cpr:border cpr:border-base-300 cpr:bg-base-200 cpr:p-3 cpr:mt-4 cpr:cursor-pointer"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="append_only" value="1" {{with $editing}}{{if .AppendOnly}}checked{{end}}{{end}}>
+        <span class="cpr:text-sm"><span class="cpr:font-medium">The server runs with <span class="cpr:mono">--append-only</span></span>
+        <span class="cpr:block cpr:text-xs cpr:text-base-content/70 cpr:mt-0.5">Recommended: this server can then add backups but never delete
         them, so ransomware here cannot destroy your history. Testing the destination checks it
         rather than taking your word for it — if the server accepts a delete, the test says so.
-        It also means retention cannot run through this address — give the second one below.</small></span></label>
+        It also means retention cannot run through this address — give the second one below.</span></span></label>
 
       <label class="cpr:field-label cpr:mt-4" for="maintenance_base_url">Address that may delete (optional)</label>
-      <input type="text" class="cpr:input cpr:w-full" id="maintenance_base_url" name="maintenance_base_url" value="{{$data.Field "maintenance_base_url"}}"
+      <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="maintenance_base_url" name="maintenance_base_url" value="{{$data.Field "maintenance_base_url"}}"
              placeholder="https://backup.internal:8000">
       <small class="cpr:help">A second rest-server over the same storage with append-only off.
       Without it, nothing can ever prune old backups.</small>
 
       <label class="cpr:field-label cpr:mt-4" for="ca_bundle">CA bundle file (optional)</label>
-      <input type="text" class="cpr:input cpr:w-full" id="ca_bundle" name="ca_bundle" value="{{$data.Field "ca_bundle"}}" placeholder="/etc/gniza/backup-ca.pem">
+      <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="ca_bundle" name="ca_bundle" value="{{$data.Field "ca_bundle"}}" placeholder="/etc/gniza/backup-ca.pem">
       <small class="cpr:help">Only if the backup server uses a private certificate authority.</small>
     </div>
 
@@ -387,26 +407,26 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
       <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
         <div>
           <label class="cpr:field-label" for="host">Host</label>
-          <input type="text" class="cpr:input cpr:w-full" id="host" name="host" value="{{$data.Field "host"}}" placeholder="backup.example.com">
+          <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="host" name="host" value="{{$data.Field "host"}}" placeholder="backup.example.com">
         </div>
         <div>
           <label class="cpr:field-label" for="port">Port</label>
-          <input type="number" class="cpr:input cpr:w-full" id="port" name="port" value="{{$data.FieldOr "port" "22"}}">
+          <input type="number" class="cpr:input cpr:input-sm cpr:w-full" id="port" name="port" value="{{$data.FieldOr "port" "22"}}">
         </div>
         <div>
           <label class="cpr:field-label" for="user">SSH user</label>
-          <input type="text" class="cpr:input cpr:w-full" id="user" name="user" value="{{$data.Field "user"}}" placeholder="cpbackup">
+          <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="user" name="user" value="{{$data.Field "user"}}" placeholder="cpbackup">
         </div>
         <div>
           <label class="cpr:field-label" for="root">Remote directory</label>
-          <input type="text" class="cpr:input cpr:w-full" id="root" name="root" value="{{$data.Field "root"}}" placeholder="/home/cpbackup/backups">
+          <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="root" name="root" value="{{$data.Field "root"}}" placeholder="/home/cpbackup/backups">
         </div>
       </div>
 
       <label class="cpr:field-label cpr:mt-4" for="password">Remote password <span class="cpr:text-base-content/70">(optional)</span></label>
-      <input type="password" class="cpr:input cpr:w-full" id="password" name="password" autocomplete="new-password">
+      <input type="password" class="cpr:input cpr:input-sm cpr:w-full" id="password" name="password" autocomplete="new-password">
 
-      <div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:text-sm cpr:mt-4">
+      <div class="cpr:alert cpr:alert-soft cpr:alert-info cpr:mt-4">
         <div><b>Gniza makes its own key.</b> Give the remote password once and
         it installs the key, checks it works and creates the folder. The password is used for
         that and never stored. Leave it empty and you get the public key to add yourself.
@@ -415,7 +435,7 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
       </div>
 
       {{with $data.Prepared}}
-      <div class="cpr:alert cpr:alert-soft cpr:alert-success cpr:text-sm cpr:mt-3">
+      <div class="cpr:alert cpr:alert-soft cpr:alert-success cpr:mt-3">
         <div class="cpr:min-w-0">
           <b>Here is the key.</b> Add this line to
           <span class="cpr:mono">~/.ssh/authorized_keys</span> of the SSH user above, on the
@@ -423,7 +443,7 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
           else can use it.
           <div class="cpr:log cpr:mt-2" id="cpr-prepared-key">{{.AuthorizedKey}}</div>
           <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:mt-2">
-            <button type="button" class="cpr:btn cpr:btn-sm" data-copy="#cpr-prepared-key">Copy</button>
+            <button type="button" class="cpr:btn cpr:btn-xs" data-copy="#cpr-prepared-key">Copy</button>
             <span class="cpr:hint cpr:mt-0">Fingerprint {{.Fingerprint}}</span>
           </div>
         </div>
@@ -437,9 +457,9 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
       {{end}}
 
       <details class="cpr:mt-4">
-        <summary class="cpr:fold cpr:text-sm cpr:text-base-content/70 cpr:py-2">Use a key I already have instead</summary>
+        <summary class="cpr:fold cpr:text-base-content/70 cpr:py-2">Use a key I already have instead</summary>
         <label class="cpr:field-label cpr:mt-2" for="identity_file">Private key on this server</label>
-        <input type="text" class="cpr:input cpr:w-full" id="identity_file" name="identity_file" value="{{$data.Field "identity_file"}}"
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="identity_file" name="identity_file" value="{{$data.Field "identity_file"}}"
                placeholder="/root/.ssh/id_ed25519">
         <small class="cpr:help">Leave empty to have Gniza generate one.</small>
       </details>
@@ -449,51 +469,51 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
       <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
         <div>
           <label class="cpr:field-label" for="bucket">Bucket</label>
-          <input type="text" class="cpr:input cpr:w-full" id="bucket" name="bucket" value="{{$data.Field "bucket"}}">
+          <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="bucket" name="bucket" value="{{$data.Field "bucket"}}">
         </div>
         <div>
           <label class="cpr:field-label" for="region">Region</label>
-          <input type="text" class="cpr:input cpr:w-full" id="region" name="region" value="{{$data.Field "region"}}" placeholder="us-east-1">
+          <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="region" name="region" value="{{$data.Field "region"}}" placeholder="us-east-1">
         </div>
       </div>
       <label class="cpr:field-label cpr:mt-4" for="endpoint">Endpoint (leave empty for Amazon S3)</label>
-      <input type="text" class="cpr:input cpr:w-full" id="endpoint" name="endpoint" value="{{$data.Field "endpoint"}}" placeholder="s3.us-east-1.wasabisys.com">
+      <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="endpoint" name="endpoint" value="{{$data.Field "endpoint"}}" placeholder="s3.us-east-1.wasabisys.com">
       <small class="cpr:help">Wasabi, Cloudflare R2, MinIO, Backblaze B2 and Ceph all work here.</small>
       <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
         <div>
           <label class="cpr:field-label" for="access_key_id">Access key</label>
-          <input type="text" class="cpr:input cpr:w-full" id="access_key_id" name="access_key_id" value="{{$data.Field "access_key_id"}}">
+          <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="access_key_id" name="access_key_id" value="{{$data.Field "access_key_id"}}">
           {{if $editing}}<small class="cpr:help">Leave empty to keep the stored credentials.</small>{{end}}
         </div>
         <div>
           <label class="cpr:field-label" for="secret_access_key">Secret key</label>
-          <input type="password" class="cpr:input cpr:w-full" id="secret_access_key" name="secret_access_key">
+          <input type="password" class="cpr:input cpr:input-sm cpr:w-full" id="secret_access_key" name="secret_access_key">
         </div>
       </div>
     </div>
 
     <div {{if $editing}}{{if ne $editing.Type "local"}}hidden{{end}}{{else}}data-for-type="local" {{if $data.HiddenFor "local"}}hidden{{end}}{{end}}>
       <label class="cpr:field-label cpr:mt-4" for="local_root">Directory</label>
-      <input type="text" class="cpr:input cpr:w-full" id="local_root" name="root" value="{{$data.Field "root"}}" placeholder="/mnt/backups">
+      <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="local_root" name="root" value="{{$data.Field "root"}}" placeholder="/mnt/backups">
       <small class="cpr:help">A disk on this machine protects against a lost file, not a lost
       server. Pair it with something remote.</small>
     </div>
 
     {{if $editing}}
     <label class="cpr:field-label cpr:mt-4">Folder inside the destination</label>
-    <input type="text" class="cpr:input cpr:w-full" value="{{$editing.Repository.Path}}" disabled>
+    <input type="text" class="cpr:input cpr:input-sm cpr:w-full" value="{{$editing.Repository.Path}}" disabled>
     <small class="cpr:help">This is where the existing backups are. Changing it would start an
     empty repository somewhere else, so it is fixed once the destination is created.</small>
     {{else}}
     <label class="cpr:field-label cpr:mt-4" for="repo_path">Folder inside the destination</label>
-    <input type="text" class="cpr:input cpr:w-full" id="repo_path" name="repo_path" value="{{$data.FieldOr "repo_path" $data.Hostname}}">
+    <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="repo_path" name="repo_path" value="{{$data.FieldOr "repo_path" $data.Hostname}}">
     <small class="cpr:help">Keeps this server's backups separate from any other server's.</small>
     {{end}}
 
-    <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:mt-4">
+    <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-2 cpr:mt-5 cpr:pt-3 cpr:border-t cpr:border-base-300">
+      {{if $editing}}<a class="cpr:btn cpr:btn-sm cpr:btn-ghost cpr:ml-auto" href="?p=destinations">Cancel</a>
+      {{else}}<span class="cpr:hint cpr:mt-0 cpr:mr-auto">Credentials are encrypted before they are written to disk.</span>{{end}}
       <button class="cpr:btn cpr:btn-sm cpr:btn-primary" type="submit">{{if $editing}}Save changes{{else}}Add and test{{end}}</button>
-      {{if $editing}}<a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=destinations">Cancel</a>
-      {{else}}<span class="cpr:hint cpr:mt-0">Credentials are encrypted before they are written to disk.</span>{{end}}
     </div>
   </form>
 {{end}}

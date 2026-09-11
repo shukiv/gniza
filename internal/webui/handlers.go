@@ -1676,7 +1676,7 @@ func (a accountView) NeedsRemovalPreparation() bool {
 func (a accountView) Stripe() string {
 	switch {
 	case a.Running:
-		return "cpr:stripe-warn"
+		return "cpr:stripe-run"
 	case a.LastBackup == nil, a.LastStatus == job.StatusFailed:
 		return "cpr:stripe-bad"
 	case a.LastStatus == job.StatusPartialSuccess, len(a.MissingCopies) > 0:

@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -82,6 +84,10 @@ func TestNativeCommandProcess(t *testing.T) {
 	if err := os.WriteFile(os.Getenv("GNIZA_NATIVE_CAPTURE"), []byte(task.Encode()), 0o600); err != nil {
 		os.Exit(2)
 	}
+	// What DirectAdmin would create files under.
+	mask := syscall.Umask(0)
+	syscall.Umask(mask)
+	_ = os.WriteFile(os.Getenv("GNIZA_NATIVE_CAPTURE")+".umask", []byte(fmt.Sprintf("%03o", mask)), 0o600)
 	if scenario == "wrong-task" {
 		task.Set("select1", "victim")
 	}
@@ -162,6 +168,14 @@ func TestNativeCommandProcess(t *testing.T) {
 	}
 	if scenario != "no-completion" {
 		fmt.Printf("2026/09/08 05:41:23  info finished task             duration=739ms task=%s\n", task.Encode())
+	}
+	// DirectAdmin runs the server's post-hooks after a restore that
+	// created the account, and they outlive the task by a second or two.
+	if scenario == "post-hook" || os.Getenv("GNIZA_NATIVE_LINGER") == "1" {
+		child := exec.Command("sleep", "2")
+		if err := child.Start(); err != nil {
+			os.Exit(2)
+		}
 	}
 	if scenario == "exit-failure" {
 		os.Exit(1)
@@ -808,5 +822,55 @@ func TestAnAccountTheServerHasIsNotOverwrittenByAccident(t *testing.T) {
 	}
 	if _, err := os.Stat(os.Getenv("GNIZA_NATIVE_CAPTURE")); !os.IsNotExist(err) {
 		t.Fatal("DirectAdmin's restore was run")
+	}
+}
+
+// DirectAdmin inherits the service's umask, 077, and every file it
+// generates into an archive came out 0600 where its own backups give
+// 0644 -- the zone file among them, which named then refused after a
+// restore that created the account: "loading from master file
+// /var/named/<domain>.db failed: permission denied", 2026-09-11.
+func TestDirectAdminIsRunUnderTheUmaskItsOwnBackupsGet(t *testing.T) {
+	r := nativeHost(t)
+	old := syscall.Umask(0o077)
+	defer syscall.Umask(old)
+	archive := filepath.Join(t.TempDir(), "user.admin.studio.tar.zst")
+	writeNativeArchive(t, archive, "studio")
+	if _, err := r.Apply(t.Context(), archive, panel.ApplyOptions{Overwrite: true, Unrestricted: true}); err != nil {
+		t.Fatal(err)
+	}
+	if mask, _ := os.ReadFile(os.Getenv("GNIZA_NATIVE_CAPTURE") + ".umask"); string(mask) != "022" {
+		t.Errorf("DirectAdmin ran under umask %s, want 022", mask)
+	}
+}
+
+// A restore that created the account runs the server's post-hooks
+// afterwards, and they outlive the task. They were taken for a detached
+// writer and killed with the task, and the restore reported as failed
+// after DirectAdmin had said "has been restored" -- Imunify's
+// add-sudouser on the validation host, 2026-09-11. A task that said it
+// finished is given time to be rid of them.
+func TestAFinishedTaskIsGivenTimeForItsPostHooks(t *testing.T) {
+	r := nativeHost(t)
+	t.Setenv("GNIZA_NATIVE_SCENARIO", "post-hook")
+	archive := filepath.Join(t.TempDir(), "user.admin.studio.tar.zst")
+	writeNativeArchive(t, archive, "studio")
+	if transcript, err := r.Apply(t.Context(), archive, panel.ApplyOptions{Overwrite: true, Unrestricted: true}); err != nil {
+		t.Fatalf("a finished restore with a post-hook still running was failed: %v\n%s", err, transcript)
+	}
+}
+
+// And one that did not say it finished is not.
+func TestADetachedWriterIsStillNotACompletion(t *testing.T) {
+	r := nativeHost(t)
+	t.Setenv("GNIZA_NATIVE_SCENARIO", "detached-writer")
+	archive := filepath.Join(t.TempDir(), "user.admin.studio.tar.zst")
+	writeNativeArchive(t, archive, "studio")
+	// no-completion prints no "finished task"; detached-writer prints it,
+	// so the case here is the writer outliving a task that never finished.
+	t.Setenv("GNIZA_NATIVE_SCENARIO", "no-completion")
+	t.Setenv("GNIZA_NATIVE_LINGER", "1")
+	if _, err := r.Apply(t.Context(), archive, panel.ApplyOptions{Overwrite: true, Unrestricted: true}); err == nil || !strings.Contains(err.Error(), "left running") {
+		t.Fatalf("a task that never finished and left a writer behind was accepted: %v", err)
 	}
 }

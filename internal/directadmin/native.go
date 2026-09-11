@@ -313,8 +313,28 @@ func (b *nativeOutput) Write(p []byte) (int, error) {
 	return n, nil
 }
 
+// nativeUmask is what DirectAdmin runs under here. The service runs with
+// umask 077, and DirectAdmin inherits it: every file it generates into an
+// archive -- the zone file, user.db -- came out 0600 instead of the 0644
+// its own backups give them, and a restore that created the account from
+// such an archive left the zone unreadable to named: "loading from master
+// file /var/named/<domain>.db failed: permission denied". Measured on
+// 1.709, 2026-09-11. DirectAdmin's own cron runs it under 022.
+const nativeUmask = "022"
+
+// nativeDrain is how long a native task that reported itself finished is
+// given to be rid of its children before they are taken for a detached
+// writer. A restore that creates an account runs the server's
+// user_create_post.sh and user_restore_post.sh afterwards -- Imunify's
+// add-sudouser on the validation host, a second or two -- and killing
+// those with the task is what happened before this existed.
+const nativeDrain = 2 * time.Minute
+
 func (r *Real) runNative(ctx context.Context, action, selection, destination string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, r.binary(), args...)
+	// Through the shell for one thing only, the umask; the shell execs
+	// DirectAdmin in its own place, so the process group is the same.
+	cmd := exec.CommandContext(ctx, "/bin/sh",
+		append([]string{"-c", `umask ` + nativeUmask + ` && exec "$0" "$@"`, r.binary()}, args...)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 	// Cancel the whole group, not just DirectAdmin with mysqldump/tar still
 	// using the directory after its account lock has been released.
@@ -327,10 +347,20 @@ func (r *Real) runNative(ctx context.Context, action, selection, destination str
 	// A native command must not leave a background writer behind after its
 	// parent exits (including an output-pipe WaitDelay failure). Do not turn
 	// a detached operation into a reported completion and release its lock.
+	// A task that said it finished is given time to be rid of what it ran
+	// afterwards first; see nativeDrain.
 	if cmd.Process != nil && syscall.Kill(-cmd.Process.Pid, 0) == nil {
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		if err == nil {
-			err = fmt.Errorf("native task left running child processes")
+		if err == nil && strings.Contains(output.String(), "finished task ") {
+			deadline := time.Now().Add(nativeDrain)
+			for syscall.Kill(-cmd.Process.Pid, 0) == nil && time.Now().Before(deadline) && ctx.Err() == nil {
+				time.Sleep(200 * time.Millisecond)
+			}
+		}
+		if syscall.Kill(-cmd.Process.Pid, 0) == nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			if err == nil {
+				err = fmt.Errorf("native task left running child processes")
+			}
 		}
 	}
 	if ctx.Err() != nil {

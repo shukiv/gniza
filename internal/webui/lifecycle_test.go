@@ -280,13 +280,7 @@ func TestCoverageAndLifecycleTemplatesParse(t *testing.T) {
 		MissingRepositoryIDs: []string{"off-site"},
 	}
 	err = templates["accounts.html"].ExecuteTemplate(&output, "layout", page{
-		Data: struct {
-			Accounts    []accountView
-			RunAll      *nodestore.Policy
-			Warnings    []string
-			Protected   int
-			Unprotected int
-		}{Accounts: []accountView{{RemovalSafety: &safety}}},
+		Data: accountsView{Accounts: []accountView{{RemovalSafety: &safety}}},
 	})
 	if err != nil {
 		t.Fatal(err)

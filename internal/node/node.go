@@ -356,6 +356,14 @@ func (e *Engine) Accounts(ctx context.Context) ([]panel.AccountInfo, error) {
 	return e.provider.Accounts(ctx)
 }
 
+// Chooser is the provider's choosing of what to back up, on a server
+// whose accounts are the operator's choice rather than a panel's list.
+// A panel server has none, and the pages show the panel's list.
+func (e *Engine) Chooser() (panel.Chooser, bool) {
+	chooser, ok := e.provider.(panel.Chooser)
+	return chooser, ok
+}
+
 // ProbeCapabilities reports which pkgacct flags this host supports, and
 // records them so the UI can warn about a host that cannot disable
 // compression.

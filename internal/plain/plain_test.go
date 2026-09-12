@@ -15,20 +15,32 @@ import (
 	"github.com/shukiv/gniza/internal/plain"
 )
 
+// catalog keeps choices in memory, as the node's store does on disk.
+type catalog struct{ sources map[string]panel.Source }
+
+func newCatalog() *catalog { return &catalog{sources: map[string]panel.Source{}} }
+
+func (c *catalog) Sources() ([]panel.Source, error) {
+	var out []panel.Source
+	for _, s := range c.sources {
+		out = append(out, s)
+	}
+	return out, nil
+}
+func (c *catalog) SaveSource(s panel.Source) error { c.sources[s.Name] = s; return nil }
+func (c *catalog) DeleteSource(name string) error  { delete(c.sources, name); return nil }
+
 // fakeMySQL writes a mysql and a mysqldump that answer from a script:
-// mysql prints the database list, or the sizes when asked from
-// information_schema; mysqldump prints a dump, and fails for a database
-// named in $GNIZA_BAD_DUMP.
+// mysql prints the sizes when asked from information_schema; mysqldump
+// prints a dump, and fails for a database named in $GNIZA_BAD_DUMP.
 func fakeMySQL(t *testing.T, databases ...string) (mysql, mysqldump string) {
 	t.Helper()
 	dir := t.TempDir()
 	mysql = filepath.Join(dir, "mysql")
 	mysqldump = filepath.Join(dir, "mysqldump")
-	list := strings.Join(databases, "\n")
 	script := "#!/bin/sh\n" +
 		"case \"$*\" in\n" +
 		"  *information_schema*) for d in " + strings.Join(databases, " ") + "; do printf '%s\\t4096\\n' \"$d\"; done ;;\n" +
-		"  *'SHOW DATABASES'*) printf '%s\\n' '" + list + "' ;;\n" +
 		"  *) cat > /dev/null; printf 'loaded %s\\n' \"$*\" >> \"$(dirname \"$0\")/mysql.log\" ;;\n" +
 		"esac\n"
 	if err := os.WriteFile(mysql, []byte(script), 0o755); err != nil {
@@ -44,6 +56,50 @@ func fakeMySQL(t *testing.T, databases ...string) (mysql, mysqldump string) {
 	return mysql, mysqldump
 }
 
+// fakePostgres writes a psql and a pg_dump: psql lists the databases
+// with their sizes, and logs a CREATE DATABASE or a load; pg_dump prints
+// a dump.
+func fakePostgres(t *testing.T, databases ...string) (psql, pgdump string) {
+	t.Helper()
+	dir := t.TempDir()
+	psql = filepath.Join(dir, "psql")
+	pgdump = filepath.Join(dir, "pg_dump")
+	script := "#!/bin/sh\n" +
+		"case \"$*\" in\n" +
+		"  *pg_database_size*) for d in " + strings.Join(databases, " ") + "; do printf '%s\\t8192\\n' \"$d\"; done ;;\n" +
+		"  *) cat > /dev/null; printf 'psql %s\\n' \"$*\" >> \"$(dirname \"$0\")/psql.log\" ;;\n" +
+		"esac\n"
+	if err := os.WriteFile(psql, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dump := "#!/bin/sh\nfor a; do name=$a; done\nprintf -- '-- pg dump of %s\\n' \"$name\"\n"
+	if err := os.WriteFile(pgdump, []byte(dump), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return psql, pgdump
+}
+
+// fakeDocker writes a docker that lists the containers given and
+// answers inspect from $GNIZA_INSPECT_DIR/<name>.json.
+func fakeDocker(t *testing.T, inspectDir string, containers ...string) string {
+	t.Helper()
+	docker := filepath.Join(t.TempDir(), "docker")
+	var lines []string
+	for _, c := range containers {
+		lines = append(lines, c+"\\timage:1\\tUp 2 hours")
+	}
+	script := "#!/bin/sh\n" +
+		"case \"$1\" in\n" +
+		"  ps) printf '" + strings.Join(lines, "\\n") + "\\n' ;;\n" +
+		"  inspect) for a; do name=$a; done; cat \"" + inspectDir + "/$name.json\" 2>/dev/null || { echo \"Error: no such container: $name\" >&2; exit 1; } ;;\n" +
+		"  *) exit 1 ;;\n" +
+		"esac\n"
+	if err := os.WriteFile(docker, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return docker
+}
+
 func site(t *testing.T, root, name string) string {
 	t.Helper()
 	dir := filepath.Join(root, name)
@@ -56,75 +112,138 @@ func site(t *testing.T, root, name string) string {
 	return dir
 }
 
-// TestEverySubdirectoryOfARootIsAnAccount: a LAMP server keeps one site
-// per directory under /var/www, a container host one stack per directory
-// under /opt. Those directories are the accounts; a file or a dot
-// directory beside them is not.
-func TestEverySubdirectoryOfARootIsAnAccount(t *testing.T) {
+func chosen(t *testing.T, provider *plain.Provider, source panel.Source) {
+	t.Helper()
+	if err := provider.AddSource(context.Background(), source); err != nil {
+		t.Fatalf("AddSource(%s): %v", source.Name, err)
+	}
+}
+
+// TestNothingIsBackedUpUntilChosen: the directories under the roots are
+// offered, not assumed. A folder becomes a source when the operator
+// says so, and is no longer offered once it is.
+func TestNothingIsBackedUpUntilChosen(t *testing.T) {
 	www, opt := t.TempDir(), t.TempDir()
-	site(t, www, "shop")
+	shop := site(t, www, "shop")
 	site(t, www, "blog")
 	site(t, opt, "stack")
 	os.MkdirAll(filepath.Join(www, ".cache"), 0o755)
 	os.WriteFile(filepath.Join(www, "index.html"), []byte("x"), 0o644)
+	provider := &plain.Provider{Roots: []string{www, opt, "/nowhere"}, Catalog: newCatalog(), PostgresUser: "-"}
 
-	provider := &plain.Provider{Roots: []string{www, opt}}
 	accounts, err := provider.Accounts(context.Background())
+	if err != nil || len(accounts) != 0 {
+		t.Fatalf("accounts before any choice = %v, %v", accounts, err)
+	}
+	candidates, err := provider.Candidates(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got []string
-	for _, a := range accounts {
-		got = append(got, a.User+"="+a.HomeDir)
+	want := []string{filepath.Join(www, "blog"), shop, filepath.Join(opt, "stack")}
+	if strings.Join(candidates.Folders, " ") != strings.Join(want, " ") {
+		t.Errorf("folders offered = %v, want %v", candidates.Folders, want)
 	}
-	want := []string{
-		"blog=" + filepath.Join(www, "blog"),
-		"shop=" + filepath.Join(www, "shop"),
-		"stack=" + filepath.Join(opt, "stack"),
+
+	chosen(t, provider, panel.Source{Path: shop})
+	accounts, _ = provider.Accounts(context.Background())
+	if len(accounts) != 1 || accounts[0].User != "shop" || accounts[0].HomeDir != shop || accounts[0].Missing {
+		t.Errorf("accounts after choosing = %+v", accounts)
 	}
-	if strings.Join(got, " ") != strings.Join(want, " ") {
-		t.Errorf("accounts = %v, want %v", got, want)
+	candidates, _ = provider.Candidates(context.Background())
+	for _, folder := range candidates.Folders {
+		if folder == shop {
+			t.Error("a folder already chosen is still offered")
+		}
+	}
+	if err := provider.RemoveSource(context.Background(), "shop"); err != nil {
+		t.Fatal(err)
+	}
+	if accounts, _ = provider.Accounts(context.Background()); len(accounts) != 0 {
+		t.Errorf("accounts after removing = %v", accounts)
+	}
+	if err := provider.RemoveSource(context.Background(), "shop"); !errors.Is(err, panel.ErrNoSuchAccount) {
+		t.Errorf("removing what is not chosen = %v", err)
 	}
 }
 
-// TestAnAccountOwnsTheDatabasesNamedAfterIt follows the convention every
-// panel uses: the database is called after the account, alone or with an
-// underscore and a suffix. "shop10" is somebody else's.
-func TestAnAccountOwnsTheDatabasesNamedAfterIt(t *testing.T) {
+// TestAChoiceIsChecked: what cannot be backed up is refused where the
+// operator can read why, not on the night.
+func TestAChoiceIsChecked(t *testing.T) {
 	www := t.TempDir()
-	site(t, www, "shop")
-	mysql, mysqldump := fakeMySQL(t, "information_schema", "mysql", "shop", "shop_wp", "shop10", "blog")
-	provider := &plain.Provider{Roots: []string{www}, MySQLPath: mysql, MysqldumpPath: mysqldump}
+	shop := site(t, www, "shop")
+	provider := &plain.Provider{Roots: []string{www}, Catalog: newCatalog(), PostgresUser: "-"}
+	chosen(t, provider, panel.Source{Name: "shop", Path: shop})
+
+	for _, refused := range []panel.Source{
+		{},
+		{Name: "rel", Path: "var/www"},
+		{Name: "file", Path: filepath.Join(shop, "public", "index.php")},
+		{Name: "gone", Path: filepath.Join(www, "gone")},
+		{Name: "shop", Path: www},
+		{Name: "again", Path: shop},
+		{Name: "bad name!", Path: www},
+		{Name: "baddb", MySQL: []string{"drop table"}},
+		{Name: "root", Path: "/"},
+	} {
+		if err := provider.AddSource(context.Background(), refused); err == nil {
+			t.Errorf("%+v was accepted", refused)
+		}
+	}
+	if err := provider.AddSource(context.Background(), panel.Source{MySQL: []string{"erp"}}); err != nil {
+		t.Errorf("a source of databases only was refused: %v", err)
+	}
+	sources, _ := provider.Sources(context.Background())
+	if len(sources) != 2 || sources[0].Name != "erp" || sources[0].Path != "" {
+		t.Errorf("sources = %+v; a database-only source should be named after its database", sources)
+	}
+}
+
+// TestASourceCarriesTheDatabasesTicked: the databases are the operator's
+// choice, not a naming rule, and a PostgreSQL one is marked so a dump's
+// name says which client it came from.
+func TestASourceCarriesTheDatabasesTicked(t *testing.T) {
+	www := t.TempDir()
+	shop := site(t, www, "shop")
+	mysql, mysqldump := fakeMySQL(t, "shop", "shop_wp", "blog")
+	psql, pgdump := fakePostgres(t, "erp", "crm")
+	provider := &plain.Provider{Roots: []string{www}, Catalog: newCatalog(),
+		MySQLPath: mysql, MysqldumpPath: mysqldump, PsqlPath: psql, PgDumpPath: pgdump, PostgresUser: "-"}
+
+	candidates, _ := provider.Candidates(context.Background())
+	if strings.Join(candidates.MySQL, ",") != "blog,shop,shop_wp" || strings.Join(candidates.PostgreSQL, ",") != "crm,erp" {
+		t.Errorf("databases offered: mysql %v, postgresql %v", candidates.MySQL, candidates.PostgreSQL)
+	}
+	chosen(t, provider, panel.Source{Name: "shop", Path: shop, MySQL: []string{"shop_wp", "shop"}, PostgreSQL: []string{"erp"}})
 
 	account, err := provider.Account(context.Background(), "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(account.Databases, ",") != "shop,shop_wp" {
-		t.Errorf("databases = %v, want [shop shop_wp]", account.Databases)
-	}
-	if account.HomeDir != filepath.Join(www, "shop") {
-		t.Errorf("home = %s", account.HomeDir)
+	if strings.Join(account.Databases, ",") != "shop,shop_wp,erp.pg" {
+		t.Errorf("databases = %v, want [shop shop_wp erp.pg]", account.Databases)
 	}
 	if account.SizeBytes == 0 {
-		t.Error("the account was not measured")
+		t.Error("the source was not measured")
 	}
-	if account.LeanBytes != 2*4096 {
-		t.Errorf("lean bytes = %d, want the two databases' 8192", account.LeanBytes)
+	if account.LeanBytes != 2*4096+8192 {
+		t.Errorf("lean bytes = %d, want the three databases' 16384", account.LeanBytes)
 	}
-	if _, err := provider.Account(context.Background(), "nobody"); err == nil {
-		t.Error("an account that is not under any root was found")
+	if _, err := provider.Account(context.Background(), "nobody"); !errors.Is(err, panel.ErrNoSuchAccount) {
+		t.Errorf("a name never chosen = %v", err)
 	}
 }
 
-// TestAStagedAccountIsReadWhereItLiesWithItsDumpsBeside: the files are
+// TestAStagedSourceIsReadWhereItLiesWithItsDumpsBeside: the files are
 // backed up from where they are, and what the staging directory holds
-// is the dumps and a record of what this account is.
-func TestAStagedAccountIsReadWhereItLiesWithItsDumpsBeside(t *testing.T) {
+// is the dumps and a record of what this source is.
+func TestAStagedSourceIsReadWhereItLiesWithItsDumpsBeside(t *testing.T) {
 	www := t.TempDir()
 	home := site(t, www, "shop")
 	mysql, mysqldump := fakeMySQL(t, "shop", "shop_wp")
-	provider := &plain.Provider{Roots: []string{www}, MySQLPath: mysql, MysqldumpPath: mysqldump}
+	psql, pgdump := fakePostgres(t, "erp")
+	provider := &plain.Provider{Roots: []string{www}, Catalog: newCatalog(),
+		MySQLPath: mysql, MysqldumpPath: mysqldump, PsqlPath: psql, PgDumpPath: pgdump, PostgresUser: "-"}
+	chosen(t, provider, panel.Source{Name: "shop", Path: home, MySQL: []string{"shop", "shop_wp"}, PostgreSQL: []string{"erp"}})
 	staging := t.TempDir()
 
 	account, err := provider.Account(context.Background(), "shop")
@@ -150,37 +269,35 @@ func TestAStagedAccountIsReadWhereItLiesWithItsDumpsBeside(t *testing.T) {
 		}
 	}
 	if homedir != home {
-		t.Errorf("homedir part = %q, want the account's own directory %q", homedir, home)
+		t.Errorf("homedir part = %q, want the source's own directory %q", homedir, home)
 	}
 	if metadata == "" || !strings.HasPrefix(metadata, staging) {
 		t.Errorf("metadata part = %q, want a directory under %s", metadata, staging)
 	}
-	for _, db := range []string{"shop", "shop_wp"} {
+	for db, want := range map[string]string{"shop": "dump of shop", "shop_wp": "dump of shop_wp", "erp.pg": "pg dump of erp"} {
 		body, err := os.ReadFile(payload.DumpPaths[db])
 		if err != nil {
 			t.Errorf("dump of %s: %v", db, err)
 			continue
 		}
-		if !strings.Contains(string(body), "dump of "+db) {
+		if !strings.Contains(string(body), want) {
 			t.Errorf("dump of %s holds %q", db, body)
 		}
-		if !strings.HasPrefix(payload.DumpPaths[db], metadata) {
-			t.Errorf("dump of %s is at %s, outside the metadata part", db, payload.DumpPaths[db])
+		if !strings.HasPrefix(payload.DumpPaths[db], filepath.Join(metadata, "databases")) ||
+			!strings.HasSuffix(payload.DumpPaths[db], db+".sql") {
+			t.Errorf("dump of %s is at %s", db, payload.DumpPaths[db])
 		}
 	}
 	record, err := os.ReadFile(filepath.Join(metadata, "gniza", "account.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var got struct {
-		Account   string   `json:"account"`
-		Path      string   `json:"path"`
-		Databases []string `json:"databases"`
-	}
+	var got plain.Record
 	if err := json.Unmarshal(record, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Account != "shop" || got.Path != home || strings.Join(got.Databases, ",") != "shop,shop_wp" {
+	if got.Account != "shop" || got.Path != home || strings.Join(got.Databases, ",") != "shop,shop_wp,erp.pg" ||
+		strings.Join(got.MySQL, ",") != "shop,shop_wp" || strings.Join(got.PostgreSQL, ",") != "erp" {
 		t.Errorf("account.json = %s", record)
 	}
 	if len(payload.Missing) != 0 {
@@ -188,14 +305,54 @@ func TestAStagedAccountIsReadWhereItLiesWithItsDumpsBeside(t *testing.T) {
 	}
 }
 
+// TestASourceOfDatabasesOnlyStillHasAFilesPart: a snapshot is read back
+// through one home directory part and one metadata part, so a source
+// with no folder is given one holding a note, and its files cannot be restored
+// because there are none.
+func TestASourceOfDatabasesOnlyStillHasAFilesPart(t *testing.T) {
+	mysql, mysqldump := fakeMySQL(t, "erp")
+	provider := &plain.Provider{Catalog: newCatalog(), MySQLPath: mysql, MysqldumpPath: mysqldump, PostgresUser: "-"}
+	chosen(t, provider, panel.Source{Name: "erp", MySQL: []string{"erp"}})
+	staging := t.TempDir()
+	account, _ := provider.Account(context.Background(), "erp")
+	payload, err := provider.Stage(context.Background(), panel.StageRequest{
+		Account: account, StagingDir: staging, Mode: pkgacct.ModeSplit,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var homedir string
+	for _, part := range payload.Parts {
+		if part.Kind == pkgacct.PartHomedir {
+			homedir = part.Path
+		}
+	}
+	if !strings.HasPrefix(homedir, staging) {
+		t.Errorf("files part = %q, want an empty directory under %s", homedir, staging)
+	}
+	if entries, err := os.ReadDir(homedir); err != nil || len(entries) != 1 || entries[0].Name() != plain.NoFolderNote {
+		t.Errorf("files part holds %v, %v; want only the note", entries, err)
+	}
+	if _, ok := payload.DumpPaths["erp"]; !ok {
+		t.Error("the database was not dumped")
+	}
+	if err := provider.PutHomeDir(context.Background(), "erp", t.TempDir()); err == nil {
+		t.Error("files were restored for a source that has none")
+	}
+	if id, err := provider.AccountIdentity("erp"); err != nil || id == 0 {
+		t.Errorf("identity of a database-only source = %d, %v", id, err)
+	}
+}
+
 // TestADumpThatFailsIsAnOmissionNotARefusal keeps ADR 0017: a backup
 // with a hole in it is worth having, and worth being told about.
 func TestADumpThatFailsIsAnOmissionNotARefusal(t *testing.T) {
 	www := t.TempDir()
-	site(t, www, "shop")
+	shop := site(t, www, "shop")
 	mysql, mysqldump := fakeMySQL(t, "shop", "shop_wp")
 	t.Setenv("GNIZA_BAD_DUMP", "shop_wp")
-	provider := &plain.Provider{Roots: []string{www}, MySQLPath: mysql, MysqldumpPath: mysqldump}
+	provider := &plain.Provider{Roots: []string{www}, Catalog: newCatalog(), MySQLPath: mysql, MysqldumpPath: mysqldump, PostgresUser: "-"}
+	chosen(t, provider, panel.Source{Name: "shop", Path: shop, MySQL: []string{"shop", "shop_wp"}})
 
 	account, err := provider.Account(context.Background(), "shop")
 	if err != nil {
@@ -223,9 +380,10 @@ func TestADumpThatFailsIsAnOmissionNotARefusal(t *testing.T) {
 // gets files only.
 func TestASkipOfTheDatabasesLeavesNoDumps(t *testing.T) {
 	www := t.TempDir()
-	site(t, www, "shop")
+	shop := site(t, www, "shop")
 	mysql, mysqldump := fakeMySQL(t, "shop")
-	provider := &plain.Provider{Roots: []string{www}, MySQLPath: mysql, MysqldumpPath: mysqldump}
+	provider := &plain.Provider{Roots: []string{www}, Catalog: newCatalog(), MySQLPath: mysql, MysqldumpPath: mysqldump, PostgresUser: "-"}
+	chosen(t, provider, panel.Source{Name: "shop", Path: shop, MySQL: []string{"shop"}})
 	account, _ := provider.Account(context.Background(), "shop")
 	payload, err := provider.Stage(context.Background(), panel.StageRequest{
 		Account: account, StagingDir: t.TempDir(), Mode: pkgacct.ModeSplit, SkipDatabases: true,
@@ -241,8 +399,9 @@ func TestASkipOfTheDatabasesLeavesNoDumps(t *testing.T) {
 // TestOnlyTheSplitShapeIsStaged: there is no native archive to make.
 func TestOnlyTheSplitShapeIsStaged(t *testing.T) {
 	www := t.TempDir()
-	site(t, www, "shop")
-	provider := &plain.Provider{Roots: []string{www}}
+	shop := site(t, www, "shop")
+	provider := &plain.Provider{Roots: []string{www}, Catalog: newCatalog(), PostgresUser: "-"}
+	chosen(t, provider, panel.Source{Name: "shop", Path: shop})
 	account, _ := provider.Account(context.Background(), "shop")
 	_, err := provider.Stage(context.Background(), panel.StageRequest{
 		Account: account, StagingDir: t.TempDir(), Mode: pkgacct.ModeMonolithic,
@@ -255,7 +414,7 @@ func TestOnlyTheSplitShapeIsStaged(t *testing.T) {
 // TestTheNativeRestoreIsRefusedAsUnverified: there is no panel to hand
 // an archive to. Files go back with PutHomeDir, dumps with LoadDatabase.
 func TestTheNativeRestoreIsRefusedAsUnverified(t *testing.T) {
-	provider := &plain.Provider{Roots: []string{t.TempDir()}}
+	provider := &plain.Provider{Roots: []string{t.TempDir()}, Catalog: newCatalog()}
 	_, err := provider.Apply(context.Background(), "/nowhere.tar", panel.ApplyOptions{Overwrite: true, Unrestricted: true})
 	if !errors.Is(err, plain.ErrUnverified) {
 		t.Errorf("Apply = %v, want ErrUnverified", err)
@@ -266,10 +425,13 @@ func TestTheNativeRestoreIsRefusedAsUnverified(t *testing.T) {
 	if err := provider.PutDatabaseUsers(context.Background(), "shop", nil); !errors.Is(err, plain.ErrUnverified) {
 		t.Errorf("PutDatabaseUsers = %v, want ErrUnverified", err)
 	}
+	if err := (&plain.Provider{}).AddSource(context.Background(), panel.Source{Path: t.TempDir()}); !errors.Is(err, plain.ErrNoCatalog) {
+		t.Errorf("a provider with no catalog took a choice: %v", err)
+	}
 }
 
 // TestTheFilesGoBackWhereTheyWere: PutHomeDir writes the restored tree
-// over the account's own directory, and a file that was added since
+// over the source's own directory, and a file that was added since
 // stays.
 func TestTheFilesGoBackWhereTheyWere(t *testing.T) {
 	www := t.TempDir()
@@ -280,7 +442,8 @@ func TestTheFilesGoBackWhereTheyWere(t *testing.T) {
 	os.WriteFile(filepath.Join(from, "public", "index.php"), []byte("<?php echo 'restored';"), 0o644)
 	os.WriteFile(filepath.Join(from, "config.php"), []byte("<?php"), 0o600)
 
-	provider := &plain.Provider{Roots: []string{www}}
+	provider := &plain.Provider{Roots: []string{www}, Catalog: newCatalog(), PostgresUser: "-"}
+	chosen(t, provider, panel.Source{Name: "shop", Path: home})
 	if err := provider.PutHomeDir(context.Background(), "shop", from); err != nil {
 		t.Fatal(err)
 	}
@@ -299,17 +462,21 @@ func TestTheFilesGoBackWhereTheyWere(t *testing.T) {
 		t.Errorf("config.php mode = %o, want 600", info.Mode().Perm())
 	}
 	if err := provider.PutHomeDir(context.Background(), "nobody", from); err == nil {
-		t.Error("files were written for an account that is not under any root")
+		t.Error("files were written for a source nobody chose")
 	}
 }
 
-// TestADumpIsLoadedIntoTheAccountsOwnDatabase: LoadDatabase feeds the
-// dump to mysql, and only for a database the account owns by name.
-func TestADumpIsLoadedIntoTheAccountsOwnDatabase(t *testing.T) {
+// TestADumpIsLoadedOnlyIntoADatabaseTheSourceWasChosenWith: LoadDatabase
+// feeds a MySQL dump to mysql and a PostgreSQL one to psql, and refuses
+// a database the operator did not tick for this source.
+func TestADumpIsLoadedOnlyIntoADatabaseTheSourceWasChosenWith(t *testing.T) {
 	www := t.TempDir()
-	site(t, www, "shop")
+	shop := site(t, www, "shop")
 	mysql, mysqldump := fakeMySQL(t, "shop", "blog")
-	provider := &plain.Provider{Roots: []string{www}, MySQLPath: mysql, MysqldumpPath: mysqldump}
+	psql, pgdump := fakePostgres(t, "erp")
+	provider := &plain.Provider{Roots: []string{www}, Catalog: newCatalog(),
+		MySQLPath: mysql, MysqldumpPath: mysqldump, PsqlPath: psql, PgDumpPath: pgdump, PostgresUser: "-"}
+	chosen(t, provider, panel.Source{Name: "shop", Path: shop, MySQL: []string{"shop"}, PostgreSQL: []string{"erp", "crm"}})
 	dump := filepath.Join(t.TempDir(), "shop.sql")
 	os.WriteFile(dump, []byte("CREATE TABLE t (id int);"), 0o600)
 
@@ -317,17 +484,154 @@ func TestADumpIsLoadedIntoTheAccountsOwnDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	log, _ := os.ReadFile(filepath.Join(filepath.Dir(mysql), "mysql.log"))
-	if !strings.Contains(string(log), "loaded") || !strings.Contains(string(log), "shop") {
+	if !strings.Contains(string(log), "loaded shop") {
 		t.Errorf("mysql was not asked to load the dump: %q", log)
 	}
 	if err := provider.LoadDatabase(context.Background(), "shop", "blog", dump); err == nil {
-		t.Error("a dump was loaded into a database the account does not own")
+		t.Error("a dump was loaded into a MySQL database the source was not chosen with")
 	}
 	if err := provider.CreateDatabase(context.Background(), "shop", "blog"); err == nil {
-		t.Error("a database was created under a name the account does not own")
+		t.Error("a MySQL database was created under a name the source was not chosen with")
 	}
-	if err := provider.CreateDatabase(context.Background(), "shop", "shop_new"); err != nil {
-		t.Errorf("CreateDatabase = %v", err)
+	if err := provider.CreateDatabase(context.Background(), "shop", "shop"); err != nil {
+		t.Errorf("CreateDatabase(shop) = %v", err)
+	}
+
+	if err := provider.LoadDatabase(context.Background(), "shop", "erp.pg", dump); err != nil {
+		t.Fatal(err)
+	}
+	pglog, _ := os.ReadFile(filepath.Join(filepath.Dir(psql), "psql.log"))
+	if !strings.Contains(string(pglog), "-d erp") {
+		t.Errorf("psql was not asked to load the dump into erp: %q", pglog)
+	}
+	if err := provider.LoadDatabase(context.Background(), "shop", "erp", dump); err == nil {
+		t.Error("a PostgreSQL dump was handed to mysql because its name lost the mark")
+	}
+	// erp is there, so nothing is created; crm is gone, so it is.
+	if err := provider.CreateDatabase(context.Background(), "shop", "erp.pg"); err != nil {
+		t.Errorf("CreateDatabase(erp.pg) = %v", err)
+	}
+	if err := provider.CreateDatabase(context.Background(), "shop", "crm.pg"); err != nil {
+		t.Errorf("CreateDatabase(crm.pg) = %v", err)
+	}
+	pglog, _ = os.ReadFile(filepath.Join(filepath.Dir(psql), "psql.log"))
+	if strings.Contains(string(pglog), `CREATE DATABASE "erp"`) || !strings.Contains(string(pglog), `CREATE DATABASE "crm"`) {
+		t.Errorf("psql log = %q; want crm created and erp left alone", pglog)
+	}
+}
+
+// TestAContainerBecomesASourcePerMount: ticking a container chooses each
+// of its volumes and bind mounts, read where they lie on the host, and
+// its backup carries the container's own description and compose file
+// beside the record. A volume read while the container runs is said to
+// be so.
+func TestAContainerBecomesASourcePerMount(t *testing.T) {
+	host := t.TempDir()
+	data := filepath.Join(host, "volumes", "web_data", "_data")
+	html := filepath.Join(host, "srv", "web", "html")
+	for _, dir := range []string{data, html} {
+		os.MkdirAll(dir, 0o755)
+		os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644)
+	}
+	compose := filepath.Join(host, "srv", "web", "docker-compose.yml")
+	os.WriteFile(compose, []byte("services: {}\n"), 0o644)
+	inspectDir := t.TempDir()
+	web := map[string]any{
+		"Name":  "/web",
+		"State": map[string]any{"Running": true},
+		"Config": map[string]any{"Image": "nginx:1", "Labels": map[string]string{
+			"com.docker.compose.project":              "web",
+			"com.docker.compose.project.working_dir":  filepath.Join(host, "srv", "web"),
+			"com.docker.compose.project.config_files": "docker-compose.yml",
+		}},
+		"Mounts": []map[string]string{
+			{"Type": "volume", "Name": "web_data", "Source": data, "Destination": "/var/lib/data"},
+			{"Type": "bind", "Source": html, "Destination": "/usr/share/nginx/html"},
+			{"Type": "bind", "Source": filepath.Join(host, "gone"), "Destination": "/gone"},
+		},
+	}
+	body, _ := json.Marshal([]any{web})
+	os.WriteFile(filepath.Join(inspectDir, "web.json"), body, 0o644)
+	body, _ = json.Marshal([]any{map[string]any{"Name": "/redis", "State": map[string]any{"Running": false}}})
+	os.WriteFile(filepath.Join(inspectDir, "redis.json"), body, 0o644)
+	docker := fakeDocker(t, inspectDir, "web", "redis")
+	provider := &plain.Provider{Catalog: newCatalog(), DockerPath: docker, PodmanPath: filepath.Join(host, "no-podman"), PostgresUser: "-"}
+
+	candidates, err := provider.Candidates(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(candidates.Containers) != 2 || candidates.Containers[0].Name != "redis" || candidates.Containers[1].Image != "image:1" {
+		t.Errorf("containers offered = %+v", candidates.Containers)
+	}
+
+	made, err := provider.AddContainer(context.Background(), "docker", "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, source := range made {
+		names = append(names, source.Name+"="+source.Path)
+	}
+	want := []string{"web-data=" + data, "web-html=" + html}
+	if strings.Join(names, " ") != strings.Join(want, " ") {
+		t.Errorf("sources made = %v, want %v", names, want)
+	}
+	if made[0].Container == nil || made[0].Container.Mount != "/var/lib/data" || made[0].Container.Engine != "docker" {
+		t.Errorf("container ref = %+v", made[0].Container)
+	}
+	if _, err := provider.AddContainer(context.Background(), "docker", "web"); err == nil {
+		t.Error("a container was chosen twice")
+	}
+	if _, err := provider.AddContainer(context.Background(), "docker", "nothere"); err == nil {
+		t.Error("a container docker does not know was chosen")
+	}
+	candidates, _ = provider.Candidates(context.Background())
+	for _, c := range candidates.Containers {
+		if (c.Name == "web") != c.Chosen {
+			t.Errorf("%s chosen = %v", c.Name, c.Chosen)
+		}
+	}
+
+	account, err := provider.Account(context.Background(), "web-data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := provider.Stage(context.Background(), panel.StageRequest{
+		Account: account, StagingDir: t.TempDir(), Mode: pkgacct.ModeSplit,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var metadata string
+	for _, part := range payload.Parts {
+		if part.Kind == pkgacct.PartMetadata {
+			metadata = part.Path
+		}
+	}
+	if _, err := os.Stat(filepath.Join(metadata, "gniza", "container.json")); err != nil {
+		t.Errorf("the container's description was not kept: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(metadata, "gniza", "compose", "docker-compose.yml")); err != nil {
+		t.Errorf("the compose file was not kept: %v", err)
+	}
+	if len(payload.Warnings) != 1 || !strings.Contains(payload.Warnings[0], "was running") {
+		t.Errorf("warnings = %v, want one about the running container", payload.Warnings)
+	}
+	record, _ := os.ReadFile(filepath.Join(metadata, "gniza", "account.json"))
+	var got plain.Record
+	json.Unmarshal(record, &got)
+	if got.Container == nil || got.Container.Name != "web" || len(got.ComposeFiles) != 1 {
+		t.Errorf("account.json = %s", record)
+	}
+
+	// A container with no mounts is chosen as its description alone.
+	made, err = provider.AddContainer(context.Background(), "docker", "redis")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(made) != 1 || made[0].Name != "redis" || made[0].Path != "" || made[0].Container.Mount != "" {
+		t.Errorf("a container with no mounts made %+v", made)
 	}
 }
 
@@ -362,13 +666,14 @@ func TestTheLayoutNamesWhatAPlainServerHas(t *testing.T) {
 	}
 }
 
-// TestAnAccountsIdentityIsItsDirectory: a directory removed and made
-// again under the same name is another account, and a name with no
-// directory is no account.
-func TestAnAccountsIdentityIsItsDirectory(t *testing.T) {
+// TestASourcesIdentityIsItsDirectory: a directory removed and made
+// again under the same name is another account, and a source whose
+// directory is gone has no identity to give.
+func TestASourcesIdentityIsItsDirectory(t *testing.T) {
 	www := t.TempDir()
 	home := site(t, www, "shop")
-	provider := &plain.Provider{Roots: []string{www}}
+	provider := &plain.Provider{Roots: []string{www}, Catalog: newCatalog(), PostgresUser: "-"}
+	chosen(t, provider, panel.Source{Name: "shop", Path: home})
 	first, err := provider.AccountIdentity("shop")
 	if err != nil {
 		t.Fatal(err)
@@ -378,6 +683,9 @@ func TestAnAccountsIdentityIsItsDirectory(t *testing.T) {
 	}
 	if _, err := provider.AccountIdentity("shop"); !errors.Is(err, panel.ErrNoSuchAccount) {
 		t.Errorf("a name whose directory is gone = %v, want ErrNoSuchAccount", err)
+	}
+	if accounts, _ := provider.Accounts(context.Background()); len(accounts) != 1 || !accounts[0].Missing {
+		t.Errorf("a source whose directory is gone is not listed as missing: %+v", accounts)
 	}
 	// The kernel stamps a directory's birth with its coarse clock, a few
 	// milliseconds wide, and ext4 hands a freed inode number straight
@@ -391,5 +699,8 @@ func TestAnAccountsIdentityIsItsDirectory(t *testing.T) {
 	}
 	if first == second {
 		t.Error("the same identity was given to a directory made again under the old name")
+	}
+	if _, err := provider.AccountIdentity("nobody"); !errors.Is(err, panel.ErrNoSuchAccount) {
+		t.Errorf("a name never chosen = %v", err)
 	}
 }

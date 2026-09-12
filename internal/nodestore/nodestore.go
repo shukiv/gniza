@@ -35,6 +35,9 @@ var (
 	bucketIdentities   = []byte("account_identities")
 	bucketLifecycle    = []byte("lifecycle_events")
 	bucketBaskets      = []byte("baskets")
+	// bucketSources holds what an operator chose to back up on a server
+	// without a panel (panel.Source), keyed by name.
+	bucketSources = []byte("sources")
 )
 
 var allBuckets = [][]byte{
@@ -44,6 +47,7 @@ var allBuckets = [][]byte{
 	bucketIdentities,
 	bucketLifecycle,
 	bucketBaskets,
+	bucketSources,
 }
 
 // Store is the on-disk state file.

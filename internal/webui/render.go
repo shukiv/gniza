@@ -23,9 +23,13 @@ import (
 type page struct {
 	Title string
 	Nav   string
-	CSRF  string
-	Flash *flash
-	Data  any
+	// Choosing says the accounts are the operator's choice rather than a
+	// panel's list (panel.Chooser), so the rail calls the page by what it
+	// is there: what to back up.
+	Choosing bool
+	CSRF     string
+	Flash    *flash
+	Data     any
 	// RunningVersion is this binary's build, not the latest published release.
 	RunningVersion string
 	// Running is every backup and restore happening now. It is on the
@@ -106,6 +110,7 @@ func (s *Server) renderStatus(
 		Panel:          s.panelName(),
 		Document:       documentOf(r),
 		Cpanel:         s.panelName() == "cPanel",
+		Choosing:       s.choosing(),
 	}
 	// An account-facing request is confined to the account that opened
 	// the socket, here as everywhere: another customer's restore is not

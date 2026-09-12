@@ -1,10 +1,19 @@
 {{define "content"}}
 {{$d := .Data}}
+{{$choose := $d.Choose}}
 <div class="cpr:flex cpr:flex-wrap cpr:items-end cpr:gap-3">
   <div class="cpr:mr-auto">
+    {{if $choose}}
+    <h1 class="cpr:page-title">What to back up</h1>
+    <p class="cpr:page-sub">This server has no panel to say what an account is, so you do: folders, databases and containers, each backed up on its own.</p>
+    {{else}}
     <h1 class="cpr:page-title">Accounts</h1>
     <p class="cpr:page-sub">Back up, verify or recover any account on this server.</p>
+    {{end}}
   </div>
+  {{if and $choose $d.Accounts (not $choose.Adding)}}
+  <a class="cpr:btn cpr:btn-sm cpr:btn-primary" href="?p=accounts&amp;add=1" data-dialog="add-source">Add</a>
+  {{end}}
   {{with $d.RunAll}}
   <form method="post" action="?p=schedule/run" class="cpr:inline-block cpr:align-middle">
     <input type="hidden" name="csrf" value="{{$.CSRF}}">
@@ -21,7 +30,7 @@
   <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-2 cpr:px-3 cpr:py-2.5 cpr:border-b cpr:border-base-300">
     <label class="cpr:input cpr:input-sm cpr:w-64">
       <svg viewBox="0 0 24 24" class="cpr:size-4 cpr:opacity-60 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" aria-hidden="true"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
-      <input type="search" id="filter" placeholder="Filter by account or domain" aria-label="Filter accounts"
+      <input type="search" id="filter" placeholder="{{if $choose}}Filter by name or path{{else}}Filter by account or domain{{end}}" aria-label="Filter"
              autocomplete="off" data-filter="#accounts">
     </label>
     <div class="cpr:join" data-filter-state="#accounts">
@@ -34,16 +43,21 @@
   <div class="cpr:overflow-x-auto" data-tablewrap>
     <table id="accounts" class="cpr:table cpr:table-sm" data-sortable>
       <thead>
-        <tr><th>Account</th><th>State</th><th>Last backup</th><th>Size</th><th data-nosort>Backups</th><th class="cpr:text-right" data-nosort>&nbsp;</th></tr>
+        <tr><th>{{if $choose}}Source{{else}}Account{{end}}</th><th>State</th><th>Last backup</th><th>Size</th><th data-nosort>Backups</th><th class="cpr:text-right" data-nosort>&nbsp;</th></tr>
       </thead>
       <tbody data-live="accounts">
         {{range $d.Accounts}}
-        <tr class="{{.Stripe}}" data-name="{{.User}} {{.PrimaryDomain}}" data-state="{{.Filter}}" {{if .Running}}data-running="1"{{end}}>
+        <tr class="{{.Stripe}}" data-name="{{.User}} {{.PrimaryDomain}}{{with .Source}} {{.Path}}{{end}}" data-state="{{.Filter}}" {{if .Running}}data-running="1"{{end}}>
           <td><a class="cpr:link cpr:link-hover cpr:font-semibold" href="?p=account&amp;user={{.User}}">{{.User}}</a>
             {{if .PrimaryDomain}}<br><span class="cpr:text-xs cpr:text-base-content/60">{{.PrimaryDomain}}</span>{{end}}
+            {{with .Source}}
+            {{if .Path}}<div class="cpr:sublabel cpr:mono cpr:break-all">{{.Path}}</div>{{end}}
+            {{if or .MySQL .PostgreSQL}}<div class="cpr:sublabel">{{if .MySQL}}MySQL: {{range $i, $n := .MySQL}}{{if $i}}, {{end}}{{$n}}{{end}}{{end}}{{if and .MySQL .PostgreSQL}} · {{end}}{{if .PostgreSQL}}PostgreSQL: {{range $i, $n := .PostgreSQL}}{{if $i}}, {{end}}{{$n}}{{end}}{{end}}</div>{{end}}
+            {{with .Container}}<div class="cpr:sublabel" title="This source came from a container. Its description and compose file are kept beside every backup of it.">{{.Engine}} container {{.Name}}{{if .Mount}}, mounted at <span class="cpr:mono">{{.Mount}}</span>{{else}}: its description only{{end}}</div>{{end}}
+            {{end}}
             {{if .Missing}}<div class="cpr:sublabel cpr:text-warning"
-              title="{{$.Panel}} lists this account, but nothing is at its home directory. Its backup will fail until that is sorted out — which is better than it quietly not being backed up at all.">
-              home directory missing</div>{{end}}</td>
+              title="{{if $choose}}This folder was chosen, but it is not there now.{{else}}{{$.Panel}} lists this account, but nothing is at its home directory.{{end}} Its backup will fail until that is sorted out — which is better than it quietly not being backed up at all.">
+              {{if $choose}}folder missing{{else}}home directory missing{{end}}</div>{{end}}</td>
           <td class="cpr:min-w-40">{{template "accountstate" .}}{{template "jobprogress" .}}
             {{with .RemovalSafety}}<div class="cpr:sublabel" title="{{.Detail}}">
               {{if .Allowed}}<span class="cpr:pill cpr:badge-success">Safe to terminate</span>
@@ -96,6 +110,11 @@
               <button class="cpr:btn cpr:btn-xs cpr:whitespace-nowrap cpr:btn-ghost" {{if or .Running (not .LastBackup)}}disabled{{end}}>Download</button>
             </form>
             <a class="cpr:btn cpr:btn-xs cpr:whitespace-nowrap cpr:btn-ghost" href="?p=account&amp;user={{.User}}">Open</a>
+            {{if $choose}}<form method="post" action="?p=accounts/remove" class="cpr:contents" data-confirm="Stop backing up {{.User}}? The backups already taken of it stay at the destinations.">
+              <input type="hidden" name="csrf" value="{{$.CSRF}}">
+              <input type="hidden" name="account" value="{{.User}}">
+              <button class="cpr:btn cpr:btn-xs cpr:whitespace-nowrap cpr:btn-ghost cpr:text-error" title="Stop backing this up. What was already backed up stays." {{if .Running}}disabled{{end}}>Remove</button>
+            </form>{{end}}
           </div></td>
         </tr>
         {{end}}
@@ -103,13 +122,119 @@
     </table>
   </div>
   <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:px-3 cpr:py-2 cpr:border-t cpr:border-base-300 cpr:text-xs cpr:text-base-content/70">
-    <span><span class="cpr:tabular-nums" data-count-for="#accounts">{{len $d.Accounts}}</span> account{{if ne (len $d.Accounts) 1}}s{{end}}</span>
+    <span><span class="cpr:tabular-nums" data-count-for="#accounts">{{len $d.Accounts}}</span> {{if $choose}}source{{else}}account{{end}}{{if ne (len $d.Accounts) 1}}s{{end}}</span>
   </div>
 </div>
-{{else}}
+{{else if not $choose}}
 <div class="cpr:panel"><div class="cpr:px-4 cpr:py-8 cpr:text-center cpr:text-base-content/70">
   <p class="cpr:mb-4"><b>No {{$.Panel}} accounts found on this server.</b><br>
-    Gniza reads them from <span class="cpr:mono">/var/cpanel/users</span>.</p>
+    Gniza reads them from {{if $.Cpanel}}<span class="cpr:mono">/var/cpanel/users</span>{{else}}{{$.Panel}}'s own list of accounts{{end}}.</p>
 </div></div>
 {{end}}
+
+{{with $choose}}
+{{if not $d.Accounts}}
+{{/* Nothing chosen yet: the form is the page, so the first visit says
+     what to do rather than showing an empty list. */}}
+<div class="cpr:panel">
+  <div class="cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">Nothing is backed up yet. Choose what should be.</h2>
+    <p class="cpr:hint cpr:mt-1">Each folder you name, with the databases ticked beside it, becomes a source that is backed up on its own. A container becomes one source per volume. Add more afterwards with the Add button.</p>
+  </div>
+  <div class="cpr:pad cpr:max-w-2xl" data-drawer-content>{{template "sourceform" $}}</div>
+</div>
+{{else if .Adding}}
+<div class="cpr:panel">
+  <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
+    <h2 class="cpr:section-title">Add to what is backed up</h2>
+    <a class="cpr:btn cpr:btn-sm cpr:btn-ghost cpr:ml-auto" href="?p=accounts">Cancel</a>
+  </div>
+  <div class="cpr:pad cpr:max-w-2xl" data-drawer-content>{{template "sourceform" $}}</div>
+</div>
+{{else}}
+<dialog id="add-source" class="cpr:modal cpr:modal-end" data-sheet aria-label="Add to what is backed up">
+  <div class="cpr:modal-box cpr:sheet">
+    <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-5 cpr:py-4 cpr:border-b cpr:border-base-300 cpr:shrink-0">
+      <h2 class="cpr:text-lg cpr:font-semibold" data-drawer-title>Add to what is backed up</h2>
+      <button type="button" class="cpr:btn cpr:btn-sm cpr:btn-ghost cpr:btn-square cpr:ml-auto" data-dialog-close aria-label="Close">
+        <svg class="cpr:size-4 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div class="cpr:flex-1 cpr:overflow-y-auto cpr:px-5 cpr:py-4" data-drawer-body>
+      {{template "sourceform" $}}
+    </div>
+  </div>
+</dialog>
+{{end}}
+{{end}}
+{{end}}
+
+{{/* The choosing: a folder with its databases as one source, and each
+     container ticked as the sources its mounts make. A section is shown
+     only when there is something in it to tick, and says so when the
+     client or the engine is not there. */}}
+{{define "sourceform"}}
+{{$c := .Data.Choose}}
+{{$k := $c.Candidates}}
+{{with $c.FormError}}
+<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:mb-4"><div>{{.}}</div></div>
+{{end}}
+<form method="post" action="?p=accounts/add">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <div class="cpr:grid cpr:gap-4">
+    <div>
+      <label class="cpr:field-label" for="path">Folder</label>
+      <input type="text" class="cpr:input cpr:input-sm cpr:w-full cpr:mono" id="path" name="path" list="folders"
+             placeholder="/var/www/shop" value="{{$c.Field "path"}}" autocomplete="off">
+      {{if $k.Folders}}<datalist id="folders">{{range $k.Folders}}<option value="{{.}}">{{end}}</datalist>{{end}}
+      <small class="cpr:help">Backed up from where it is, files and all.
+        {{if $k.Folders}}Under {{range $i, $r := $k.Roots}}{{if $i}}, {{end}}<span class="cpr:mono">{{$r}}</span>{{end}} there is:
+        {{range $i, $f := $k.Folders}}{{if $i}}, {{end}}<a class="cpr:link" href="#" data-fill="#path" data-value="{{$f}}"><span class="cpr:mono">{{$f}}</span></a>{{end}}.
+        {{else}}Nothing was found under {{range $i, $r := $k.Roots}}{{if $i}}, {{end}}<span class="cpr:mono">{{$r}}</span>{{end}}; name any folder on this server.{{end}}
+        Leave it empty for a source of databases only.</small>
+    </div>
+    <div>
+      <label class="cpr:field-label" for="name">Name</label>
+      <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="name" name="name" placeholder="after the folder, if left empty" value="{{$c.Field "name"}}">
+      <small class="cpr:help">How it is called on these pages and in the backups. Letters, digits, dot, dash and underscore.</small>
+    </div>
+    {{if $k.MySQL}}
+    <fieldset>
+      <legend class="cpr:field-label">MySQL databases to dump beside it</legend>
+      <div class="cpr:grid cpr:gap-1 cpr:sm:grid-cols-2">
+        {{range $k.MySQL}}<label class="cpr:check"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="mysql" value="{{.}}" {{if $c.Was (printf "mysql/%s" .)}}checked{{end}}><span class="cpr:mono">{{.}}</span></label>{{end}}
+      </div>
+    </fieldset>
+    {{else if $k.MySQLError}}
+    <p class="cpr:hint cpr:mt-0">MySQL: no databases to offer. <span class="cpr:text-base-content/60">{{$k.MySQLError}}</span></p>
+    {{end}}
+    {{if $k.PostgreSQL}}
+    <fieldset>
+      <legend class="cpr:field-label">PostgreSQL databases to dump beside it</legend>
+      <div class="cpr:grid cpr:gap-1 cpr:sm:grid-cols-2">
+        {{range $k.PostgreSQL}}<label class="cpr:check"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="postgresql" value="{{.}}" {{if $c.Was (printf "postgresql/%s" .)}}checked{{end}}><span class="cpr:mono">{{.}}</span></label>{{end}}
+      </div>
+    </fieldset>
+    {{else if $k.PostgreSQLError}}
+    <p class="cpr:hint cpr:mt-0">PostgreSQL: no databases to offer. <span class="cpr:text-base-content/60">{{$k.PostgreSQLError}}</span></p>
+    {{end}}
+    {{if $k.Containers}}
+    <fieldset>
+      <legend class="cpr:field-label">Containers</legend>
+      <div class="cpr:grid cpr:gap-1">
+        {{range $k.Containers}}<label class="cpr:check {{if .Chosen}}cpr:opacity-60{{end}}"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="container" value="{{.Engine}}/{{.Name}}" {{if .Chosen}}disabled{{else if $c.Was (printf "container/%s/%s" .Engine .Name)}}checked{{end}}>
+          <span><span class="cpr:font-semibold">{{.Name}}</span> <span class="cpr:text-xs cpr:text-base-content/60">{{.Engine}} · {{.Image}} · {{.Status}}{{if .Chosen}} · already chosen{{end}}</span></span></label>{{end}}
+      </div>
+      <small class="cpr:help">A ticked container becomes one source per volume and bind mount, read where it lies on this machine, with the container's description and compose file kept beside each. A database that lives inside a running container is not consistent when read this way: tick its database above instead, or stop the container for the backup.</small>
+    </fieldset>
+    {{end}}
+    {{if not $c.Offers}}
+    <p class="cpr:hint cpr:mt-0">No MySQL or PostgreSQL client answered and no container engine is installed, so there is nothing to tick; a folder is what can be chosen.</p>
+    {{end}}
+  </div>
+  <div class="cpr:flex cpr:flex-wrap cpr:gap-2 cpr:mt-5">
+    <button class="cpr:btn cpr:btn-sm cpr:btn-primary">Back this up</button>
+    {{if .Data.Accounts}}<a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=accounts" data-dialog-close>Cancel</a>{{end}}
+  </div>
+</form>
 {{end}}

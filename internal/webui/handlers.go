@@ -1586,6 +1586,9 @@ func (s *Server) handleDeleteSchedule(w http.ResponseWriter, r *http.Request) {
 
 type accountView struct {
 	panel.AccountInfo
+	// Source is the operator's choice this account is, on a server
+	// without a panel; nil where a panel lists the accounts.
+	Source     *panel.Source
 	LastBackup *time.Time
 	LastStatus job.Status
 	Running    bool
@@ -2160,6 +2163,21 @@ func (s *Server) accountViews(r *http.Request) ([]accountView, []string, error) 
 		views = append(views, view)
 	}
 	sort.Slice(views, func(i, j int) bool { return views[i].User < views[j].User })
+	// On a server without a panel each account is a choice; the row says
+	// what was chosen.
+	if chooser, ok := s.engine.Chooser(); ok {
+		if sources, err := chooser.Sources(r.Context()); err == nil {
+			byName := map[string]panel.Source{}
+			for _, source := range sources {
+				byName[source.Name] = source
+			}
+			for i := range views {
+				if source, chosen := byName[views[i].User]; chosen {
+					views[i].Source = &source
+				}
+			}
+		}
+	}
 	// After the sort, so that the accounts a warning names are in the
 	// order the page below it lists them.
 	warnings = append(warnings, failureWarnings(views)...)
@@ -2264,13 +2282,7 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	view := struct {
-		Accounts    []accountView
-		RunAll      *nodestore.Policy
-		Warnings    []string
-		Protected   int
-		Unprotected int
-	}{Accounts: accounts, Warnings: warnings}
+	view := accountsView{Accounts: accounts, Warnings: warnings}
 	if policy, ok := preferredBackupPolicy(policies, "", true); ok {
 		view.RunAll = &policy
 	}
@@ -2282,7 +2294,28 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 			view.Unprotected++
 		}
 	}
-	s.render(w, r, "accounts.html", "Accounts", "accounts", view)
+	title := "Accounts"
+	if chooser, ok := s.engine.Chooser(); ok {
+		choose := s.chooseViewFor(r, chooser, len(accounts), "")
+		view.Choose = &choose
+		title = "What to back up"
+	}
+	s.render(w, r, "accounts.html", title, "accounts", view)
+}
+
+// accountsView is the accounts page: the panel's list, or, on a server
+// without a panel, what the operator chose and what could be chosen.
+type accountsView struct {
+	Accounts    []accountView
+	RunAll      *nodestore.Policy
+	Warnings    []string
+	Protected   int
+	Unprotected int
+	Choose      *chooseView
+	// FormError is the refused choice's reason, at the top of the view
+	// as well as inside Choose: the terminal reads it there, as it does
+	// for every form.
+	FormError string
 }
 
 // activityRow is one thing that happened to an account.

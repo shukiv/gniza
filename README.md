@@ -77,7 +77,7 @@ again upgrades in place. Then:
 |---|---|
 | cPanel/WHM | WHM sidebar, **Plugins → Gniza Backups**. Customers get a tile in cPanel with their own restore points. |
 | DirectAdmin | **Admin Tools → Gniza**, in the Evolution skin. |
-| No panel | `gniza-agent -tui` as root, or a browser at the address the installer asks about, behind a password. |
+| No panel | `gniza-agent -tui` as root, or a browser at the address the installer asks about, behind a password. Nothing is backed up until chosen on **What to back up**: folders, MySQL and PostgreSQL databases, docker and podman containers. |
 
 From there: add a destination, add a schedule, and the server backs itself
 up. Destinations are SFTP, S3, a restic REST server or a local disk.
@@ -108,11 +108,12 @@ than guessing. [The DirectAdmin guide](docs/guide/directadmin.md) has the
 full list.
 
 **A server without a panel** since v0.3.6
-([ADR 22](docs/adr/0022-a-server-without-a-panel.md)). An account is a
-directory directly under one of the roots in `/etc/gniza/plain.env`,
-`/var/www`, `/srv` and `/opt` by default. A MySQL database named after the
-account, alone or with an underscore and a suffix, is backed up with it.
-The system backup takes the web, PHP, database, container, cron and SSH
+([ADR 22](docs/adr/0022-a-server-without-a-panel.md),
+[ADR 25](docs/adr/0025-what-to-back-up-on-a-server-without-a-panel.md)).
+Nothing says what an account is there, so the operator does: a folder
+with the MySQL and PostgreSQL databases ticked beside it, or a docker or
+podman container, each backed up as a source of its own. The folders
+under `/var/www`, `/srv` and `/opt` are offered, not assumed. The system backup takes the web, PHP, database, container, cron and SSH
 configuration, the certificates, the unit files and a manifest of packages,
 containers and volumes. Restore of files and databases is written and not
 yet proved on a live server; the provider says so at start.

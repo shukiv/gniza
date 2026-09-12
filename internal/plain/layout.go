@@ -28,6 +28,9 @@ const (
 	DumpDir = "databases"
 	// FilesDir is where the account's directory goes in a rebuilt tree.
 	FilesDir = "files"
+	// NoFolderNote is the one file in the files part of a source that
+	// has no folder.
+	NoFolderNote = "no-folder.txt"
 )
 
 func (Layout) Panel() string       { return PanelName }

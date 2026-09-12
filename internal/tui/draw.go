@@ -66,7 +66,11 @@ func (m Model) header() string {
 
 	var tabs []string
 	for which := screen(0); which < screenCount; which++ {
-		label := fmt.Sprintf("%d %s", which+1, screenNames[which])
+		name := screenNames[which]
+		if which == screenAccounts && m.choosing() {
+			name = "What to back up"
+		}
+		label := fmt.Sprintf("%d %s", which+1, name)
 		if which == m.screen {
 			tabs = append(tabs, sTabOn.Render(label))
 		} else {
@@ -140,6 +144,9 @@ func (m Model) screenKeys() string {
 	case screenSchedules:
 		return chips("a", "add", "e", "edit", "R", "run now", "d", "remove")
 	case screenAccounts:
+		if m.choosing() {
+			return chips("a", "add a folder", "c", "add a container", "d", "remove", "b", "back up", "B", "back up everything")
+		}
 		return chips("b", "back up", "B", "back up every account")
 	case screenLogs:
 		return chips("t", "next tab")
@@ -440,12 +447,28 @@ func (m Model) schedulesView() string {
 
 // --- accounts ---
 
+// choosing says the accounts are what the operator chose, on a server
+// without a panel, once the accounts page has said so.
+func (m Model) choosing() bool {
+	if !m.loaded[screenAccounts] {
+		return false
+	}
+	return decode[accountsPage](m, screenAccounts).Choose != nil
+}
+
 func (m Model) accountsView() string {
 	v := decode[accountsPage](m, screenAccounts)
 	width := m.innerWidth()
 	if len(v.Accounts) == 0 {
+		if v.Choose != nil {
+			hint := "Press a to back up a folder with its databases, or c to back up a container. Each becomes a source that is backed up on its own."
+			if folders := v.Choose.Candidates.Folders; len(folders) > 0 {
+				hint += " Found under the roots: " + strings.Join(folders, ", ") + "."
+			}
+			return empty(width, "Nothing is backed up yet.", "", "") + "\n\n" + sMuted.Render(clipWrap(hint, width))
+		}
 		return empty(width, "No accounts were found.", "", "") + "\n\n" +
-			sMuted.Render(clipWrap("On a server with no panel, an account is a directory under one of the roots in /etc/gniza/plain.env.", width))
+			sMuted.Render(clipWrap("The panel lists no accounts on this server.", width))
 	}
 	rows := make([][]string, 0, len(v.Accounts))
 	for _, a := range v.Accounts {
@@ -457,19 +480,54 @@ func (m Model) accountsView() string {
 		if a.Runs > 0 {
 			record = fmt.Sprintf("%d/%d ok", a.Succeeded, a.Runs)
 		}
+		if v.Choose != nil {
+			rows = append(rows, []string{a.User, whatWasChosen(a), state, ago(a.LastBackup), human.Bytes(a.SizeBytes), record, a.Because})
+			continue
+		}
 		rows = append(rows, []string{a.User, state, ago(a.LastBackup), human.Bytes(a.SizeBytes),
 			fmt.Sprint(len(a.Databases)), record, a.Because})
 	}
-	summary := fmt.Sprintf("%s · %s protected", plural(len(v.Accounts), "account"), fmt.Sprint(v.Protected))
+	noun := "account"
+	if v.Choose != nil {
+		noun = "source"
+	}
+	summary := fmt.Sprintf("%s · %s protected", plural(len(v.Accounts), noun), fmt.Sprint(v.Protected))
 	if v.Unprotected > 0 {
 		summary += " · " + sBad.Render(fmt.Sprintf("%d never backed up", v.Unprotected))
 	}
-	out := sMuted.Render(summary) + "\n\n" + grid(width, m.cursor[screenAccounts],
-		[]string{"Account", "State", "Last backup", "Size", "DBs", "Record", "Why"}, rows)
+	header := []string{"Account", "State", "Last backup", "Size", "DBs", "Record", "Why"}
+	if v.Choose != nil {
+		header = []string{"Source", "What", "State", "Last backup", "Size", "Record", "Why"}
+	}
+	out := sMuted.Render(summary) + "\n\n" + grid(width, m.cursor[screenAccounts], header, rows)
 	for _, warning := range v.Warnings {
 		out += "\n" + banner("warn", warning, width)
 	}
 	return out
+}
+
+// whatWasChosen says in a few words what a source is.
+func whatWasChosen(a account) string {
+	if a.Source == nil {
+		return a.HomeDir
+	}
+	var parts []string
+	switch c := a.Source.Container; {
+	case c != nil && c.Mount != "":
+		// The mount says more than the volume's path on the host does.
+		parts = append(parts, c.Engine+" "+c.Name+":"+c.Mount)
+	case c != nil:
+		parts = append(parts, c.Engine+" "+c.Name+" (description)")
+	case a.Source.Path != "":
+		parts = append(parts, a.Source.Path)
+	}
+	if n := len(a.Source.MySQL); n > 0 {
+		parts = append(parts, plural(n, "MySQL db"))
+	}
+	if n := len(a.Source.PostgreSQL); n > 0 {
+		parts = append(parts, plural(n, "PostgreSQL db"))
+	}
+	return strings.Join(parts, " · ")
 }
 
 // --- logs ---

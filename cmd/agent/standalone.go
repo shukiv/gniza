@@ -10,6 +10,7 @@ import (
 	"github.com/shukiv/gniza/internal/directadmin"
 	"github.com/shukiv/gniza/internal/node"
 	"github.com/shukiv/gniza/internal/nodestore"
+	"github.com/shukiv/gniza/internal/plain"
 	"github.com/shukiv/gniza/internal/vault"
 	"github.com/shukiv/gniza/internal/webui"
 )
@@ -71,6 +72,11 @@ func runStandalone(ctx context.Context, cfg config, log *slog.Logger) error {
 	provider, err := buildProvider(cfg, log)
 	if err != nil {
 		return err
+	}
+	// A plain server keeps what the operator chose to back up in the
+	// store, beside everything else, so the pages can change it.
+	if chooser, ok := provider.(*plain.Provider); ok {
+		chooser.Catalog = store
 	}
 
 	engine, err := node.New(node.Config{

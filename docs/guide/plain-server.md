@@ -8,12 +8,39 @@ neither panel directory and takes the plain package (ADR 0022).
 curl -fsSL https://github.com/shukiv/gniza/releases/latest/download/get.sh | sh
 ```
 
-## What an account is here
+## What to back up
 
-Every directory directly under one of the roots is an account, named
-after the directory. The roots default to `/var/www`, `/srv` and `/opt`;
-a root that is not there is skipped. To change them, edit
-`/etc/gniza/plain.env` and restart the service:
+Nothing on a server without a panel says what an account is, so you do.
+On the page called **What to back up** (screen 4 in the terminal) a
+*source* is chosen, and each source is backed up on its own, under its
+name, the way a panel's account would be:
+
+- **A folder**, backed up from where it lies, with the **MySQL** and
+  **PostgreSQL** databases you tick beside it dumped into the same
+  backup. The folders under `/var/www`, `/srv` and `/opt` are offered;
+  any folder on the server can be named. A source may have databases
+  and no folder.
+- **A container**, docker or podman. Each of its volumes and bind mounts
+  becomes a source, read where it lies on this machine, with the
+  container's own description and its compose file kept beside every
+  backup. A database that lives inside a running container is not
+  consistent when read this way: tick its database as a folder source's
+  database instead, or stop the container for the backup. The pages
+  say so where the container is ticked.
+
+Nothing is backed up until it is chosen; the page opens on the form
+until something is. A source can be removed at any time; the backups
+already taken of it stay at the destinations, and choosing it again
+under the same name carries its history on.
+
+The database lists come from the `mysql` and `psql` clients on the
+server; a client that is not there, or cannot connect, is said on the
+form and that kind is not offered. `psql` and `pg_dump` run as the
+`postgres` unix account. The container list comes from `docker ps -a`
+and `podman ps -a`.
+
+To change which folders are offered, edit `/etc/gniza/plain.env` and
+restart the service:
 
 ```
 GNIZA_PLAIN_ROOTS=/var/www,/home/deploy/sites
@@ -23,16 +50,11 @@ GNIZA_PLAIN_ROOTS=/var/www,/home/deploy/sites
 systemctl restart gniza
 ```
 
-A MySQL database named after the account, alone or with an underscore
-and a suffix (`shop`, `shop_wp`), is backed up with it. A database named
-differently is not, and the record beside the dumps in every backup
-says which databases were taken.
-
-The files are read where they lie; only the dumps and that record are
-written to staging. The system backup, when a schedule includes it,
-takes the web, PHP, database, container, cron and SSH configuration, the
-certificates and the unit files, with a list of the installed packages
-and of the containers and volumes present.
+The files are read where they lie; only the dumps and a record of what
+the source is are written to staging. The system backup, when a schedule
+includes it, takes the web, PHP, database, container, cron and SSH
+configuration, the certificates and the unit files, with a list of the
+installed packages and of the containers and volumes present.
 
 ## Setting it up from the terminal
 
@@ -61,8 +83,10 @@ screen says what the keys do there. The first hour is:
 3. On Schedules, press `a`. The defaults are nightly at two, split
    shape, the server's own configuration included, seven daily, four
    weekly and six monthly backups kept, written to every destination.
-4. On Accounts, `b` backs up the account under the cursor now, and
-   `B` runs the schedule over every account. Logs shows what happened.
+4. On What to back up, `a` chooses a folder and the databases beside
+   it, and `c` a container. `b` backs up the source under the cursor
+   now, and `B` runs the schedule over every source. Logs shows what
+   happened.
 
 The same forms are posted with `curl` from a script. Every request
 carries the CSRF token from any page:
@@ -76,6 +100,9 @@ curl -s --unix-socket $S -X POST http://x/schedule/save \
   -d "csrf=$CSRF" -d "name=Nightly" -d "cron=0 2 * * *" -d "mode=split" \
   -d "enabled=1" -d "include_system=1" \
   -d "keep_daily=7" -d "keep_weekly=4" -d "keep_monthly=6"
+curl -s --unix-socket $S -X POST http://x/accounts/add \
+  -d "csrf=$CSRF" -d "path=/var/www/shop" -d "mysql=shop" -d "mysql=shop_wp"
+curl -s --unix-socket $S -X POST http://x/accounts/add -d "csrf=$CSRF" -d "container=docker/web"
 curl -s --unix-socket $S -X POST http://x/accounts/backup -d "csrf=$CSRF" -d "account=shop"
 ```
 
@@ -142,10 +169,10 @@ which it does to upgrade itself.
 ## Restore
 
 There is no native restore to hand an archive to. What a plain server
-restores is files and databases: the website files go back over the
-account's directory (a file added since the backup stays), and a
-database dump is loaded into a database the account owns by name,
-created first if it is gone. A whole-account restore is refused as
+restores is files and databases: the files go back over the source's
+folder (a file added since the backup stays), and a dump is loaded into
+a database the source was chosen with, created first if it is gone; a
+PostgreSQL dump is the one whose name ends in `.pg`. A whole-account restore is refused as
 unverified, on purpose. The terminal's Restore screen shows what has
 been restored; asking for one from the terminal is not written yet
 (bead `cprest-91g.2`), so a restore is asked for from the browser, or

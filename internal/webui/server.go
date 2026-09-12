@@ -153,6 +153,15 @@ func New(engine *node.Engine, log *slog.Logger, options ...Option) (*Server, err
 
 // panelName is what to call the control panel this server runs, for the
 // pages that tell an operator what is about to happen.
+// choosing says whether the accounts here are chosen rather than listed.
+func (s *Server) choosing() bool {
+	if s.engine == nil {
+		return false
+	}
+	_, ok := s.engine.Chooser()
+	return ok
+}
+
 func (s *Server) panelName() string {
 	if s.engine == nil {
 		return "your control panel"
@@ -260,6 +269,8 @@ func (s *Server) operatorMux() *http.ServeMux {
 	mux.HandleFunc("GET /accounts", s.handleAccounts)
 	mux.HandleFunc("GET /account", s.handleAccount)
 	mux.HandleFunc("POST /accounts/backup", s.guard(s.handleBackupNow))
+	mux.HandleFunc("POST /accounts/add", s.guard(s.handleAddSource))
+	mux.HandleFunc("POST /accounts/remove", s.guard(s.handleRemoveSource))
 	mux.HandleFunc("POST /accounts/repair", s.guard(s.handleRepairCoverage))
 	mux.HandleFunc("POST /accounts/prepare-removal", s.guard(s.handlePrepareRemoval))
 	mux.HandleFunc("POST /accounts/download", s.guard(s.handleDownloadRequest))

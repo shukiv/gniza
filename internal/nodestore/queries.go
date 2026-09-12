@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/shukiv/gniza/internal/panel"
 	"sort"
 	"time"
 
@@ -447,6 +448,39 @@ func (s *Store) Policies() ([]Policy, error) {
 
 // DeletePolicy removes a policy. Its job history is kept.
 func (s *Store) DeletePolicy(id string) error { return s.delete(bucketPolicies, id) }
+
+// Source reads one chosen source by name.
+func (s *Store) Source(name string) (panel.Source, error) {
+	var source panel.Source
+	if err := s.get(bucketSources, name, &source); err != nil {
+		return panel.Source{}, err
+	}
+	return source, nil
+}
+
+// Sources lists what an operator chose to back up on a server without a
+// panel, by name.
+func (s *Store) Sources() ([]panel.Source, error) {
+	var sources []panel.Source
+	err := s.forEach(bucketSources, func(_ string, raw []byte) error {
+		var source panel.Source
+		if err := json.Unmarshal(raw, &source); err != nil {
+			return err
+		}
+		sources = append(sources, source)
+		return nil
+	})
+	sort.Slice(sources, func(i, j int) bool { return sources[i].Name < sources[j].Name })
+	return sources, err
+}
+
+// SaveSource records a choice, replacing one of the same name.
+func (s *Store) SaveSource(source panel.Source) error {
+	return s.put(bucketSources, source.Name, source)
+}
+
+// DeleteSource forgets a choice. Its backups and its job history stay.
+func (s *Store) DeleteSource(name string) error { return s.delete(bucketSources, name) }
 
 // SetPolicyLastRun records a firing, so a restart neither skips a window
 // nor replays past ones.

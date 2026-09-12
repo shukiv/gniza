@@ -297,7 +297,7 @@ if command -v systemctl >/dev/null 2>&1; then
 fi
 
 say "Gniza is installed."
-say "  accounts: every directory under $(sed -n 's/^GNIZA_PLAIN_ROOTS=//p' "$ENV_FILE") (edit $ENV_FILE to change)"
+say "  sources:  nothing is backed up until chosen; the pages offer the folders under $(sed -n 's/^GNIZA_PLAIN_ROOTS=//p' "$ENV_FILE"), the databases and the containers"
 say "  socket:   $RUN_DIR/admin/ui.sock"
 case "$WEB_LISTEN" in
 	"") say "  browser:  none (GNIZA_WEB_LISTEN in $ENV_FILE turns it on)" ;;

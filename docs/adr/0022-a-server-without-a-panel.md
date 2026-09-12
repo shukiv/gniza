@@ -4,7 +4,10 @@ Status: accepted, 2026-09-11. The provider, the package and the terminal
 interface are in; the terminal does not yet ask for a restore or change
 a setting. Amended by [ADR 0024](0024-a-browser-on-a-server-without-a-panel.md):
 the pages are also served on a TCP address, behind a password, when the
-installer is told to.
+installer is told to. Amended by
+[ADR 0025](0025-what-to-back-up-on-a-server-without-a-panel.md): an
+account is no longer a directory under a root but what the operator
+chose, folders, databases and containers alike.
 
 ## Context
 

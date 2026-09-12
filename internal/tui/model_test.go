@@ -362,3 +362,111 @@ func TestTheKeysHelpNamesEveryScreen(t *testing.T) {
 		}
 	}
 }
+
+// choosing is the accounts page of a server without a panel: what was
+// chosen, and what could be.
+func choosing(rows ...map[string]any) map[string]any {
+	accounts := []any{}
+	for _, row := range rows {
+		accounts = append(accounts, row)
+	}
+	return map[string]any{
+		"Accounts": accounts,
+		"Choose": map[string]any{"Candidates": map[string]any{
+			"Roots":      []string{"/var/www"},
+			"Folders":    []string{"/var/www/shop", "/var/www/blog"},
+			"MySQL":      []string{"shop", "shop_wp"},
+			"PostgreSQL": []string{"erp"},
+			"Containers": []any{
+				map[string]any{"Engine": "docker", "Name": "web", "Image": "nginx:1", "Status": "Up 2 hours"},
+				map[string]any{"Engine": "docker", "Name": "db", "Image": "mysql:8", "Status": "Up 2 hours", "Chosen": true},
+			},
+		}},
+	}
+}
+
+// TestOnAServerWithoutAPanelTheScreenIsWhatToBackUp: the tab is named for
+// what it is there, an empty page says how to start, and a chosen source
+// says what it holds.
+func TestOnAServerWithoutAPanelTheScreenIsWhatToBackUp(t *testing.T) {
+	api := fixture()
+	api.pages["/accounts"] = choosing()
+	m := fresh(t, api)
+	m = press(t, m, "4")
+	view := m.View()
+	for _, want := range []string{"4 What to back up", "Nothing is backed up yet", "/var/www/shop", "add a folder", "add a container"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the empty screen lacks %q:\n%s", want, view)
+		}
+	}
+	api.pages["/accounts"] = choosing(map[string]any{
+		"User": "shop", "Condition": "protected",
+		"Source": map[string]any{"path": "/var/www/shop", "mysql": []string{"shop", "shop_wp"}},
+	}, map[string]any{
+		"User": "web-data", "Condition": "never",
+		"Source": map[string]any{"path": "/var/lib/docker/volumes/web_data/_data",
+			"container": map[string]any{"engine": "docker", "name": "web", "mount": "/data"}},
+	})
+	m = press(t, m, "3", "4")
+	view = m.View()
+	for _, want := range []string{"2 sources", "/var/www/shop", "2 MySQL dbs", "docker web"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the screen lacks %q:\n%s", want, view)
+		}
+	}
+}
+
+// TestChoosingAFolderWithItsDatabases: a posts the folder typed and the
+// databases ticked, as the handler reads them.
+func TestChoosingAFolderWithItsDatabases(t *testing.T) {
+	api := fixture()
+	api.pages["/accounts"] = choosing()
+	m := fresh(t, api)
+	m = press(t, m, "4", "a")
+	m = typed(t, m, "/var/www/shop")
+	m = press(t, m, "tab")      // name, left empty
+	m = press(t, m, "tab", " ") // MySQL shop: on
+	m = press(t, m, "tab")      // MySQL shop_wp: left off
+	m = press(t, m, "tab", " ") // PostgreSQL erp: on
+	m = press(t, m, "enter")
+	if len(api.posted) != 1 {
+		t.Fatalf("posted %+v", api.posted)
+	}
+	sent := api.posted[0]
+	if sent.path != "/accounts/add" || sent.form.Get("path") != "/var/www/shop" || sent.form.Get("name") != "" ||
+		strings.Join(sent.form["mysql"], ",") != "shop" || strings.Join(sent.form["postgresql"], ",") != "erp" {
+		t.Errorf("the form sent %v", sent.form)
+	}
+}
+
+// TestChoosingAContainer: c offers the containers not chosen yet and posts
+// the one picked.
+func TestChoosingAContainer(t *testing.T) {
+	api := fixture()
+	api.pages["/accounts"] = choosing()
+	m := fresh(t, api)
+	m = press(t, m, "4", "c")
+	view := m.View()
+	if !strings.Contains(view, "web (docker · nginx:1") || strings.Contains(view, "mysql:8") {
+		t.Fatalf("the container form offers the wrong containers:\n%s", view)
+	}
+	m = press(t, m, "enter")
+	if len(api.posted) != 1 || api.posted[0].path != "/accounts/add" || api.posted[0].form.Get("container") != "docker/web" {
+		t.Errorf("posted %+v", api.posted)
+	}
+}
+
+// TestRemovingASourceAsksFirst: d asks, and y posts the removal.
+func TestRemovingASourceAsksFirst(t *testing.T) {
+	api := fixture()
+	api.pages["/accounts"] = choosing(map[string]any{"User": "shop", "Source": map[string]any{"path": "/var/www/shop"}})
+	m := fresh(t, api)
+	m = press(t, m, "4", "d")
+	if !strings.Contains(m.View(), `Stop backing up "shop"?`) {
+		t.Fatalf("no question:\n%s", m.View())
+	}
+	m = press(t, m, "y")
+	if len(api.posted) != 1 || api.posted[0].path != "/accounts/remove" || api.posted[0].form.Get("account") != "shop" {
+		t.Errorf("posted %+v", api.posted)
+	}
+}

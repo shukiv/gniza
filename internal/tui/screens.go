@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,6 +18,7 @@ type account struct {
 	User       string
 	HomeDir    string
 	Databases  []string
+	Source     *sourceRow
 	SizeBytes  uint64
 	LastBackup *time.Time
 	LastStatus string
@@ -122,6 +124,38 @@ type accountsPage struct {
 	RunAll      *struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
+	}
+	// Choose is on the page of a server without a panel, where the
+	// accounts are what the operator chose (ADR 0025).
+	Choose *struct {
+		Candidates candidates
+	}
+}
+
+// sourceRow is what an account on a server without a panel was chosen
+// as: a folder, databases, a container's mount.
+type sourceRow struct {
+	Path       string   `json:"path"`
+	MySQL      []string `json:"mysql"`
+	PostgreSQL []string `json:"postgresql"`
+	Container  *struct {
+		Engine string `json:"engine"`
+		Name   string `json:"name"`
+		Mount  string `json:"mount"`
+	} `json:"container"`
+}
+
+// candidates is what could be chosen now.
+type candidates struct {
+	Roots           []string
+	Folders         []string
+	MySQL           []string
+	MySQLError      string
+	PostgreSQL      []string
+	PostgreSQLError string
+	Containers      []struct {
+		Engine, Name, Image, Status string
+		Chosen                      bool
 	}
 }
 
@@ -483,6 +517,36 @@ func scheduleForm(destinations []destinationRow, editing *policyRow) *form {
 
 func (m Model) accountsKey(key string) (tea.Model, tea.Cmd) {
 	v := decode[accountsPage](m, screenAccounts)
+	if v.Choose != nil {
+		switch key {
+		case "a":
+			m.form = sourceForm(v.Choose.Candidates)
+			m.mode = modeForm
+			return m, nil
+		case "c":
+			form, ok := containerForm(v.Choose.Candidates)
+			if !ok {
+				m.err = "No container is left to choose: none is running here, or every one is chosen already."
+				return m, nil
+			}
+			m.form = form
+			m.mode = modeForm
+			return m, nil
+		case "d":
+			i := m.cursor[screenAccounts]
+			if i < 0 || i >= len(v.Accounts) {
+				return m, nil
+			}
+			a := v.Accounts[i]
+			m.confirm = &confirmation{
+				question: fmt.Sprintf("Stop backing up %q?", a.User),
+				warning:  "The backups already taken of it stay at the destinations, and its history stays here.",
+				path:     "/accounts/remove", form: url.Values{"account": {a.User}}, intent: intentAct,
+			}
+			m.mode = modeConfirm
+			return m, nil
+		}
+	}
 	switch key {
 	case "b":
 		i := m.cursor[screenAccounts]
@@ -501,6 +565,58 @@ func (m Model) accountsKey(key string) (tea.Model, tea.Cmd) {
 		return m, m.post("/schedule/run", url.Values{"id": {v.RunAll.ID}}, intentAct)
 	}
 	return m, nil
+}
+
+// sourceForm chooses a folder and the databases beside it. The folders
+// under the roots are said in the help rather than offered as a choice,
+// because any folder on the server can be named.
+func sourceForm(offered candidates) *form {
+	folders := "Any folder on this server, from /."
+	if len(offered.Folders) > 0 {
+		folders = "Under the roots there is: " + strings.Join(offered.Folders, ", ") + ". Any other folder can be named too."
+	}
+	fields := []field{
+		textField("path", "Folder", "", folders+" Leave it empty for a source of databases only."),
+		textField("name", "Name", "", "How it is called on these screens and in the backups. Empty names it after the folder."),
+	}
+	for _, name := range offered.MySQL {
+		fields = append(fields, toggleField("mysql", "MySQL "+name, name, false))
+	}
+	for _, name := range offered.PostgreSQL {
+		fields = append(fields, toggleField("postgresql", "PostgreSQL "+name, name, false))
+	}
+	f := newForm("Back up a folder, with its databases", "/accounts/add", fields...)
+	switch {
+	case offered.MySQLError != "" && offered.PostgreSQLError != "":
+		f.fields[0].help += " No MySQL or PostgreSQL client answered, so no database is offered."
+	case offered.MySQLError != "":
+		f.fields[0].help += " No MySQL client answered."
+	case offered.PostgreSQLError != "":
+		f.fields[0].help += " No PostgreSQL client answered."
+	}
+	return f
+}
+
+// containerForm chooses a container that is not chosen yet. Each of its
+// mounts becomes a source.
+func containerForm(offered candidates) (*form, bool) {
+	var choices []choice
+	for _, c := range offered.Containers {
+		if c.Chosen {
+			continue
+		}
+		choices = append(choices, choice{c.Engine + "/" + c.Name, fmt.Sprintf("%s (%s · %s · %s)", c.Name, c.Engine, c.Image, c.Status)})
+	}
+	if len(choices) == 0 {
+		return nil, false
+	}
+	return newForm("Back up a container", "/accounts/add",
+		withHelp(choiceField("container", "Container", choices, choices[0].value),
+			"Each volume and bind mount of it becomes a source, read where it lies on this machine, "+
+				"with the container's description and compose file kept beside it. A database inside "+
+				"a running container is not consistent when read this way: choose its database as a "+
+				"folder source's database instead, or stop the container for the backup."),
+	), true
 }
 
 // --- logs ---

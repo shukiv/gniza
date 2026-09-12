@@ -314,8 +314,117 @@
     }
     settle(table);
   });
-  document.addEventListener("gniza:loaded", function (event) { prepare(event.detail || document); });
+  // The folder browser on the folders tab: one directory at a time,
+  // read from the service as data, with a box on each folder. A box
+  // ticked puts the folder in the table above it as a row that posts
+  // "folder", so what was ticked stays while the browser moves on.
+  function pickedRow(table, path) {
+    return Array.prototype.find.call(table.querySelectorAll("input[name=folder]"), function (box) { return box.value === path; });
+  }
+  function pick(browser, path, on) {
+    var form = browser.closest("form");
+    var table = form && form.querySelector("[data-picked]");
+    if (!table) { return; }
+    var box = pickedRow(table, path);
+    if (!box) {
+      var row = document.createElement("tr");
+      var cell = document.createElement("td");
+      box = document.createElement("input");
+      box.type = "checkbox"; box.className = "cpr:checkbox cpr:checkbox-sm"; box.name = "folder"; box.value = path;
+      box.setAttribute("aria-label", path);
+      cell.appendChild(box); row.appendChild(cell);
+      var name = document.createElement("td"); name.className = "cpr:mono"; name.textContent = path; row.appendChild(name);
+      var as = document.createElement("td"); as.innerHTML = '<span class="cpr:text-base-content/50">when saved</span>'; row.appendChild(as);
+      var empty = table.querySelector("[data-picked-empty]");
+      table.querySelector("tbody").insertBefore(row, empty);
+      if (empty) { empty.hidden = true; }
+    }
+    box.checked = on;
+    settle(table);
+  }
+  function drawListing(browser, listing) {
+    browser.dataset.dir = listing.Dir;
+    var form = browser.closest("form");
+    var picked = form && form.querySelector("[data-picked]");
+    var crumbs = browser.querySelector("[data-crumbs]");
+    crumbs.textContent = "";
+    var parts = listing.Dir === "/" ? [] : listing.Dir.replace(/^\//, "").split("/");
+    var path = "";
+    [{ name: "/", path: "/" }].concat(parts.map(function (part) { path += "/" + part; return { name: part, path: path }; })).forEach(function (step, i) {
+      if (i) { var slash = document.createElement("span"); slash.className = "cpr:text-base-content/40"; slash.textContent = "/"; crumbs.appendChild(slash); }
+      var button = document.createElement("button");
+      button.type = "button"; button.className = "cpr:btn cpr:btn-xs cpr:btn-ghost cpr:mono"; button.dataset.go = step.path; button.textContent = step.name;
+      crumbs.appendChild(button);
+    });
+    var label = browser.querySelector("[data-crumb-dir]");
+    if (label) { label.textContent = listing.Dir; }
+    var body = browser.querySelector("[data-entries]");
+    body.textContent = "";
+    (listing.Entries || []).forEach(function (entry) {
+      var row = document.createElement("tr");
+      var cell = document.createElement("td");
+      var box = document.createElement("input");
+      box.type = "checkbox"; box.className = "cpr:checkbox cpr:checkbox-sm"; box.setAttribute("aria-label", entry.Path);
+      if (entry.ChosenAs) { box.checked = true; box.disabled = true; }
+      else {
+        box.dataset.pick = entry.Path;
+        var already = picked && pickedRow(picked, entry.Path);
+        box.checked = !!(already && already.checked);
+      }
+      cell.appendChild(box); row.appendChild(cell);
+      var name = document.createElement("td");
+      var open = document.createElement("button");
+      open.type = "button"; open.className = "cpr:link cpr:link-hover cpr:mono"; open.dataset.go = entry.Path; open.textContent = entry.Name + "/";
+      name.appendChild(open); row.appendChild(name);
+      var as = document.createElement("td");
+      if (entry.ChosenAs) { as.textContent = entry.ChosenAs; } else { as.innerHTML = '<span class="cpr:text-base-content/50">not yet</span>'; }
+      row.appendChild(as);
+      body.appendChild(row);
+    });
+    if (!(listing.Entries || []).length) {
+      var none = document.createElement("tr");
+      none.innerHTML = '<td colspan="3" class="cpr:text-base-content/50">No folder under it.</td>';
+      body.appendChild(none);
+    }
+  }
+  function browse(browser, dir) {
+    var url = browser.dataset.browse + (browser.dataset.browse.indexOf("?") >= 0 ? "&" : "?") + "dir=" + encodeURIComponent(dir);
+    fetch(url, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
+      .then(function (response) { return response.json().then(function (data) { return { ok: response.ok, data: data }; }); })
+      .then(function (result) {
+        if (!result.ok) { throw new Error(result.data && result.data.error ? result.data.error : "could not read the folder"); }
+        drawListing(browser, result.data);
+      })
+      .catch(function (err) {
+        var body = browser.querySelector("[data-entries]");
+        body.textContent = "";
+        var row = document.createElement("tr");
+        var cell = document.createElement("td"); cell.colSpan = 3; cell.className = "cpr:text-error"; cell.textContent = String(err.message || err);
+        row.appendChild(cell); body.appendChild(row);
+      });
+  }
+  document.addEventListener("click", function (event) {
+    var go = event.target.closest("[data-go]");
+    if (!go) { return; }
+    var browser = go.closest("[data-folder-browser]");
+    if (browser) { browse(browser, go.dataset.go); }
+  });
+  document.addEventListener("change", function (event) {
+    var box = event.target;
+    if (!box.matches || !box.matches("input[type=checkbox][data-pick]")) { return; }
+    var browser = box.closest("[data-folder-browser]");
+    if (browser) { pick(browser, box.dataset.pick, box.checked); }
+  });
+  // A browser drawn without a listing, on a page the drawer fetched
+  // later for instance, reads its directory now.
+  function wake(scope) {
+    scope.querySelectorAll("[data-folder-browser]").forEach(function (browser) {
+      if (browser.querySelector("[data-entries-empty]")) { browse(browser, browser.dataset.dir || "/"); }
+    });
+  }
+  document.addEventListener("gniza:loaded", function (event) { prepare(event.detail || document); wake(event.detail || document); });
   prepare(document);
+  wake(document);
 
   // Row menus.
   //

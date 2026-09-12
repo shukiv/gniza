@@ -2,6 +2,7 @@ package webui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -61,9 +62,53 @@ type chooseView struct {
 	// the databases and containers the way the What to back up page
 	// does, and the first schedule saved backs something up.
 	Fresh bool
+	// Listing is the folder browser's first directory, /, drawn with the
+	// page so the tab shows something before the script takes over.
+	Listing panel.Listing
 	// containerAs names the sources made from each container, comma
 	// joined, keyed "<engine>/<name>".
 	containerAs map[string]string
+}
+
+// folderCrumb is one step of the folder browser's path.
+type folderCrumb struct{ Name, Path string }
+
+// Crumbs is the listing's directory as steps from /.
+func (v chooseView) Crumbs() []folderCrumb {
+	crumbs := []folderCrumb{{Name: "/", Path: "/"}}
+	if v.Listing.Dir == "" || v.Listing.Dir == "/" {
+		return crumbs
+	}
+	path := ""
+	for _, part := range strings.Split(strings.Trim(v.Listing.Dir, "/"), "/") {
+		path += "/" + part
+		crumbs = append(crumbs, folderCrumb{Name: part, Path: path})
+	}
+	return crumbs
+}
+
+// FolderSources is every source with a folder that no container, stack
+// or engine row stands for: the rows of the folders tab.
+func (v chooseView) FolderSources() []panel.Source {
+	elsewhere := map[string]bool{}
+	for _, stack := range v.Candidates.Stacks {
+		elsewhere[stack.ChosenAs] = true
+	}
+	for _, engine := range v.Candidates.Engines {
+		elsewhere[engine.ChosenAs] = true
+	}
+	for _, names := range v.containerAs {
+		for _, name := range strings.Split(names, ",") {
+			elsewhere[name] = true
+		}
+	}
+	var folders []panel.Source
+	for _, source := range v.Sources {
+		if source.Path != "" && !elsewhere[source.Name] {
+			folders = append(folders, source)
+		}
+	}
+	return folders
 }
 
 func (v chooseView) Field(name string) string { return v.Submitted[name] }
@@ -140,6 +185,11 @@ func (v *chooseView) load(ctx context.Context, chooser panel.Chooser) {
 		return
 	}
 	v.Sources = sources
+	if browser, ok := chooser.(panel.Browser); ok {
+		if listing, err := browser.Browse(ctx, "/"); err == nil {
+			v.Listing = listing
+		}
+	}
 	v.containerAs = map[string]string{}
 	for _, source := range sources {
 		if source.Container == nil {
@@ -153,27 +203,11 @@ func (v *chooseView) load(ctx context.Context, chooser panel.Chooser) {
 	}
 }
 
-// extra is every source no candidate row stands for. A source with a
-// folder needs a folder row: one chosen with its databases, in the
-// form's first shape, is behind its database rows, and its folder is
-// still drawn on the folders tab, or the tab would show the folder as
-// not chosen anywhere.
+// extra is every source of databases only that no database row stands
+// for, drawn as a row of its own on its tab. A source with a folder is
+// a row of the folders tab already (FolderSources).
 func (v chooseView) extra() []panel.Source {
-	folderRow, databaseRow := map[string]bool{}, map[string]bool{}
-	for _, folder := range v.Candidates.Folders {
-		folderRow[folder.ChosenAs] = true
-	}
-	for _, stack := range v.Candidates.Stacks {
-		folderRow[stack.ChosenAs] = true
-	}
-	for _, engine := range v.Candidates.Engines {
-		folderRow[engine.ChosenAs] = true
-	}
-	for _, names := range v.containerAs {
-		for _, name := range strings.Split(names, ",") {
-			folderRow[name] = true
-		}
-	}
+	databaseRow := map[string]bool{}
 	for _, database := range v.Candidates.MySQL {
 		databaseRow[database.ChosenAs] = true
 	}
@@ -182,41 +216,23 @@ func (v chooseView) extra() []panel.Source {
 	}
 	var extra []panel.Source
 	for _, source := range v.Sources {
-		switch {
-		case source.Path != "" && !folderRow[source.Name]:
-			extra = append(extra, source)
-		case source.Path == "" && !databaseRow[source.Name] && !folderRow[source.Name]:
+		if source.Path == "" && source.Container == nil && !databaseRow[source.Name] {
 			extra = append(extra, source)
 		}
 	}
 	return extra
 }
 
-// ExtraFolders, ExtraMySQL and ExtraPostgreSQL split the sources no
-// candidate row stands for by the tab they belong on: a folder, a
-// source of MySQL databases only, a source of PostgreSQL databases only.
-func (v chooseView) ExtraFolders() []panel.Source { return v.extraOf(0) }
-func (v chooseView) ExtraMySQL() []panel.Source   { return v.extraOf(1) }
-func (v chooseView) ExtraPostgreSQL() []panel.Source {
-	return v.extraOf(2)
-}
+// ExtraMySQL and ExtraPostgreSQL split the extra sources by the tab
+// they belong on.
+func (v chooseView) ExtraMySQL() []panel.Source      { return v.extraOf(true) }
+func (v chooseView) ExtraPostgreSQL() []panel.Source { return v.extraOf(false) }
 
-func (v chooseView) extraOf(kind int) []panel.Source {
+func (v chooseView) extraOf(mysql bool) []panel.Source {
 	var of []panel.Source
 	for _, source := range v.Extra {
-		switch {
-		case source.Path != "":
-			if kind == 0 {
-				of = append(of, source)
-			}
-		case len(source.MySQL) > 0:
-			if kind == 1 {
-				of = append(of, source)
-			}
-		case len(source.PostgreSQL) > 0:
-			if kind == 2 {
-				of = append(of, source)
-			}
+		if (len(source.MySQL) > 0) == mysql {
+			of = append(of, source)
 		}
 	}
 	return of
@@ -392,6 +408,30 @@ func (s *Server) scheduleChoices(r *http.Request, chooser panel.Chooser) (names,
 		keep(name)
 	}
 	return names, append(refused, notAdded...), nil
+}
+
+// handleBrowseFolders answers the folder browser: the directories under
+// the one asked for, as data, with the ones chosen already marked.
+func (s *Server) handleBrowseFolders(w http.ResponseWriter, r *http.Request) {
+	chooser, ok := s.engine.Chooser()
+	browser, browses := chooser.(panel.Browser)
+	if !ok || !browses {
+		s.fail(w, r, http.StatusNotFound, fmt.Errorf("the folders on this server are not browsed here: %s lists the accounts", s.panelName()))
+		return
+	}
+	dir := r.URL.Query().Get("dir")
+	if dir == "" {
+		dir = "/"
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	listing, err := browser.Browse(r.Context(), dir)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(listing)
 }
 
 // handleAddSource records what the operator ticked: what could be

@@ -269,6 +269,7 @@ func (s *Server) operatorMux() *http.ServeMux {
 	mux.HandleFunc("GET /accounts", s.handleAccounts)
 	mux.HandleFunc("GET /account", s.handleAccount)
 	mux.HandleFunc("POST /accounts/backup", s.guard(s.handleBackupNow))
+	mux.HandleFunc("GET /accounts/browse", s.handleBrowseFolders)
 	mux.HandleFunc("POST /accounts/add", s.guard(s.handleAddSource))
 	mux.HandleFunc("POST /accounts/remove", s.guard(s.handleRemoveSource))
 	mux.HandleFunc("POST /accounts/repair", s.guard(s.handleRepairCoverage))

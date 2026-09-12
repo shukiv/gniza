@@ -17,9 +17,13 @@ the terminal). Both draw the same tables, one tab per kind; each row
 ticked becomes a *source*, backed up on its own, under its name, the way
 a panel's account would be:
 
-- **Folders.** The folders under `/var/www`, `/srv` and `/opt` are
-  listed, unticked; any other folder can be typed in. Each is backed up
-  from where it lies, files and all, and is named after itself.
+- **Folders.** A browser of the server's directories, one at a time
+  from `/`, with `/var/www`, `/srv` and `/opt` a click away: open a
+  folder to look inside it, tick it to back it up. What is ticked
+  gathers in the table above the browser; any other folder can be typed
+  in below it. Each is backed up from where it lies, files and all, and
+  is named after itself. In the terminal the folders under those three
+  roots are offered as toggles instead.
 - **MySQL** and **PostgreSQL.** Every database the `mysql` or `psql`
   client can see, in a table with its size and its users -- MySQL's
   grantees, PostgreSQL's owner -- all ticked by default, with a box in
@@ -45,17 +49,17 @@ until something is. A source can be removed at any time, on the What to
 back up page; the backups already taken of it stay at the destinations,
 and choosing it again under the same name carries its history on.
 
-In the schedule form the same tables sit under **What to back up**,
-with two choices above them: *everything on the list*, which covers
-every source now and any chosen later, or *only what I tick below*. A
-row already on the list is ticked by its name there, and under
-*everything* it is ticked and greyed, since that covers it anyway; a
-fresh row ticked in either case goes on the list when the schedule is
-saved. A source that stands behind several rows -- a folder chosen
-together with its databases, in the form's first shape -- ticks and
-unticks as one. So the first schedule can be the whole setup: tick the
-databases, the folders and the stacks, save, and they are chosen and
-covered in one go.
+In the schedule form the same tables sit where a panel's form asks
+which accounts, and what is ticked is what the schedule covers. A row
+already on the list is ticked by its name there; a fresh row ticked
+goes on the list when the schedule is saved. Every source on the list
+ticked means *everything, now and later*: a source chosen afterwards
+is covered too, and that is the schedule *Back up all* runs. Leave one
+out and the schedule covers only what is ticked. A source that stands
+behind several rows -- a folder chosen together with its databases, in
+the form's first shape -- ticks and unticks as one. So the first
+schedule can be the whole setup: tick the databases, the folders and
+the stacks, save, and they are chosen and covered in one go.
 
 The database lists come from the `mysql` and `psql` clients on the
 server; a client that is not there, or cannot connect, is said on its
@@ -144,9 +148,11 @@ curl -s --unix-socket $S -X POST http://x/accounts/backup -d "csrf=$CSRF" -d "ac
 
 The schedule form takes the same `folder`, `mysql`, `postgresql` and
 `container` fields as `/accounts/add`, adds them, and covers them;
-`source=<name>` ticks one already on the list, and `scope=selected`
-makes the schedule cover only what was ticked. A schedule over nothing
-is refused.
+`source=<name>` ticks one already on the list. With every source ticked,
+or with `scope=all` and nothing ticked, the schedule covers everything
+now and later; otherwise only what was ticked. A schedule over nothing
+is refused. `http://x/accounts/browse?dir=/var` lists the directories
+under one, as the folders tab's browser reads them.
 
 Any page reads as data with `-H 'Accept: application/json'`: `http://x/`,
 `http://x/accounts` (`http://x/accounts?add=1` carries what there is to

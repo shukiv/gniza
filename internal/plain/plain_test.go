@@ -769,3 +769,58 @@ func TestASourcesIdentityIsItsDirectory(t *testing.T) {
 		t.Errorf("a name never chosen = %v", err)
 	}
 }
+
+// TestBrowseListsTheDirectoriesUnderOne: the folder browser shows the
+// directories under a path, marks the ones chosen, leaves files and
+// links out, and refuses what is not a directory.
+func TestBrowseListsTheDirectoriesUnderOne(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{"www/shop", "www/blog", "www/.hidden"} {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "www", "notes.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "www", "shop"), filepath.Join(root, "www", "link")); err != nil {
+		t.Fatal(err)
+	}
+	provider := &plain.Provider{Catalog: newCatalog()}
+	if err := provider.AddSource(context.Background(), panel.Source{Path: filepath.Join(root, "www", "shop")}); err != nil {
+		t.Fatal(err)
+	}
+	listing, err := provider.Browse(context.Background(), filepath.Join(root, "www"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, entry := range listing.Entries {
+		got = append(got, entry.Name+":"+entry.ChosenAs)
+	}
+	if want := ".hidden: blog: shop:shop"; strings.Join(got, " ") != want {
+		t.Errorf("browse = %q, want %q", strings.Join(got, " "), want)
+	}
+	if listing.Parent != root || listing.Dir != filepath.Join(root, "www") {
+		t.Errorf("listing says dir %s under %s", listing.Dir, listing.Parent)
+	}
+	if _, err := provider.Browse(context.Background(), filepath.Join(root, "www", "notes.txt")); err == nil || !strings.Contains(err.Error(), "is a file") {
+		t.Errorf("browsing a file: %v", err)
+	}
+	if _, err := provider.Browse(context.Background(), "www"); err == nil || !strings.Contains(err.Error(), "not an absolute path") {
+		t.Errorf("browsing a relative path: %v", err)
+	}
+	top, err := provider.Browse(context.Background(), "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if top.Parent != "" {
+		t.Errorf("/ has a parent: %s", top.Parent)
+	}
+	for _, entry := range top.Entries {
+		switch entry.Path {
+		case "/proc", "/sys", "/dev", "/run":
+			t.Errorf("/ lists %s", entry.Path)
+		}
+	}
+}

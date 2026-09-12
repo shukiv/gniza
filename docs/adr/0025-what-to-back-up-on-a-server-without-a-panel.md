@@ -144,34 +144,48 @@ choose* and lists the accounts; on a server without a panel the list is
 what has been chosen, so the question and the choosing are the same
 question, and the form asks it once.
 
-**The same tables, in the schedule form.** The four tabs are one
-template (`choosetabs` in `partials.html`) drawn by the What to back up
-page inside one form with a "Back these up" button, and by the schedule
-form in place of the account picker. The two radios stay: *everything
-on the list* is what "Back up all" and a source chosen later depend on
-(`Policy.AllAccounts`), and *only what I tick* is a selected scope.
-What differs is what a row posts. On the What to back up page a row
+**The same tables, in the schedule form, and nothing else.** The four
+tabs are one template (`choosetabs` in `partials.html`) drawn by the
+What to back up page inside one form with a "Back these up" button,
+and by the schedule form in place of the account picker. The first
+version kept the two radios -- *everything on the list* and *only what
+I tick* -- and the operator's answer was "only the tabs". So the
+schedule form has no scope of its own: what is ticked is what it
+covers, and every source on the list ticked means everything, now and
+later (`Policy.AllAccounts`), which is what "Back up all" runs under
+and what a source chosen afterwards comes under; leave one out and the
+schedule covers only what is ticked. A form with no tables, the
+terminal's or a script's, still says `scope=all`. What differs between
+the two pages is what a row posts. On the What to back up page a row
 already chosen is disabled, since it cannot be chosen twice. In the
 schedule form it is a box that posts `source=<name>`, ticked when the
-schedule covers it, and under *everything* ticked and disabled, since
-that covers it anyway; a fresh row posts `folder`, `mysql`, `postgresql`
+schedule covers it; a fresh row posts `folder`, `mysql`, `postgresql`
 or `container` as before and is added when the schedule is saved, then
 covered. One source can stand behind several rows -- a folder chosen
 with its databases, in the form's first shape, is five rows on two tabs
 -- so rows with the same name tick together (`data-same`) rather than
-one of them silently bringing the rest. A source no row stands for, a
-folder outside the roots or a container that is gone, is drawn as a row
-of its own, or it could not be put under a selected schedule.
+one of them silently bringing the rest.
+
+**The folders tab is a browser.** "Folders should be showing me a file
+browser to select from, and add paths to backup." The tab is the
+server's directories one at a time from `/`, read as data from
+`/accounts/browse?dir=` (`panel.Browser`, which the plain provider
+implements over `os.ReadDir`, leaving symbolic links and the pseudo
+filesystems out), with a box on each; the roots are shortcuts. A box
+ticked puts the folder in the table above the browser as a row that
+posts `folder`, so the choice survives the browser moving on, and the
+table also holds every folder source already chosen. The list of
+folders under the roots (`Candidates.Folders`) stays for the terminal,
+whose form is toggles. A typed path stays too, for the folder one knows
+the name of.
 
 **Saving adds first, then covers.** The save handler reads the names
 ticked, adds the fresh rows, and the schedule covers the union. What
 could not be added is said and the schedule is still saved, as the
-What to back up page does; a schedule that would cover nothing --
-*only what I tick* with nothing ticked, or *everything* while the list
-is still empty -- is refused rather than saved empty, since a nightly
-run over nothing would look like protection. The candidates are read
-when a person opens the form, not for the terminal's read of the page
-as data.
+What to back up page does; a schedule that would cover nothing is
+refused rather than saved empty, since a nightly run over nothing would
+look like protection. The candidates are read when a person opens the
+form, not for the terminal's read of the page as data.
 
 The What to back up page stays: it is where a source is removed, where
 its last backup shows, and the only form the terminal has, whose

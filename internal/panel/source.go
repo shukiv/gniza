@@ -141,6 +141,34 @@ type EngineCandidate struct {
 	Error string
 }
 
+// Listing is one directory of the server, for the folder browser: the
+// directories under it, with the ones chosen already marked.
+type Listing struct {
+	Dir string
+	// Parent is the directory above, or empty at /.
+	Parent  string
+	Entries []FolderEntry
+}
+
+// FolderEntry is one directory in a Listing.
+type FolderEntry struct {
+	Name string
+	Path string
+	// ChosenAs names the source that already backs this directory up,
+	// or is empty.
+	ChosenAs string
+}
+
+// Browser is implemented by a Chooser that can show the server's
+// directories one at a time, so a folder can be found rather than
+// typed.
+type Browser interface {
+	// Browse lists the directories under dir, which is absolute. A path
+	// that is not a directory is refused with an error the operator can
+	// read.
+	Browse(ctx context.Context, dir string) (Listing, error)
+}
+
 // Chooser is implemented by a provider whose accounts are chosen by the
 // operator rather than declared by a panel. The pages ask for it and
 // show the choosing when it is there; on cPanel and DirectAdmin it is

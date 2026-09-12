@@ -123,9 +123,10 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 	}
 	// One tab per kind; the databases are ticked by default and say whose
 	// they are; a client that is not there says so on its tab.
-	for _, want := range []string{"What to back up", "Nothing is backed up yet", shop,
+	for _, want := range []string{"What to back up", "Nothing is backed up yet",
 		`data-tab="folders"`, `data-tab="mysql"`, `data-tab="postgresql"`, `data-tab="containers"`,
-		`name="folder" value="` + shop + `"`, `name="mysql" value="shop" aria-label="shop" checked`,
+		`data-folder-browser data-browse="?p=accounts/browse" data-dir="/"`, `data-go="` + filepath.Dir(shop) + `"`,
+		`name="mysql" value="shop" aria-label="shop" checked`,
 		`name="mysql" value="blog" aria-label="blog" checked`, "&#39;shop_app&#39;@&#39;localhost&#39;",
 		"No PostgreSQL database is offered", "data-tick-all", "data-tick-count"} {
 		if !strings.Contains(body, want) {
@@ -232,10 +233,14 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 	if removed.Code != http.StatusSeeOther || !strings.Contains(removed.Header().Get("Location"), "kind=ok") {
 		t.Fatalf("removing = %d %s", removed.Code, removed.Header().Get("Location"))
 	}
-	// The folder is offered again, the databases chosen stay chosen.
+	// The folder is offered again by the browser, the databases chosen
+	// stay chosen.
 	after := getPage(handler, "/accounts?add=1", false).Body.String()
-	if strings.Contains(after, ">shop</a>") || !strings.Contains(after, `name="folder" value="`+shop+`" aria-label="`+shop+`">`) {
-		t.Errorf("after removing, the folder is not offered again: %s", firstLine(after, `name="folder"`))
+	if strings.Contains(after, ">shop</a>") || strings.Contains(after, `name="folder" value="`+shop+`"`) {
+		t.Errorf("after removing, the folder is still on the list: %s", firstLine(after, `name="folder"`))
+	}
+	if listing := browse(t, handler, filepath.Dir(shop)); len(listing.Entries) != 1 || listing.Entries[0].ChosenAs != "" {
+		t.Errorf("after removing, the browser says %+v", listing.Entries)
 	}
 	for _, name := range []string{"mysql-shop", "mysql-blog", "public"} {
 		removed := postForm(server, handler, "/accounts/remove", url.Values{"account": {name}})
@@ -264,6 +269,58 @@ func TestAPanelServerKeepsItsAccountsPage(t *testing.T) {
 	if refused.Code != http.StatusSeeOther || !strings.Contains(refused.Header().Get("Location"), "kind=error") {
 		t.Errorf("adding on a panel server = %d %s", refused.Code, refused.Header().Get("Location"))
 	}
+	if browsed := getPage(handler, "/accounts/browse?dir=/", true); browsed.Code != http.StatusNotFound {
+		t.Errorf("browsing on a panel server = %d", browsed.Code)
+	}
+}
+
+// TestTheFolderBrowserListsOneDirectoryAtATime: the folders tab reads
+// the server's directories as data, one at a time, with the ones chosen
+// marked; a path that is not a directory is refused with the reason.
+func TestTheFolderBrowserListsOneDirectoryAtATime(t *testing.T) {
+	server, handler, shop := newPlainServer(t)
+	www := filepath.Dir(shop)
+	listing := browse(t, handler, www)
+	if listing.Dir != www || listing.Parent != filepath.Dir(www) || len(listing.Entries) != 1 ||
+		listing.Entries[0].Name != "shop" || listing.Entries[0].Path != shop || listing.Entries[0].ChosenAs != "" {
+		t.Errorf("browsing www = %+v", listing)
+	}
+	if added := postForm(server, handler, "/accounts/add", url.Values{"folder": {shop}}); added.Code != http.StatusSeeOther {
+		t.Fatalf("adding = %d", added.Code)
+	}
+	if listing := browse(t, handler, www); listing.Entries[0].ChosenAs != "shop" {
+		t.Errorf("after adding, the browser says %+v", listing.Entries)
+	}
+	if inside := browse(t, handler, shop); len(inside.Entries) != 1 || inside.Entries[0].Name != "public" {
+		t.Errorf("browsing shop = %+v", inside.Entries)
+	}
+	file := getPage(handler, "/accounts/browse?dir="+url.QueryEscape(filepath.Join(shop, "index.php")), true)
+	if file.Code != http.StatusBadRequest || !strings.Contains(file.Body.String(), "is a file") {
+		t.Errorf("browsing a file = %d %s", file.Code, file.Body.String())
+	}
+	if top := browse(t, handler, ""); top.Dir != "/" || top.Parent != "" {
+		t.Errorf("browsing nothing = %+v", top)
+	}
+	// The page's script drives the browser and the picked table.
+	page := getPage(handler, "/accounts", false).Body.String()
+	for _, want := range []string{`closest("[data-go]")`, "data-pick", "data-picked"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page does not carry %q", want)
+		}
+	}
+}
+
+func browse(t *testing.T, handler http.Handler, dir string) panel.Listing {
+	t.Helper()
+	response := getPage(handler, "/accounts/browse?dir="+url.QueryEscape(dir), true)
+	if response.Code != http.StatusOK {
+		t.Fatalf("browsing %q = %d %s", dir, response.Code, response.Body.String())
+	}
+	var listing panel.Listing
+	if err := json.Unmarshal(response.Body.Bytes(), &listing); err != nil {
+		t.Fatal(err)
+	}
+	return listing
 }
 
 func firstLine(body, containing string) string {
@@ -302,7 +359,7 @@ func TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp(t *testing.T) 
 	for _, want := range []string{
 		"data-choose-in-schedule", `data-tabs="folders"`,
 		`name="mysql" value="shop" aria-label="shop" checked`,
-		`name="folder" value="` + shop + `" aria-label="` + shop + `">`,
+		`data-folder-browser data-browse="?p=accounts/browse" data-dir="/"`, "No folder yet",
 		`id="folder_path"`,
 	} {
 		if !strings.Contains(page, want) {
@@ -373,7 +430,8 @@ func TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp(t *testing.T) 
 	edit := getPage(handler, "/schedule?edit="+policies[0].ID, false).Body.String()
 	for _, want := range []string{
 		`name="source" value="mysql-shop" aria-label="shop" checked data-existing data-same="mysql-shop"`,
-		`name="source" value="shop" aria-label="` + shop + `" checked data-existing data-same="shop"`,
+		`name="source" value="shop" aria-label="shop" checked data-existing data-same="shop"`,
+		`<td class="cpr:mono">` + shop + `</td>`,
 		`name="mysql" value="blog" aria-label="blog">`,
 	} {
 		if !strings.Contains(edit, want) {

@@ -37,6 +37,66 @@ func (p *Provider) Sources(context.Context) ([]panel.Source, error) {
 	return sources, nil
 }
 
+// pathAs names the source that backs each chosen folder up, by path.
+func (p *Provider) pathAs(ctx context.Context) (map[string]string, error) {
+	sources, err := p.Sources(ctx)
+	if err != nil {
+		return nil, err
+	}
+	pathAs := map[string]string{}
+	for _, source := range sources {
+		if source.Path != "" && source.Container == nil {
+			pathAs[filepath.Clean(source.Path)] = source.Name
+		}
+	}
+	return pathAs, nil
+}
+
+// pseudoFilesystems are the directories under / that hold no files of
+// anyone's: the kernel's views and the boot-time mounts. The browser
+// leaves them out of the root.
+var pseudoFilesystems = map[string]bool{"/proc": true, "/sys": true, "/dev": true, "/run": true}
+
+// Browse lists the directories under one, for the folder browser, with
+// the ones chosen already marked. Symbolic links are not followed: a
+// link is not a folder to back up, its target is.
+func (p *Provider) Browse(ctx context.Context, dir string) (panel.Listing, error) {
+	if !filepath.IsAbs(dir) {
+		return panel.Listing{}, fmt.Errorf("%s is not an absolute path; a folder is named from /", dir)
+	}
+	dir = filepath.Clean(dir)
+	stat, err := os.Stat(dir)
+	switch {
+	case err != nil:
+		return panel.Listing{}, fmt.Errorf("%s is not there: %v", dir, err)
+	case !stat.IsDir():
+		return panel.Listing{}, fmt.Errorf("%s is a file; choose the folder that holds it", dir)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return panel.Listing{}, fmt.Errorf("plain: list %s: %w", dir, err)
+	}
+	pathAs, err := p.pathAs(ctx)
+	if err != nil {
+		return panel.Listing{}, err
+	}
+	listing := panel.Listing{Dir: dir}
+	if dir != "/" {
+		listing.Parent = filepath.Dir(dir)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		if dir == "/" && pseudoFilesystems[path] {
+			continue
+		}
+		listing.Entries = append(listing.Entries, panel.FolderEntry{Name: entry.Name(), Path: path, ChosenAs: pathAs[path]})
+	}
+	return listing, nil
+}
+
 // source finds one choice by name.
 func (p *Provider) source(name string) (panel.Source, error) {
 	sources, err := p.Sources(context.Background())

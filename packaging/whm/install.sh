@@ -222,6 +222,25 @@ install_hint() {
         echo "install the $1 package"
     fi
 }
+# install_package puts one package on with whatever manager this machine
+# has, without asking: the service's own updater runs this script with no
+# terminal. apt-get on a fresh image has no package lists yet, so a failed
+# install there is retried once after an update.
+install_package() {
+    if command -v dnf >/dev/null 2>&1; then
+        say "installing $1 with dnf"
+        dnf install -y -q "$1"
+    elif command -v yum >/dev/null 2>&1; then
+        say "installing $1 with yum"
+        yum install -y -q "$1"
+    elif command -v apt-get >/dev/null 2>&1; then
+        say "installing $1 with apt-get"
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get install -y -qq "$1" || { apt-get update -qq && apt-get install -y -qq "$1"; }
+    else
+        return 1
+    fi
+}
 
 # unpack_bz2 reads restic's download, which is published as a .bz2 and
 # nothing else.
@@ -240,8 +259,10 @@ unpack_bz2() {
         python3 -c 'import bz2, shutil, sys
 with bz2.BZ2File(sys.argv[1]) as packed, open(sys.argv[2], "wb") as plain:
     shutil.copyfileobj(packed, plain)' "$1" "$2"
+    elif install_package bzip2 && command -v bzip2 >/dev/null 2>&1; then
+        bzip2 -dc "$1" > "$2"
     else
-        die "nothing here can read a .bz2, which is the only way restic is published: $(install_hint bzip2), or install restic yourself, and run this again"
+        die "nothing here can read a .bz2, which is the only way restic is published, and installing bzip2 did not work: $(install_hint bzip2) by hand, or install restic yourself, and run this again"
     fi
 }
 

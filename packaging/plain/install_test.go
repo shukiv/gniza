@@ -81,6 +81,45 @@ func TestTheInstallerAsksWhereTheBrowserInterfaceListens(t *testing.T) {
 	}
 }
 
+// TestTheInstallerInstallsBzip2Itself: restic is published as a .bz2 and
+// a fresh Debian has nothing that reads one. The installer used to stop
+// with the apt-get line for the operator to run; it runs it itself now,
+// with whatever manager the machine has, and without a prompt, because
+// the service's own updater runs this script with no terminal.
+func TestTheInstallerInstallsBzip2Itself(t *testing.T) {
+	script := read(t, "install.sh")
+	for _, want := range []string{
+		"install_package() {",
+		`dnf install -y -q "$1"`,
+		`yum install -y -q "$1"`,
+		"export DEBIAN_FRONTEND=noninteractive",
+		`apt-get install -y -qq "$1" || { apt-get update -qq && apt-get install -y -qq "$1"; }`,
+		"elif install_package bzip2 && command -v bzip2 >/dev/null 2>&1; then",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("the installer does not contain %q", want)
+		}
+	}
+	helper := helperText(t, script, "install_package")
+	if strings.Contains(helper, "/dev/tty") || strings.Contains(helper, "read ") {
+		t.Error("installing a package asks a question; the updater has no terminal to answer on")
+	}
+}
+
+// helperText lifts one shell function out of the installer.
+func helperText(t *testing.T, script, name string) string {
+	t.Helper()
+	start := strings.Index(script, name+"() {")
+	if start < 0 {
+		t.Fatalf("the installer has no %s helper", name)
+	}
+	end := strings.Index(script[start:], "\n}\n")
+	if end < 0 {
+		t.Fatalf("the installer's %s helper is never closed", name)
+	}
+	return script[start : start+end+3]
+}
+
 // TestTheUninstallerIsWhereTheRemoveButtonLooks: the node runs
 // /usr/local/share/gniza/uninstall.sh for a panel that is not
 // DirectAdmin, and the installer has to have put it there.

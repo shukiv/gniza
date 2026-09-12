@@ -542,6 +542,14 @@ func (d *browserDoor) recordFailure(from string) {
 	now := time.Now()
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	// Addresses that gave up are forgotten here as well as on a sign-in,
+	// so a caller that never signs in and never repeats an address cannot
+	// grow this map without bound.
+	for key, other := range d.failures {
+		if key != from && now.After(other.last.Add(lockoutMax)) && now.After(other.until) {
+			delete(d.failures, key)
+		}
+	}
 	failed, ok := d.failures[from]
 	if !ok {
 		failed = &loginFailures{}

@@ -65,8 +65,13 @@ sign-in page too, since it is set in them. `X-Frame-Options: DENY` and
 answer is written to `/etc/gniza/plain.env` as `GNIZA_WEB_LISTEN`, which
 the agent reads as the flag's default, so the unit is unchanged and an
 upgrade keeps the answer. `GNIZA_WEB_LISTEN` and `GNIZA_WEB_PASSWORD`
-set before the script answer for an unattended install; with neither and
-no terminal it listens on loopback and prints a generated password once.
+set before the script answer for an unattended install. With no terminal
+and no password given -- which is also how the service's own updater runs
+the script -- the address is written and no password is: the door stays
+shut until `-web-set-password` has been run, and the log and the
+installer's closing block both say so. A password made up by the script
+would have to be printed, and what the script prints is kept by the
+updater and by journald.
 
 **A door that cannot be opened costs the backups nothing.** No password
 set, the address in use, half a TLS pair: the service logs why and runs

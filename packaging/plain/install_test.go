@@ -70,6 +70,15 @@ func TestTheInstallerAsksWhereTheBrowserInterfaceListens(t *testing.T) {
 	if strings.Contains(script, "-web-listen") {
 		t.Error("the unit names the address itself; it should come from the environment file")
 	}
+	// The updater runs this script with no terminal and keeps what it
+	// prints, and journald keeps it too. A password made up here would
+	// have to be printed, so none is: the service says what to run.
+	if strings.Contains(script, "/dev/urandom") || strings.Contains(script, "generated") {
+		t.Error("the installer makes up a password; the service must instead wait for one")
+	}
+	if !strings.Contains(script, `if [ -n "$WEB_PASSWORD" ]; then`) {
+		t.Error("the installer writes a password even when it has none")
+	}
 }
 
 // TestTheUninstallerIsWhereTheRemoveButtonLooks: the node runs

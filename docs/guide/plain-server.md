@@ -129,8 +129,11 @@ To change the address, or turn the interface off, edit
 `GNIZA_WEB_LISTEN` in `/etc/gniza/plain.env` and restart the service. An
 unattended install answers with the same variable set before the
 installer runs (`GNIZA_WEB_LISTEN=` empty means none) and
-`GNIZA_WEB_PASSWORD` for the password; with neither and no terminal it
-listens on `127.0.0.1:8443` and prints a generated password, once.
+`GNIZA_WEB_PASSWORD` for the password. With no terminal and no password
+given, the address is set to `127.0.0.1:8443` and no password is: the
+service does not open the door until one has been set with
+`gniza-agent -web-set-password`, and says so in its log. That is also
+what happens on a plain server that upgrades itself to this release.
 
 A sign-out is in the rail's foot. A session ends twelve hours after it
 began, an hour after it was last used, or when the service restarts,

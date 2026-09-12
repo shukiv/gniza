@@ -195,7 +195,7 @@ ASK
 	esac
 else
 	WEB_LISTEN=127.0.0.1:8443
-	say "no terminal to ask on: the browser interface listens on 127.0.0.1:8443 (set GNIZA_WEB_LISTEN to choose)"
+	say "no terminal to ask on: the browser interface is set to 127.0.0.1:8443 (GNIZA_WEB_LISTEN in $ENV_FILE changes it)"
 fi
 if grep -q '^GNIZA_WEB_LISTEN=' "$ENV_FILE"; then
 	sed -i "s|^GNIZA_WEB_LISTEN=.*|GNIZA_WEB_LISTEN=$WEB_LISTEN|" "$ENV_FILE"
@@ -209,14 +209,21 @@ ENV
 fi
 
 # Its password, set once and kept across upgrades. Typed on the terminal
-# without echo, taken from GNIZA_WEB_PASSWORD, or -- with neither, on a
-# machine being set up unattended -- generated and printed at the end,
-# once. The hash goes through the agent so there is one way to write it.
+# without echo, or taken from GNIZA_WEB_PASSWORD. With neither -- an
+# unattended install, or the service upgrading itself, which runs this
+# script with no terminal -- none is set: the service refuses to open the
+# door without one and says so in its log, and the closing block says
+# what to run. A password made up here would have to be printed, and what
+# this script prints is captured by the updater and kept by journald.
+# The hash goes through the agent so there is one way to write it.
 WEB_PASSWORD_NOTE=""
 if [ -n "$WEB_LISTEN" ] && [ ! -f "$WEB_DIR/password" ]; then
 	if [ -n "${GNIZA_WEB_PASSWORD:-}" ]; then
 		WEB_PASSWORD=$GNIZA_WEB_PASSWORD
-	elif tty_usable; then
+	elif ! tty_usable; then
+		WEB_PASSWORD=""
+		WEB_PASSWORD_NOTE="The browser interface has no password yet, so it is not listening: run  gniza-agent -web-set-password  as root, then  systemctl restart gniza."
+	else
 		trap 'stty echo < /dev/tty 2>/dev/null || true' 1 2 15
 		while :; do
 			stty -echo < /dev/tty 2>/dev/null || true
@@ -234,12 +241,11 @@ if [ -n "$WEB_LISTEN" ] && [ ! -f "$WEB_DIR/password" ]; then
 			fi
 		done
 		trap - 1 2 15
-	else
-		WEB_PASSWORD=$(head -c 30 /dev/urandom | base64 | tr -d '/+=\n' | cut -c1-20)
-		WEB_PASSWORD_NOTE="Its password is  $WEB_PASSWORD  -- generated, and written nowhere else."
 	fi
-	GNIZA_WEB_PASSWORD=$WEB_PASSWORD "$PREFIX/gniza-agent" -web-set-password -web-password-file "$WEB_DIR/password" \
-		|| die "could not set the browser interface's password"
+	if [ -n "$WEB_PASSWORD" ]; then
+		GNIZA_WEB_PASSWORD=$WEB_PASSWORD "$PREFIX/gniza-agent" -web-set-password -web-password-file "$WEB_DIR/password" \
+			|| die "could not set the browser interface's password"
+	fi
 	unset WEB_PASSWORD WEB_AGAIN
 fi
 

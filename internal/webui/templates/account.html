@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$d := .Data}}
 {{$stripe := $d.Account.Stripe}}
-<div class="cpr:text-xs cpr:text-base-content/70 cpr:flex cpr:items-center cpr:gap-1.5"><a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=accounts">Accounts</a> <span>›</span> <span>{{$d.Account.User}}</span></div>
+<div class="cpr:text-xs cpr:text-base-content/70 cpr:flex cpr:items-center cpr:gap-1.5"><a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=accounts">{{if $.Choosing}}Sources{{else}}Accounts{{end}}</a> <span>›</span> <span>{{$d.Account.User}}</span></div>
 
 {{/* The verdict for this one account, first: what its backups amount to
      right now, drawn as gravely as the state deserves. */}}

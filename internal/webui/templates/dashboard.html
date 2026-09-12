@@ -7,7 +7,7 @@
 <div class="cpr:panel cpr:border-l-4 {{if eq $d.Band "bad"}}cpr:border-l-error{{else if eq $d.Band "warn"}}cpr:border-l-warning{{else}}cpr:border-l-success{{end}}">
   <div class="cpr:pad cpr:flex cpr:flex-col cpr:gap-3 cpr:md:flex-row cpr:md:items-center">
     <div class="cpr:min-w-0 cpr:flex-1 cpr:flex cpr:flex-col cpr:gap-1.5">
-      <p class="cpr:k">{{$d.Hostname}} · {{len $d.Accounts}} account{{if ne (len $d.Accounts) 1}}s{{end}}</p>
+      <p class="cpr:k">{{$d.Hostname}} · {{len $d.Accounts}} {{if $.Choosing}}source{{else}}account{{end}}{{if ne (len $d.Accounts) 1}}s{{end}}</p>
       <h1 class="cpr:page-title">{{$d.Verdict}}</h1>
       <p class="cpr:text-base-content/70">
         {{if $d.LastRun}}<em class="cpr:not-italic cpr:font-medium cpr:text-base-content">{{$d.LastRun.Policy}}</em>
@@ -38,17 +38,17 @@
       {{if not $d.Destinations}}
       <a class="cpr:btn cpr:btn-sm cpr:btn-primary" href="?p=destinations">Add a destination</a>
       {{else if $d.Attention}}
-      <a class="cpr:btn cpr:btn-sm {{if eq $d.Band "bad"}}cpr:btn-error{{else}}cpr:btn-warning{{end}}" href="?p=accounts">Show the accounts</a>
+      <a class="cpr:btn cpr:btn-sm {{if eq $d.Band "bad"}}cpr:btn-error{{else}}cpr:btn-warning{{end}}" href="?p=accounts">{{if $.Choosing}}Show what is backed up{{else}}Show the accounts{{end}}</a>
       {{else if $d.Unscheduled}}
       <a class="cpr:btn cpr:btn-sm cpr:btn-warning" href="?p=schedule">Review schedules</a>
       {{else}}
-      <a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=accounts">All accounts</a>
+      <a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=accounts">{{if $.Choosing}}What to back up{{else}}All accounts{{end}}</a>
       {{end}}
     </div>
   </div>
   {{if and $d.Destinations $d.Unscheduled}}
-  <div class="cpr:px-4 cpr:py-2.5 cpr:border-t cpr:border-base-300 cpr:text-xs cpr:text-base-content/70">An old backup is not continuing protection. Put those accounts on a
-    schedule, or use an all-account schedule so accounts added later are enrolled on their own.
+  <div class="cpr:px-4 cpr:py-2.5 cpr:border-t cpr:border-base-300 cpr:text-xs cpr:text-base-content/70">An old backup is not continuing protection. Put those {{if $.Choosing}}sources{{else}}accounts{{end}} on a
+    schedule, or use a schedule over {{if $.Choosing}}everything on the list, so what is chosen later is covered on its own{{else}}every account, so accounts added later are enrolled on their own{{end}}.
     <a class="cpr:link cpr:link-primary cpr:link-hover" href="?p=schedule">Review schedules</a></div>
   {{end}}
 </div>
@@ -57,7 +57,7 @@
      what has been proved to come back, and what the destinations hold. */}}
 <div class="cpr:grid cpr:grid-cols-2 cpr:lg:grid-cols-4 cpr:gap-3">
   <div class="cpr:panel"><div class="cpr:p-3.5 cpr:flex cpr:flex-col cpr:gap-0.5">
-    <p class="cpr:k">Accounts</p>
+    <p class="cpr:k">{{if $.Choosing}}Sources{{else}}Accounts{{end}}</p>
     <p class="cpr:n">{{$d.Protected}}<span class="cpr:text-base cpr:text-base-content/50">/{{len $d.Accounts}}</span></p>
     <p class="cpr:text-xs cpr:text-base-content/60">with a good recent backup</p>
   </div></div>
@@ -100,7 +100,7 @@
       <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
         <h2 class="cpr:section-title">Worth acting on</h2>
         <span class="cpr:pill {{if eq $d.Band "bad"}}cpr:badge-error{{else}}cpr:badge-warning{{end}} cpr:tabular-nums">{{len $d.Attention}}{{if $d.AttentionMore}}+{{end}}</span>
-        <a class="cpr:link cpr:link-hover cpr:text-xs cpr:ml-auto" href="?p=accounts">All accounts</a>
+        <a class="cpr:link cpr:link-hover cpr:text-xs cpr:ml-auto" href="?p=accounts">{{if $.Choosing}}What to back up{{else}}All accounts{{end}}</a>
       </div>
       <div class="cpr:overflow-x-auto" data-tablewrap>
         <table class="cpr:table cpr:table-sm">
@@ -169,7 +169,7 @@
     <div class="cpr:panel">
       <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
         <h2 class="cpr:section-title">Accounts with the worst record</h2>
-        <a class="cpr:link cpr:link-hover cpr:text-xs cpr:ml-auto" href="?p=accounts">All accounts</a>
+        <a class="cpr:link cpr:link-hover cpr:text-xs cpr:ml-auto" href="?p=accounts">{{if $.Choosing}}What to back up{{else}}All accounts{{end}}</a>
       </div>
       <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
         <thead><tr><th>Account</th><th>Record</th><th class="cpr:text-right">Failed</th></tr></thead>

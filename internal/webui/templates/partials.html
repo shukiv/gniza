@@ -332,15 +332,15 @@
 
   <section role="tabpanel" data-tab-panel="mysql" aria-label="MySQL">
     {{if or $k.MySQL $c.ExtraMySQL}}
-    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Each database becomes a source of its own, dumped with mysqldump on every run. The accounts with rights on it are listed, and their grants are kept beside the dump for reference; they are not created again on restore.</p>
+    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Each database becomes a source of its own, dumped with mysqldump on every run. Who has rights on it is listed beside it; tick an account below to keep it with the databases it reaches, password hash and grants, so a restore brings back the login that opens them.</p>
     <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-tickable>
       <thead><tr>
         <th class="cpr:w-8"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-tick-all aria-label="Tick every database"></th>
-        <th>Database</th><th class="cpr:text-right">Size</th><th>Users</th><th>Backed up as</th>
+        <th>Database</th><th class="cpr:text-right">Size</th><th>Who has rights on it</th><th>Backed up as</th>
       </tr></thead>
       <tbody>
       {{range $c.ExtraMySQL}}
-        <tr>
+        <tr data-db="{{index .MySQL 0}}">
           <td>{{template "tickbox" ($c.Box "mysql" (index .MySQL 0) .Name true .Name)}}</td>
           <td class="cpr:mono">{{join .MySQL ", "}}</td>
           <td class="cpr:text-right cpr:text-base-content/50">&mdash;</td><td></td>
@@ -348,11 +348,11 @@
         </tr>
       {{end}}
       {{range $k.MySQL}}
-        <tr{{if $c.Dim .ChosenAs}} class="cpr:opacity-60"{{end}}>
+        <tr data-db="{{.Name}}"{{if $c.Dim .ChosenAs}} class="cpr:opacity-60"{{end}}>
           <td>{{template "tickbox" ($c.Box "mysql" .Name .ChosenAs true .Name)}}</td>
           <td class="cpr:mono">{{.Name}}</td>
           <td class="cpr:text-right cpr:tabular-nums">{{bytes .Size}}</td>
-          <td class="cpr:mono cpr:text-xs">{{if .Users}}{{range $i, $u := .Users}}{{if $i}}<br>{{end}}{{$u}}{{end}}{{else}}<span class="cpr:text-base-content/50">none at the schema level</span>{{end}}</td>
+          <td class="cpr:text-xs">{{if .Rights}}{{range $i, $r := .Rights}}{{if $i}}<br>{{end}}<span class="cpr:mono">{{$r.Who}}</span> <span class="cpr:text-base-content/60">{{join $r.Privileges ", "}}</span>{{end}}{{else}}<span class="cpr:text-base-content/50">nobody at the schema level</span>{{end}}</td>
           <td>{{if .ChosenAs}}{{.ChosenAs}}{{else}}<span class="cpr:text-base-content/50">not yet</span>{{end}}</td>
         </tr>
       {{end}}
@@ -362,6 +362,27 @@
     <p class="cpr:hint cpr:mt-0">No MySQL database is offered: the client did not answer. <span class="cpr:text-base-content/60">{{$k.MySQLError}}</span></p>
     {{else}}
     <p class="cpr:hint cpr:mt-0">The MySQL client answered with no databases beyond its own.</p>
+    {{end}}
+    {{if $k.MySQLUsers}}
+    <h4 class="cpr:section-title cpr:mt-5 cpr:mb-2">Accounts</h4>
+    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Every account the server has, and what it can reach. An account ticked is kept with each source that dumps a database it has rights on; ticking it ticks those databases. The server's own accounts are shown and not offered.</p>
+    <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-tickable>
+      <thead><tr>
+        <th class="cpr:w-8"></th>
+        <th>Account</th><th>Authenticates with</th><th>Rights</th><th>Kept with</th>
+      </tr></thead>
+      <tbody>
+      {{range $k.MySQLUsers}}
+        {{$a := .}}<tr{{if or .System ($c.Dim .AttachedTo)}} class="cpr:opacity-60"{{end}}>
+          <td>{{if .System}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" disabled aria-label="{{.Who}} is the server's own account">{{else}}{{$b := $c.Box "mysql_user" .Who .AttachedTo false .Who}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="{{$b.Name}}" value="{{$b.Value}}" aria-label="{{$b.Label}}"{{if $b.Disabled}} disabled{{else if $b.Checked}} checked{{end}}{{if $b.Existing}} data-existing data-same="{{$b.Value}}"{{end}} data-needs="{{range $i, $r := .Rights}}{{if $i}},{{end}}{{$r.Database}}{{end}}">{{end}}</td>
+          <td class="cpr:mono">{{.Who}}</td>
+          <td class="cpr:mono cpr:text-xs">{{.Plugin}}</td>
+          <td class="cpr:text-xs">{{if .Global}}<span class="cpr:font-semibold">every database</span> <span class="cpr:text-base-content/60" title="{{join .Global ", "}}">{{if gt (len .Global) 8}}{{len .Global}} privileges{{else}}{{join .Global ", "}}{{end}}</span>{{end}}{{range $i, $r := .Rights}}{{if or $i $a.Global}}<br>{{end}}<span class="cpr:mono">{{$r.Database}}</span> <span class="cpr:text-base-content/60">{{join $r.Privileges ", "}}</span>{{end}}{{if and (not .Global) (not .Rights)}}<span class="cpr:text-base-content/50">connect only</span>{{end}}</td>
+          <td>{{if .System}}<span class="cpr:text-base-content/50">the server's own</span>{{else if .AttachedTo}}{{.AttachedTo}}{{else}}<span class="cpr:text-base-content/50">not yet</span>{{end}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table></div>
     {{end}}
   </section>
 

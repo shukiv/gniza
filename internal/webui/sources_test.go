@@ -39,7 +39,7 @@ func newPlainServer(t *testing.T) (*Server, http.Handler, string) {
 		t.Fatal(err)
 	}
 	mysql := filepath.Join(root, "mysql")
-	script := "#!/bin/sh\ncase \"$*\" in *schema_privileges*) printf \"shop\\t'shop_app'@'localhost'\\n\" ;; *information_schema*) printf 'shop\\t4096\\nblog\\t4096\\n' ;; *) cat >/dev/null ;; esac\n"
+	script := "#!/bin/sh\ncase \"$*\" in *schema_privileges*) printf \"shop\\t'shop_app'@'localhost'\\tINSERT,SELECT\\n\" ;; *user_privileges*) printf \"'root'@'localhost'\\tALL PRIVILEGES\\n\" ;; *\"WHERE user = \"*) printf 'mysql_native_password\\t2A41\\n' ;; *mysql.user*) printf 'root\\tlocalhost\\tmysql_native_password\\nshop_app\\tlocalhost\\tmysql_native_password\\n' ;; *VERSION*) printf '11.8.6-MariaDB\\n' ;; *information_schema*) printf 'shop\\t4096\\nblog\\t4096\\n' ;; *SHOW\\ GRANTS*) printf 'GRANT SELECT, INSERT ON `shop`.* TO `shop_app`@`localhost`\\n' ;; *) cat >/dev/null ;; esac\n"
 	if err := os.WriteFile(mysql, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 		`data-tab="folders"`, `data-tab="mysql"`, `data-tab="postgresql"`, `data-tab="containers"`,
 		`data-folder-browser data-browse="?p=accounts/browse"`, `data-go="` + filepath.Dir(shop) + `"`,
 		`name="mysql" value="shop" aria-label="shop" checked`,
-		`name="mysql" value="blog" aria-label="blog" checked`, "&#39;shop_app&#39;@&#39;localhost&#39;",
+		`name="mysql" value="blog" aria-label="blog" checked`, `<span class="cpr:mono">shop_app@localhost</span> <span class="cpr:text-base-content/60">INSERT, SELECT</span>`,
 		"No PostgreSQL database is offered", "data-tick-all", "data-tick-count"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the empty page lacks %q", want)
@@ -550,5 +550,56 @@ func TestASourceWhoseContainerIsGoneKeepsAFolderRow(t *testing.T) {
 	}
 	if got := strings.Join(names, ","); got != "old-data,site" {
 		t.Errorf("the folders tab rows are %q, want old-data,site", got)
+	}
+}
+
+// The MySQL tab lists every account the server has with what it can
+// reach, and an account ticked is kept with the source that dumps its
+// database; one with rights on no database backed up is refused by
+// name, and the server's own are not offered.
+func TestAnAccountTickedIsKeptWithItsDatabases(t *testing.T) {
+	server, handler, _ := newPlainServer(t)
+	page := getPage(handler, "/accounts", false).Body.String()
+	for _, want := range []string{
+		`name="mysql_user" value="shop_app@localhost" aria-label="shop_app@localhost" data-needs="shop"`,
+		`aria-label="root@localhost is the server's own account"`,
+		`<span class="cpr:mono">shop_app@localhost</span> <span class="cpr:text-base-content/60">INSERT, SELECT</span>`,
+		"every database</span> <span class=\"cpr:text-base-content/60\" title=\"ALL PRIVILEGES\">ALL PRIVILEGES",
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the MySQL tab lacks %q: %s", want, firstLine(page, "mysql_user"))
+		}
+	}
+	// Ticked alone, the account has no source to be kept with.
+	alone := postForm(server, handler, "/accounts/add", url.Values{"mysql_user": {"shop_app@localhost"}})
+	if alone.Code != http.StatusOK || !strings.Contains(alone.Body.String(), "has rights on no database that is backed up; tick shop with it") {
+		t.Errorf("an account without its database = %d %s", alone.Code, firstLine(alone.Body.String(), "rights on no database"))
+	}
+	// Ticked with its database, it is kept with the fresh source.
+	both := postForm(server, handler, "/accounts/add", url.Values{"mysql": {"shop"}, "mysql_user": {"shop_app@localhost"}})
+	if location := both.Header().Get("Location"); both.Code != http.StatusSeeOther || !strings.Contains(location, "kind=ok") || !strings.Contains(location, "mysql-shop+%28shop_app%40localhost+kept+with+it%29") {
+		t.Errorf("an account with its database = %d %s", both.Code, location)
+	}
+	sources, _ := server.engine.Chooser()
+	list, err := sources.Sources(context.Background())
+	if err != nil || len(list) != 1 || strings.Join(list[0].MySQLUsers, ",") != "shop_app@localhost" {
+		t.Fatalf("sources = %+v, %v", list, err)
+	}
+	page = getPage(handler, "/accounts?add=1", false).Body.String()
+	if !strings.Contains(page, `name="mysql_user" value="shop_app@localhost" aria-label="shop_app@localhost" disabled`) || !strings.Contains(page, "<td>mysql-shop</td>") {
+		t.Errorf("after keeping, the account row is not disabled and with mysql-shop: %s", firstLine(page, "mysql_user"))
+	}
+	// In the schedule form the kept account is the source's row too.
+	noted := time.Now()
+	destination, err := server.engine.Store().PutDestination(nodestore.Destination{Name: "usb", Type: "local", Config: map[string]string{"root": t.TempDir()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := server.engine.Store().PutRepository(nodestore.Repository{DestinationID: destination.ID, Path: "gniza", RecoveryNotedAt: &noted, InitialisedAt: &noted}); err != nil {
+		t.Fatal(err)
+	}
+	form := getPage(handler, "/schedule", false).Body.String()
+	if !strings.Contains(form, `name="source" value="mysql-shop" aria-label="shop_app@localhost"`) {
+		t.Errorf("the schedule form does not tick the account with its source: %s", firstLine(form, "shop_app@localhost"))
 	}
 }

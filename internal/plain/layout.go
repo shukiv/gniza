@@ -59,8 +59,9 @@ func (Layout) AccountRoot(treeDir, account string) (string, error) {
 	return root, nil
 }
 
-// PlaceDatabaseUsers has nowhere to put grants: a plain server's restore
-// loads dumps into databases the operator already has users for.
+// PlaceDatabaseUsers has nothing to move: the accounts kept with a
+// source are staged in the dumps directory already, in the files a
+// panel's backup uses, and the restore reads them from there.
 func (Layout) PlaceDatabaseUsers(string) error { return nil }
 
 // ValidateArchive binds an archive to an account. A plain server makes

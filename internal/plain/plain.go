@@ -11,7 +11,9 @@
 // What a panel would do on restore -- create the account, put the
 // archive back through its own tool -- has no counterpart here, and is
 // refused rather than imitated. Files go back with PutHomeDir; dumps go
-// back with LoadDatabase. That is the whole of a plain server's restore.
+// back with LoadDatabase; the MySQL accounts kept with a source come
+// back with PutDatabaseUsers. That is the whole of a plain server's
+// restore.
 package plain
 
 import (
@@ -312,10 +314,14 @@ type Record struct {
 	// ComposeFiles are the compose files copied beside the record, by
 	// their original paths, for a source made from a container.
 	ComposeFiles []string `json:"compose_files,omitempty"`
-	// Grants names the files beside the record that hold the database
-	// accounts' grants (MySQL) or the roles (PostgreSQL), kept for
-	// reference and not run on restore.
-	Grants   []string  `json:"grants,omitempty"`
+	// Grants names the files beside the record that hold every
+	// account's grants on the databases (MySQL) or the roles
+	// (PostgreSQL), kept for reference and not run on restore.
+	Grants []string `json:"grants,omitempty"`
+	// Users are the MySQL accounts kept beside the dumps, as user@host:
+	// their hashes and grants are in the dumps directory, in the files
+	// a panel's backup uses, so a restore makes them again.
+	Users    []string  `json:"users,omitempty"`
 	Hostname string    `json:"hostname"`
 	TakenAt  time.Time `json:"taken_at"`
 }
@@ -417,8 +423,20 @@ func (p *Provider) Stage(ctx context.Context, req panel.StageRequest) (pkgacct.P
 		}
 	}
 
+	var users []string
+	if !req.SkipDatabases && len(source.MySQLUsers) > 0 {
+		kept, warnings, err := p.keepAccounts(ctx, source, filepath.Join(metadata, DumpDir))
+		if err != nil {
+			payload.Missing = append(payload.Missing, pkgacct.Omission{What: "the accounts of " + source.Name, Why: err.Error()})
+		}
+		users = kept
+		for _, warning := range warnings {
+			payload.Missing = append(payload.Missing, pkgacct.Omission{What: "a grant", Why: warning})
+		}
+	}
+
 	record := Record{
-		Account: source.Name, Path: source.Path, Databases: dumped, Grants: grants,
+		Account: source.Name, Path: source.Path, Databases: dumped, Grants: grants, Users: users,
 		MySQL: source.MySQL, PostgreSQL: source.PostgreSQL, Container: source.Container,
 		TakenAt: time.Now().UTC(),
 	}
@@ -667,11 +685,6 @@ func (p *Provider) LoadDatabase(ctx context.Context, user, database, dumpPath st
 // PutCrontab: a source has no crontab of its own.
 func (p *Provider) PutCrontab(context.Context, string, string) error {
 	return unverified("cron jobs on a plain server are in the system backup, not in a source")
-}
-
-// PutDatabaseUsers: a plain server's backup records no database users.
-func (p *Provider) PutDatabaseUsers(context.Context, string, []panel.DatabaseUser) error {
-	return unverified("database users are not recorded in a plain server's backup")
 }
 
 // sortedCopy is a sorted copy of a list, with blanks and repeats gone.

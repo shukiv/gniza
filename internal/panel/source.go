@@ -27,6 +27,10 @@ type Source struct {
 	// by name, as the operator chose them.
 	MySQL      []string `json:"mysql,omitempty"`
 	PostgreSQL []string `json:"postgresql,omitempty"`
+	// MySQLUsers are the accounts, as user@host, whose password hash
+	// and grants are kept with the dumps so a restore brings back the
+	// login that opens the database. Each has rights on one of MySQL.
+	MySQLUsers []string `json:"mysql_users,omitempty"`
 	// Container is set on a source made from a container: Path is then
 	// one of its mounts on the host.
 	Container *ContainerRef `json:"container,omitempty"`
@@ -59,6 +63,10 @@ type Candidates struct {
 	MySQLError      string
 	PostgreSQL      []DatabaseCandidate
 	PostgreSQLError string
+	// MySQLUsers is every account the MySQL server has, with what each
+	// can reach, so the operator sees who opens which database and can
+	// choose the accounts to keep with the dumps.
+	MySQLUsers []DatabaseUserCandidate
 	// Containers is every container docker or podman knows about.
 	Containers []ContainerCandidate
 	// Stacks are the compose projects the containers belong to, with
@@ -86,13 +94,49 @@ type DatabaseCandidate struct {
 	Size uint64
 	// Users are the accounts with rights on it: MySQL's grantees at the
 	// schema level, PostgreSQL's owner. They are listed so the operator
-	// knows whose data it is, and their grants are kept beside the dump;
-	// they are not created again on restore.
+	// knows whose data it is.
 	Users []string
+	// Rights says what each of those accounts can do on it (MySQL).
+	Rights []DatabaseRight
 	// ChosenAs names the source that already dumps this database, or is
 	// empty.
 	ChosenAs string
 }
+
+// DatabaseRight is one account's privileges on one database.
+type DatabaseRight struct {
+	User string
+	Host string
+	// Database is the one the privileges are on, when the right is read
+	// from the account's side.
+	Database   string
+	Privileges []string
+}
+
+// Who is the account as user@host.
+func (r DatabaseRight) Who() string { return r.User + "@" + r.Host }
+
+// DatabaseUserCandidate is one account of the MySQL server: who it is,
+// what authenticates it, and what it can reach.
+type DatabaseUserCandidate struct {
+	User string
+	Host string
+	// Plugin is the authentication plugin; the hash is never shown.
+	Plugin string
+	// System says the account is the server's own or the operator's
+	// (root, mysql, mariadb.sys ...): shown, not offered.
+	System bool
+	// Global are the privileges held on every database, USAGE left out.
+	Global []string
+	// Rights are the privileges held on single databases.
+	Rights []DatabaseRight
+	// AttachedTo names the sources that keep this account with their
+	// dumps, comma joined, or is empty.
+	AttachedTo string
+}
+
+// Who is the account as user@host.
+func (u DatabaseUserCandidate) Who() string { return u.User + "@" + u.Host }
 
 // ContainerCandidate is one container that could be backed up.
 type ContainerCandidate struct {
@@ -200,6 +244,12 @@ type Chooser interface {
 	// AddContainer makes a source of each of the container's mounts,
 	// and one for its description when it has none, and returns them.
 	AddContainer(ctx context.Context, engine, name string) ([]Source, error)
+	// AttachMySQLUser keeps an account, as user@host, with every source
+	// that dumps a database it has rights on, and returns those sources'
+	// names. An account with rights on no database chosen, or that the
+	// server does not have, is refused with an error the operator can
+	// read.
+	AttachMySQLUser(ctx context.Context, who string) ([]string, error)
 	// RemoveSource forgets a choice. The backups taken of it stay.
 	RemoveSource(ctx context.Context, name string) error
 }

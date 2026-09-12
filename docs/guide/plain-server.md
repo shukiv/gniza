@@ -28,13 +28,21 @@ a panel's account would be:
   one's choosing, under the tree. In the terminal the folders under
   those three roots are offered as toggles instead.
 - **MySQL** and **PostgreSQL.** Every database the `mysql` or `psql`
-  client can see, in a table with its size and its users -- MySQL's
-  grantees, PostgreSQL's owner -- all ticked by default, with a box in
-  the header to tick or untick the column. Each becomes a source
-  called `mysql-<name>` or `pg-<name>`, dumped on every run. The
-  users' grants (`SHOW GRANTS`) or the roles (`pg_dumpall
-  --roles-only`) are kept beside the dump for reference; they are not
-  created again on restore.
+  client can see, in a table with its size and who has rights on it --
+  each MySQL account with its privileges, PostgreSQL's owner -- all
+  ticked by default, with a box in the header to tick or untick the
+  column. Each becomes a source called `mysql-<name>` or `pg-<name>`,
+  dumped on every run. Under the MySQL databases, **Accounts** lists
+  every account the server has, what authenticates it and what it can
+  reach: its privileges on every database, or on single ones. An
+  account ticked is kept with each source that dumps a database it has
+  rights on (ticking it ticks those databases): its password hash and
+  its grants on those databases go beside the dumps, in the files a
+  panel's backup uses, and a restore makes the account again with the
+  password it had. The server's own accounts -- root, mysql,
+  mariadb.sys -- are shown and not offered. Every account's grants
+  (`SHOW GRANTS`) and the PostgreSQL roles (`pg_dumpall --roles-only`)
+  are also kept beside the record, for reference.
 - **Docker / Podman.** Every container, grouped under the stack its
   compose file makes, with its image, status and how many mounts it
   has; a box on the stack ticks the whole stack. Each ticked container
@@ -151,7 +159,8 @@ curl -s --unix-socket $S -X POST http://x/accounts/backup -d "csrf=$CSRF" -d "ac
 
 The schedule form takes the same `folder`, `mysql`, `postgresql` and
 `container` fields as `/accounts/add`, adds them, and covers them;
-`source=<name>` ticks one already on the list. With every source ticked,
+`source=<name>` ticks one already on the list; `mysql_user=<user@host>`
+keeps an account with the sources that dump its databases. With every source ticked,
 or with `scope=all` and nothing ticked, the schedule covers everything
 now and later; otherwise only what was ticked. A schedule over nothing
 is refused. `http://x/accounts/browse?dir=/var` lists what is under

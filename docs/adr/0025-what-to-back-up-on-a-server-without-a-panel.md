@@ -1,6 +1,6 @@
 # 0025 — What to back up on a server without a panel
 
-Status: accepted, 2026-09-12; amended the same day, twice (the choosing
+Status: accepted, 2026-09-12; amended the same day, three times (the choosing
 is by kind, and it sits in the schedule form, below). Amends
 [ADR 0022](0022-a-server-without-a-panel.md).
 
@@ -112,8 +112,9 @@ expects every `.sql` there to create something, and a grants file
 creates nothing. Nothing runs them on restore: `LoadDatabase` loads a
 dump into a database that exists, and creating accounts on a machine
 that may already have them is a decision for whoever restores. MySQL 8
-does not put the password in `SHOW GRANTS` anyway. The pages say
-"kept beside the dump for reference; not created again on restore".
+does not put the password in `SHOW GRANTS` anyway. The pages said
+"kept beside the dump for reference; not created again on restore";
+the third amendment below keeps the accounts the operator chooses.
 
 **A stack is its containers and the folder its compose file lives in.**
 Containers are grouped under the compose project their labels name
@@ -188,6 +189,31 @@ looked the same, no hierarchy, no height, "not yet" on every row. The
 list of folders under the roots (`Candidates.Folders`) stays for the
 terminal, whose form is toggles. A typed path stays too, folded away,
 for the folder one knows the name of and the name one wants for it.
+
+**Amended: the accounts are chosen too, and kept with their
+databases.** "I should be able to select from all the available users
+and databases, and their relationships and permissions." The MySQL tab
+lists every account the server has (`mysql.user`), what authenticates
+it, its privileges on every database (`information_schema.user_privileges`)
+and on single ones (`schema_privileges`), and each database says who
+has what on it. An account ticked is not a source of its own: the
+point of keeping it is that restoring the database brings back the
+login that opens it, the way a panel account restores home, databases
+and users together. So `Chooser.AttachMySQLUser` keeps the account with
+every source that dumps a database it has schema-level rights on, and
+refuses one with rights on no such database, naming the databases to
+tick with it; the server's own accounts are shown and refused. The
+backup writes, beside the dumps, the two files a cPanel backup carries
+for the same thing -- the hashes as data (`_users.sql-auth.json`) and
+the statements a person can run (`_users-runnable.sql`: `CREATE USER
+IF NOT EXISTS` in the server's own dialect, MariaDB's `VIA ... USING`
+or MySQL's `WITH ... AS 0x...`, then the grants on the source's
+databases) -- so the agent's restore reads them as it reads a panel's,
+checks the databases are there, and `PutDatabaseUsers` makes the
+accounts again with the hashes they had. Grants on other databases,
+and the grant option, are not put back; the file says which, and so
+does the backup's report. The hash is never shown on a page. The
+PostgreSQL roles are listed as before and not chosen yet.
 
 **Saving adds first, then covers.** The save handler reads the names
 ticked, adds the fresh rows, and the schedule covers the union. What

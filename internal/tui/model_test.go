@@ -455,7 +455,7 @@ func TestChoosingDatabasesTicksThemAllByDefault(t *testing.T) {
 	m := fresh(t, api)
 	m = press(t, m, "4", "m")
 	view := m.View()
-	for _, want := range []string{"shop · 4.0 KiB · 'shop_app'@'localhost'", "shop_wp", "not created again on restore"} {
+	for _, want := range []string{"shop · 4.0 KiB · 'shop_app'@'localhost'", "shop_wp", "brings the login back"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the MySQL form lacks %q:\n%s", want, view)
 		}

@@ -302,6 +302,17 @@
         if (tr && tr.dataset.group === box.dataset.tickGroup) { row.checked = box.checked; }
       });
     }
+    // An account ticked brings the databases it has rights on: it is
+    // kept with the sources that dump them, so they have to be there.
+    if (box.checked && box.dataset.needs) {
+      var panel = box.closest("[data-tab-panel]") || table;
+      box.dataset.needs.split(",").forEach(function (database) {
+        panel.querySelectorAll("tr[data-db] input[type=checkbox]").forEach(function (other) {
+          if (other.closest("tr").dataset.db === database && !other.disabled) { other.checked = true; }
+        });
+      });
+      panel.querySelectorAll("[data-tickable]").forEach(settle);
+    }
     // One source can stand behind several rows, on several tabs: a
     // folder chosen with its databases is one name. They tick together.
     if (box.dataset.same) {

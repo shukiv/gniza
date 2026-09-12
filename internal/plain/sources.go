@@ -207,15 +207,23 @@ func (p *Provider) Candidates(ctx context.Context) (panel.Candidates, error) {
 	if sizes, err := p.databaseSizes(ctx); err != nil {
 		found.MySQLError = err.Error()
 	} else {
-		users, err := p.mysqlUsers(ctx)
+		rights, err := p.mysqlRights(ctx)
 		if err != nil {
 			p.log().Debug("the MySQL users could not be listed", "error", err)
 		}
 		for name, size := range sizes {
-			found.MySQL = append(found.MySQL, panel.DatabaseCandidate{
-				Name: name, Size: size, Users: users[name], ChosenAs: mysqlAs[name]})
+			candidate := panel.DatabaseCandidate{Name: name, Size: size, Rights: rights[name], ChosenAs: mysqlAs[name]}
+			for _, right := range rights[name] {
+				candidate.Users = append(candidate.Users, "'"+right.User+"'@'"+right.Host+"'")
+			}
+			found.MySQL = append(found.MySQL, candidate)
 		}
 		sort.Slice(found.MySQL, func(i, j int) bool { return found.MySQL[i].Name < found.MySQL[j].Name })
+		if accounts, err := p.mysqlUserCandidates(ctx, sources); err != nil {
+			p.log().Debug("the MySQL accounts could not be listed", "error", err)
+		} else {
+			found.MySQLUsers = accounts
+		}
 	}
 	if sizes, owners, err := p.postgresList(ctx); err != nil {
 		found.PostgreSQLError = err.Error()
@@ -490,34 +498,6 @@ func (p *Provider) postgresRoles(ctx context.Context) ([]byte, error) {
 
 // --- MySQL users ---
 
-// mysqlUsers lists, for each database, the accounts granted rights on
-// it at the schema level. A user granted everything on every database
-// is not listed against any of them; root is the operator, not a
-// customer.
-func (p *Provider) mysqlUsers(ctx context.Context) (map[string][]string, error) {
-	cmd := exec.CommandContext(ctx, p.mysql(), "-N", "-B", "-e",
-		"SELECT table_schema, grantee FROM information_schema.schema_privileges GROUP BY table_schema, grantee ORDER BY 1, 2")
-	var out, complaint bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &complaint
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("plain: mysql: %w%s", err, saidOnStderr(complaint.String()))
-	}
-	users := map[string][]string{}
-	scanner := bufio.NewScanner(&out)
-	for scanner.Scan() {
-		fields := strings.Split(scanner.Text(), "\t")
-		if len(fields) < 2 || fields[0] == "" {
-			continue
-		}
-		grantee := strings.TrimSpace(fields[1])
-		if grantee == "" || !usableGrantee(grantee) {
-			continue
-		}
-		users[fields[0]] = append(users[fields[0]], grantee)
-	}
-	return users, nil
-}
-
 // usableGrantee says a grantee reads as 'user'@'host', as the server
 // writes it, and nothing else: it is handed back to the server inside
 // SHOW GRANTS, so it is not allowed to be anything a query could hide
@@ -539,9 +519,10 @@ func usableGrantee(grantee string) bool {
 
 // mysqlGrants is the grants of every account with rights on the
 // database, as SHOW GRANTS writes them, one account after another. They
-// are kept beside the dump so a restore elsewhere knows who used the
-// database; they are not run on restore, and on MySQL 8 they do not
-// carry the password anyway.
+// are kept beside the record so a restore elsewhere knows who used the
+// database; they are not run on restore. The accounts the operator
+// kept with the source are another matter: their hashes and grants go
+// beside the dumps and the restore makes them again (users.go).
 func (p *Provider) mysqlGrants(ctx context.Context, database string) ([]byte, error) {
 	users, err := p.mysqlUsers(ctx)
 	if err != nil {

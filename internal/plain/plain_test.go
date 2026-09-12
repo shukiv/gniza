@@ -39,13 +39,21 @@ func fakeMySQL(t *testing.T, databases ...string) (mysql, mysqldump string) {
 	dir := t.TempDir()
 	mysql = filepath.Join(dir, "mysql")
 	mysqldump = filepath.Join(dir, "mysqldump")
-	// Every database has one account, <name>_app@localhost, with rights
-	// on it; SHOW GRANTS answers for any account with one line.
+	// Every database has one account, <name>_app@localhost, with SELECT
+	// and INSERT on it and everything on `other` besides; root holds
+	// everything everywhere. SHOW GRANTS answers as MariaDB does, with
+	// the password on the USAGE line. Anything else is a statement to
+	// run, logged.
+	list := strings.Join(databases, " ")
 	script := "#!/bin/sh\n" +
 		"case \"$*\" in\n" +
-		"  *schema_privileges*) for d in " + strings.Join(databases, " ") + "; do printf \"%s\\t'%s_app'@'localhost'\\n\" \"$d\" \"$d\"; done ;;\n" +
-		"  *information_schema*) for d in " + strings.Join(databases, " ") + "; do printf '%s\\t4096\\n' \"$d\"; done ;;\n" +
-		"  *SHOW\\ GRANTS*) printf 'GRANT ALL PRIVILEGES ON `x`.* TO %s\\n' \"${*##*FOR }\" ;;\n" +
+		"  *schema_privileges*) for d in " + list + "; do printf \"%s\\t'%s_app'@'localhost'\\tINSERT,SELECT\\n\" \"$d\" \"$d\"; done ;;\n" +
+		"  *user_privileges*) printf \"'root'@'localhost'\\tALL PRIVILEGES\\n\" ;;\n" +
+		"  *\"WHERE user = \"*) printf 'mysql_native_password\\t2A41\\n' ;;\n" +
+		"  *mysql.user*) printf 'root\\tlocalhost\\tmysql_native_password\\n'; for d in " + list + "; do printf '%s_app\\tlocalhost\\tmysql_native_password\\n' \"$d\"; done ;;\n" +
+		"  *VERSION*) printf '11.8.6-MariaDB\\n' ;;\n" +
+		"  *information_schema*) for d in " + list + "; do printf '%s\\t4096\\n' \"$d\"; done ;;\n" +
+		"  *SHOW\\ GRANTS*) who=\"${*##*FOR }\"; u=${who#\\'}; u=${u%%\\'*}; d=${u%_app}; printf \"GRANT USAGE ON *.* TO \\`%s\\`@\\`localhost\\` IDENTIFIED BY PASSWORD '*A'\\nGRANT SELECT, INSERT ON \\`%s\\`.* TO \\`%s\\`@\\`localhost\\`\\nGRANT ALL PRIVILEGES ON \\`other\\`.* TO \\`%s\\`@\\`localhost\\` WITH GRANT OPTION\\n\" \"$u\" \"$d\" \"$u\" \"$u\" ;;\n" +
 		"  *) cat > /dev/null; printf 'loaded %s\\n' \"$*\" >> \"$(dirname \"$0\")/mysql.log\" ;;\n" +
 		"esac\n"
 	if err := os.WriteFile(mysql, []byte(script), 0o755); err != nil {
@@ -373,7 +381,7 @@ func TestASourceOfDatabasesOnlyStillHasAFilesPart(t *testing.T) {
 	// Who used it is kept beside the record, not under the dumps where
 	// every .sql is expected to create something.
 	grants, err := os.ReadFile(filepath.Join(staging, "metadata", plain.RecordDir, plain.MySQLGrantsFile("erp")))
-	if err != nil || !strings.Contains(string(grants), "'erp_app'@'localhost'") || !strings.Contains(string(grants), "GRANT ALL") {
+	if err != nil || !strings.Contains(string(grants), "'erp_app'@'localhost'") || !strings.Contains(string(grants), "GRANT SELECT, INSERT") {
 		t.Errorf("the grants beside the record = %q, %v", grants, err)
 	}
 	if entries, _ := os.ReadDir(filepath.Join(staging, "metadata", plain.DumpDir)); len(entries) != 1 {
@@ -470,9 +478,6 @@ func TestTheNativeRestoreIsRefusedAsUnverified(t *testing.T) {
 	}
 	if err := provider.PutCrontab(context.Background(), "shop", t.TempDir()); !errors.Is(err, plain.ErrUnverified) {
 		t.Errorf("PutCrontab = %v, want ErrUnverified", err)
-	}
-	if err := provider.PutDatabaseUsers(context.Background(), "shop", nil); !errors.Is(err, plain.ErrUnverified) {
-		t.Errorf("PutDatabaseUsers = %v, want ErrUnverified", err)
 	}
 	if err := (&plain.Provider{}).AddSource(context.Background(), panel.Source{Path: t.TempDir()}); !errors.Is(err, plain.ErrNoCatalog) {
 		t.Errorf("a provider with no catalog took a choice: %v", err)
@@ -857,5 +862,146 @@ func TestBrowseListsTheDirectoriesUnderOne(t *testing.T) {
 		case "/proc", "/sys", "/dev", "/run":
 			t.Errorf("/ lists %s", entry.Path)
 		}
+	}
+}
+
+// TestTheAccountsAreListedWithWhatTheyReach: every account of the
+// server is a candidate, with its rights on each database and the
+// server's own marked; a database says who has what on it.
+func TestTheAccountsAreListedWithWhatTheyReach(t *testing.T) {
+	mysql, mysqldump := fakeMySQL(t, "shop", "blog")
+	provider := &plain.Provider{Catalog: newCatalog(), MySQLPath: mysql, MysqldumpPath: mysqldump, PostgresUser: "-"}
+	chosen(t, provider, panel.Source{Name: "shop", MySQL: []string{"shop"}})
+	found, err := provider.Candidates(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var accounts []string
+	for _, account := range found.MySQLUsers {
+		item := account.Who() + ":" + account.Plugin
+		if account.System {
+			item += ":system"
+		}
+		if len(account.Global) > 0 {
+			item += ":global=" + strings.Join(account.Global, "+")
+		}
+		for _, right := range account.Rights {
+			item += ":" + right.Database + "=" + strings.Join(right.Privileges, "+")
+		}
+		if account.AttachedTo != "" {
+			item += ":with=" + account.AttachedTo
+		}
+		accounts = append(accounts, item)
+	}
+	want := "blog_app@localhost:mysql_native_password:blog=INSERT+SELECT " +
+		"shop_app@localhost:mysql_native_password:shop=INSERT+SELECT " +
+		"root@localhost:mysql_native_password:system:global=ALL PRIVILEGES"
+	if got := strings.Join(accounts, " "); got != want {
+		t.Errorf("accounts = %q, want %q", got, want)
+	}
+	if found.MySQL[1].Name != "shop" || len(found.MySQL[1].Rights) != 1 || found.MySQL[1].Rights[0].Who() != "shop_app@localhost" ||
+		strings.Join(found.MySQL[1].Rights[0].Privileges, ",") != "INSERT,SELECT" {
+		t.Errorf("the shop database says %+v", found.MySQL[1].Rights)
+	}
+
+	// An account is kept with every source dumping a database it has
+	// rights on; one with rights on no such database is refused and
+	// told which to tick; the server's own are refused; a stranger is.
+	names, err := provider.AttachMySQLUser(context.Background(), "shop_app@localhost")
+	if err != nil || strings.Join(names, ",") != "shop" {
+		t.Errorf("attaching shop_app = %v, %v", names, err)
+	}
+	if again, err := provider.AttachMySQLUser(context.Background(), "shop_app@localhost"); err != nil || strings.Join(again, ",") != "shop" {
+		t.Errorf("attaching shop_app twice = %v, %v", again, err)
+	}
+	found, _ = provider.Candidates(context.Background())
+	if found.MySQLUsers[1].AttachedTo != "shop" {
+		t.Errorf("after attaching, shop_app is with %q", found.MySQLUsers[1].AttachedTo)
+	}
+	sources, _ := provider.Sources(context.Background())
+	if strings.Join(sources[0].MySQLUsers, ",") != "shop_app@localhost" {
+		t.Errorf("the source keeps %v", sources[0].MySQLUsers)
+	}
+	for who, complaint := range map[string]string{
+		"blog_app@localhost": "has rights on no database that is backed up; tick blog with it",
+		"root@localhost":     "the server's own account",
+		"nobody@localhost":   "has no account nobody@localhost",
+		"shop_app":           "written user@host",
+		"x'y@localhost":      "not an account name",
+	} {
+		if _, err := provider.AttachMySQLUser(context.Background(), who); err == nil || !strings.Contains(err.Error(), complaint) {
+			t.Errorf("attaching %s = %v, want %q", who, err, complaint)
+		}
+	}
+}
+
+// TestTheAccountsAreKeptBesideTheDumps: a backup of a source with an
+// account writes the account's hash and its grants on the source's
+// databases in the dumps directory, as a panel's backup does, and the
+// record names it; a restore makes the account again from them.
+func TestTheAccountsAreKeptBesideTheDumps(t *testing.T) {
+	mysql, mysqldump := fakeMySQL(t, "shop")
+	provider := &plain.Provider{Catalog: newCatalog(), MySQLPath: mysql, MysqldumpPath: mysqldump, PostgresUser: "-"}
+	chosen(t, provider, panel.Source{Name: "shop", MySQL: []string{"shop"}})
+	if _, err := provider.AttachMySQLUser(context.Background(), "shop_app@localhost"); err != nil {
+		t.Fatal(err)
+	}
+	staging := t.TempDir()
+	payload, err := provider.Stage(context.Background(), panel.StageRequest{
+		Account: panel.AccountInfo{User: "shop"}, StagingDir: staging, Mode: pkgacct.ModeSplit})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dumps := filepath.Join(staging, "metadata", plain.DumpDir)
+	runnable, err := os.ReadFile(filepath.Join(dumps, "_users-runnable.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"CREATE USER IF NOT EXISTS 'shop_app'@'localhost' IDENTIFIED VIA mysql_native_password USING '*A';",
+		"GRANT SELECT, INSERT ON `shop`.* TO 'shop_app'@'localhost';",
+		"-- not put back by a restore: GRANT ALL PRIVILEGES ON `other`.* TO 'shop_app'@'localhost' WITH GRANT OPTION;",
+	} {
+		if !strings.Contains(string(runnable), want) {
+			t.Errorf("the runnable file lacks %q:\n%s", want, runnable)
+		}
+	}
+	if strings.Contains(string(runnable), "IDENTIFIED BY PASSWORD") {
+		t.Error("the runnable file carries MariaDB's USAGE line")
+	}
+	auth, err := os.ReadFile(filepath.Join(dumps, "_users.sql-auth.json"))
+	if err != nil || string(auth) != `{"shop_app":{"localhost":{"pass_hash":"2A41","auth_plugin":"mysql_native_password"}}}` {
+		t.Errorf("the auth file = %s, %v", auth, err)
+	}
+	record, err := os.ReadFile(filepath.Join(staging, "metadata", plain.RecordDir, plain.RecordFile))
+	if err != nil || !strings.Contains(string(record), `"shop_app@localhost"`) {
+		t.Errorf("the record = %s, %v", record, err)
+	}
+	var left []string
+	for _, omission := range payload.Missing {
+		left = append(left, omission.Why)
+	}
+	if len(left) != 1 || !strings.Contains(left[0], "not put back by a restore: GRANT ALL PRIVILEGES ON `other`") {
+		t.Errorf("the grant left out is not said: %v", left)
+	}
+
+	// The restore runs the same statements; a grant on a database the
+	// source was not chosen with is refused.
+	users := []panel.DatabaseUser{{Name: "shop_app", Host: "localhost", Plugin: "mysql_native_password", Hash: "2A41",
+		Grants: []panel.DatabaseGrant{{Database: "shop", Privileges: []string{"SELECT", "INSERT"}}}}}
+	if err := provider.PutDatabaseUsers(context.Background(), "shop", users); err != nil {
+		t.Fatal(err)
+	}
+	logged, _ := os.ReadFile(filepath.Join(filepath.Dir(mysql), "mysql.log"))
+	if !strings.Contains(string(logged), "loaded") {
+		t.Errorf("nothing ran: %s", logged)
+	}
+	users[0].Grants[0].Database = "other"
+	if err := provider.PutDatabaseUsers(context.Background(), "shop", users); err == nil || !strings.Contains(err.Error(), "other was not chosen with shop") {
+		t.Errorf("a grant on another database = %v", err)
+	}
+	users[0].Grants[0] = panel.DatabaseGrant{Database: "shop", Privileges: []string{"SELECT; DROP"}}
+	if err := provider.PutDatabaseUsers(context.Background(), "shop", users); err == nil || !strings.Contains(err.Error(), "is not a privilege") {
+		t.Errorf("a privilege with a statement in it = %v", err)
 	}
 }

@@ -295,7 +295,7 @@ func knownTab(name string) bool {
 // own -- each folder, each database and each container -- and a folder
 // typed in by hand. It says what was added, by name, and what was not,
 // with why.
-func (s *Server) addTicked(r *http.Request, chooser panel.Chooser) (added, refused []string) {
+func (s *Server) addTicked(r *http.Request, chooser panel.Chooser) (added, kept, refused []string) {
 	try := func(shown string, add func() ([]string, error)) {
 		names, err := add()
 		if err != nil {
@@ -329,6 +329,19 @@ func (s *Server) addTicked(r *http.Request, chooser panel.Chooser) (added, refus
 	for _, name := range r.PostForm["postgresql"] {
 		try("PostgreSQL "+name, one(panel.Source{PostgreSQL: []string{name}}))
 	}
+	// After the databases, so an account ticked beside a fresh one finds
+	// the source that dumps it.
+	for _, who := range r.PostForm["mysql_user"] {
+		who := strings.TrimSpace(who)
+		try("account "+who, func() ([]string, error) {
+			names, err := chooser.AttachMySQLUser(r.Context(), who)
+			if err != nil {
+				return nil, err
+			}
+			kept = append(kept, who+" with "+strings.Join(names, ", "))
+			return names, nil
+		})
+	}
 	for _, ticked := range r.PostForm["container"] {
 		engine, name, found := strings.Cut(ticked, "/")
 		try(ticked, func() ([]string, error) {
@@ -346,7 +359,7 @@ func (s *Server) addTicked(r *http.Request, chooser panel.Chooser) (added, refus
 			return names, nil
 		})
 	}
-	return added, refused
+	return added, kept, refused
 }
 
 // scheduleChoices reads what the schedule form ticked: the sources
@@ -382,7 +395,7 @@ func (s *Server) scheduleChoices(r *http.Request, chooser panel.Chooser) (names,
 			}
 		}
 	}
-	added, notAdded := s.addTicked(r, chooser)
+	added, _, notAdded := s.addTicked(r, chooser)
 	for _, name := range added {
 		keep(name)
 	}
@@ -421,7 +434,10 @@ func (s *Server) handleAddSource(w http.ResponseWriter, r *http.Request) {
 		s.redirect(w, r, "/accounts", "error", "Accounts on this server are "+s.panelName()+"'s to list, not chosen here.")
 		return
 	}
-	added, refused := s.addTicked(r, chooser)
+	added, kept, refused := s.addTicked(r, chooser)
+	// An account is kept with a source that was there already: not an
+	// addition, and said as what it is.
+	added = withoutRepeats(added, kept)
 	switch {
 	case len(added) == 0 && len(refused) == 0:
 		s.refuseSource(w, r, chooser, fmt.Errorf("Tick something, or name a folder: nothing was chosen."))
@@ -437,6 +453,40 @@ func (s *Server) handleAddSource(w http.ResponseWriter, r *http.Request) {
 		s.redirect(w, r, "/accounts", "ok", fmt.Sprintf("Added %d %s: %s. The next scheduled run backs them up; Back up now does it sooner.",
 			len(added), noun, strings.Join(added, ", ")))
 	}
+}
+
+// withoutRepeats is the sources added, each once, with the accounts
+// kept with each said after its name, so a source that only gained an
+// account is still the subject of the message.
+func withoutRepeats(added, kept []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, name := range added {
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		var with []string
+		for _, item := range kept {
+			if who, sources, ok := strings.Cut(item, " with "); ok && containsName(strings.Split(sources, ", "), name) {
+				with = append(with, who)
+			}
+		}
+		if len(with) > 0 {
+			name += " (" + strings.Join(with, ", ") + " kept with it)"
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+func containsName(list []string, value string) bool {
+	for _, item := range list {
+		if item == value {
+			return true
+		}
+	}
+	return false
 }
 
 // nameOf says what a source just added is called, since the provider

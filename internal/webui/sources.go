@@ -154,32 +154,39 @@ func (v *chooseView) load(ctx context.Context, chooser panel.Chooser) {
 	}
 }
 
-// extra is every source no candidate row stands for.
+// extra is every source no candidate row stands for. A source with a
+// folder needs a folder row: one chosen with its databases, in the
+// form's first shape, is behind its database rows, and its folder is
+// still drawn on the folders tab, or the tab would show the folder as
+// not chosen anywhere.
 func (v chooseView) extra() []panel.Source {
-	reachable := map[string]bool{}
+	folderRow, databaseRow := map[string]bool{}, map[string]bool{}
 	for _, folder := range v.Candidates.Folders {
-		reachable[folder.ChosenAs] = true
-	}
-	for _, database := range v.Candidates.MySQL {
-		reachable[database.ChosenAs] = true
-	}
-	for _, database := range v.Candidates.PostgreSQL {
-		reachable[database.ChosenAs] = true
+		folderRow[folder.ChosenAs] = true
 	}
 	for _, stack := range v.Candidates.Stacks {
-		reachable[stack.ChosenAs] = true
+		folderRow[stack.ChosenAs] = true
 	}
 	for _, engine := range v.Candidates.Engines {
-		reachable[engine.ChosenAs] = true
+		folderRow[engine.ChosenAs] = true
 	}
 	for _, names := range v.containerAs {
 		for _, name := range strings.Split(names, ",") {
-			reachable[name] = true
+			folderRow[name] = true
 		}
+	}
+	for _, database := range v.Candidates.MySQL {
+		databaseRow[database.ChosenAs] = true
+	}
+	for _, database := range v.Candidates.PostgreSQL {
+		databaseRow[database.ChosenAs] = true
 	}
 	var extra []panel.Source
 	for _, source := range v.Sources {
-		if !reachable[source.Name] {
+		switch {
+		case source.Path != "" && !folderRow[source.Name]:
+			extra = append(extra, source)
+		case source.Path == "" && !databaseRow[source.Name] && !folderRow[source.Name]:
 			extra = append(extra, source)
 		}
 	}

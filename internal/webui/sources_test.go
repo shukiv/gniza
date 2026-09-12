@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/shukiv/gniza/internal/node"
 	"github.com/shukiv/gniza/internal/nodestore"
+	"github.com/shukiv/gniza/internal/panel"
 	"github.com/shukiv/gniza/internal/plain"
 	"github.com/shukiv/gniza/internal/vault"
 )
@@ -413,6 +415,25 @@ func TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp(t *testing.T) 
 	table = getPage(handler, "/schedule", false).Body.String()
 	if !strings.Contains(table, "Everything chosen") || !strings.Contains(table, "3 sources") {
 		t.Errorf("the schedules table does not say Everything chosen, 3 sources: %s", firstLine(table, "Everything"))
+	}
+
+	// A source chosen in the form's first shape, a folder outside the
+	// roots with a database beside it, is behind its database row; its
+	// folder still gets a row of its own, and the two tick together.
+	chooser, _ := server.engine.Chooser()
+	site := t.TempDir()
+	if err := chooser.AddSource(context.Background(), panel.Source{Name: "site", Path: site, MySQL: []string{"shop"}}); err != nil {
+		t.Fatal(err)
+	}
+	form := getPage(handler, "/schedule", false).Body.String()
+	for _, want := range []string{
+		`name="source" value="site" aria-label="site" checked data-existing data-same="site"`,
+		`<td class="cpr:mono">` + site + `</td>`,
+		`name="source" value="mysql-shop"`,
+	} {
+		if !strings.Contains(form, want) {
+			t.Errorf("the form with a folder-and-database source lacks %q: %s", want, firstLine(form, `value="site"`))
+		}
 	}
 }
 

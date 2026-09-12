@@ -394,7 +394,7 @@ func TestOnAServerWithoutAPanelTheScreenIsWhatToBackUp(t *testing.T) {
 	m := fresh(t, api)
 	m = press(t, m, "4")
 	view := m.View()
-	for _, want := range []string{"4 What to back up", "Nothing is backed up yet", "/var/www/shop", "add a folder", "add a container"} {
+	for _, want := range []string{"4 What to back up", "Nothing is backed up yet", "add a folder", "add a container"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the empty screen lacks %q:\n%s", want, view)
 		}
@@ -420,9 +420,14 @@ func TestOnAServerWithoutAPanelTheScreenIsWhatToBackUp(t *testing.T) {
 // databases ticked, as the handler reads them.
 func TestChoosingAFolderWithItsDatabases(t *testing.T) {
 	api := fixture()
-	api.pages["/accounts"] = choosing()
+	// The list is read without the offer; the offer is read for the key.
+	api.pages["/accounts"] = map[string]any{"Accounts": []any{}, "Choose": map[string]any{}}
+	api.pages["/accounts?add=1"] = choosing()
 	m := fresh(t, api)
 	m = press(t, m, "4", "a")
+	if view := m.View(); !strings.Contains(view, "/var/www/shop, /var/www/blog") {
+		t.Fatalf("the form does not say what was found under the roots:\n%s", view)
+	}
 	m = typed(t, m, "/var/www/shop")
 	m = press(t, m, "tab")      // name, left empty
 	m = press(t, m, "tab", " ") // MySQL shop: on
@@ -443,7 +448,8 @@ func TestChoosingAFolderWithItsDatabases(t *testing.T) {
 // the one picked.
 func TestChoosingAContainer(t *testing.T) {
 	api := fixture()
-	api.pages["/accounts"] = choosing()
+	api.pages["/accounts"] = map[string]any{"Accounts": []any{}, "Choose": map[string]any{}}
+	api.pages["/accounts?add=1"] = choosing()
 	m := fresh(t, api)
 	m = press(t, m, "4", "c")
 	view := m.View()

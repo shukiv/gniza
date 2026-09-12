@@ -462,9 +462,6 @@ func (m Model) accountsView() string {
 	if len(v.Accounts) == 0 {
 		if v.Choose != nil {
 			hint := "Press a to back up a folder with its databases, or c to back up a container. Each becomes a source that is backed up on its own."
-			if folders := v.Choose.Candidates.Folders; len(folders) > 0 {
-				hint += " Found under the roots: " + strings.Join(folders, ", ") + "."
-			}
 			return empty(width, "Nothing is backed up yet.", "", "") + "\n\n" + sMuted.Render(clipWrap(hint, width))
 		}
 		return empty(width, "No accounts were found.", "", "") + "\n\n" +

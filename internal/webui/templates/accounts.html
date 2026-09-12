@@ -12,7 +12,7 @@
     {{end}}
   </div>
   {{if and $choose $d.Accounts (not $choose.Adding)}}
-  <a class="cpr:btn cpr:btn-sm cpr:btn-primary" href="?p=accounts&amp;add=1" data-dialog="add-source">Add</a>
+  <a class="cpr:btn cpr:btn-sm cpr:btn-primary" href="?p=accounts&amp;add=1" data-dialog="add-source" data-dialog-fetch data-dialog-title="Add to what is backed up">Add</a>
   {{end}}
   {{with $d.RunAll}}
   <form method="post" action="?p=schedule/run" class="cpr:inline-block cpr:align-middle">
@@ -161,7 +161,9 @@
       </button>
     </div>
     <div class="cpr:flex-1 cpr:overflow-y-auto cpr:px-5 cpr:py-4" data-drawer-body>
-      {{template "sourceform" $}}
+      {{/* The form is fetched when Add is pressed, with what there is to
+           choose from as it is then; the list page itself does not look. */}}
+      <p class="cpr:hint"><a class="cpr:link" href="?p=accounts&amp;add=1">Add to what is backed up</a></p>
     </div>
   </div>
 </dialog>

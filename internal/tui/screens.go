@@ -519,19 +519,9 @@ func (m Model) accountsKey(key string) (tea.Model, tea.Cmd) {
 	v := decode[accountsPage](m, screenAccounts)
 	if v.Choose != nil {
 		switch key {
-		case "a":
-			m.form = sourceForm(v.Choose.Candidates)
-			m.mode = modeForm
-			return m, nil
-		case "c":
-			form, ok := containerForm(v.Choose.Candidates)
-			if !ok {
-				m.err = "No container is left to choose: none is running here, or every one is chosen already."
-				return m, nil
-			}
-			m.form = form
-			m.mode = modeForm
-			return m, nil
+		case "a", "c":
+			m.busy = "Looking at what there is to choose from…"
+			return m, m.offer(key)
 		case "d":
 			i := m.cursor[screenAccounts]
 			if i < 0 || i >= len(v.Accounts) {
@@ -570,6 +560,31 @@ func (m Model) accountsKey(key string) (tea.Model, tea.Cmd) {
 // sourceForm chooses a folder and the databases beside it. The folders
 // under the roots are said in the help rather than offered as a choice,
 // because any folder on the server can be named.
+// chooseWith opens the form the key asked for, with what the server
+// offered just now.
+func (m Model) chooseWith(key string) (tea.Model, tea.Cmd) {
+	m.busy = ""
+	v := decode[accountsPage](m, screenAccounts)
+	if v.Choose == nil {
+		return m, nil
+	}
+	switch key {
+	case "a":
+		m.form = sourceForm(v.Choose.Candidates)
+	case "c":
+		form, ok := containerForm(v.Choose.Candidates)
+		if !ok {
+			m.err = "No container is left to choose: none is running here, or every one is chosen already."
+			return m, nil
+		}
+		m.form = form
+	default:
+		return m, nil
+	}
+	m.mode = modeForm
+	return m, nil
+}
+
 func sourceForm(offered candidates) *form {
 	folders := "Any folder on this server, from /."
 	if len(offered.Folders) > 0 {

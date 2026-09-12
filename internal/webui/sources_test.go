@@ -136,12 +136,31 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 			}
 		}
 	}
-	if err := json.Unmarshal(getPage(handler, "/accounts", true).Body.Bytes(), &answered); err != nil {
+	if err := json.Unmarshal(getPage(handler, "/accounts?add=1", true).Body.Bytes(), &answered); err != nil {
 		t.Fatal(err)
 	}
 	if answered.Data.Choose == nil || strings.Join(answered.Data.Choose.Candidates.MySQL, ",") != "blog,shop" ||
 		strings.Join(answered.Data.Choose.Candidates.Folders, ",") != shop {
 		t.Errorf("the page as data does not carry the candidates: %+v", answered.Data.Choose)
+	}
+	// The offer costs a look at the databases and the containers, so the
+	// terminal's five-second read of the list does not carry it; it asks
+	// with add=1 when a or c is pressed.
+	var polled struct {
+		Data struct {
+			Choose *struct {
+				Candidates struct{ Folders, MySQL []string }
+			}
+		}
+	}
+	if err := json.Unmarshal(getPage(handler, "/accounts", true).Body.Bytes(), &polled); err != nil {
+		t.Fatal(err)
+	}
+	if polled.Data.Choose == nil || len(polled.Data.Choose.Candidates.Folders)+len(polled.Data.Choose.Candidates.MySQL) != 0 {
+		t.Errorf("the list as data looks at the candidates: %+v", polled.Data.Choose)
+	}
+	if !strings.Contains(body, `closest("[data-fill]")`) {
+		t.Error("the page offers folders with data-fill links but nothing fills the field")
 	}
 
 	added := postForm(server, handler, "/accounts/add", url.Values{"path": {shop}, "mysql": {"shop"}})
@@ -149,10 +168,18 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 		t.Fatalf("adding = %d %s %s", added.Code, added.Header().Get("Location"), added.Body.String())
 	}
 	body = getPage(handler, "/accounts", false).Body.String()
-	for _, want := range []string{">shop</a>", shop, "MySQL: shop", `href="?p=accounts&amp;add=1"`, "?p=accounts/remove"} {
+	for _, want := range []string{">shop</a>", shop, "MySQL: shop", `href="?p=accounts&amp;add=1" data-dialog="add-source" data-dialog-fetch`, "?p=accounts/remove"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page with a source lacks %q", want)
 		}
+	}
+	// With a source chosen the list does not look at the candidates
+	// either: Add fetches the form, which does.
+	if strings.Contains(body, "blog</option>") || strings.Contains(body, `name="mysql"`) {
+		t.Error("the list page carries the form's offer")
+	}
+	if asked := getPage(handler, "/accounts?add=1", false).Body.String(); !strings.Contains(asked, `name="mysql" value="blog"`) || !strings.Contains(asked, "data-drawer-content") {
+		t.Errorf("the asked-for form lacks the offer or the drawer content:\n%s", firstLine(asked, "mysql"))
 	}
 	if strings.Contains(body, "Nothing is backed up yet") {
 		t.Error("the page still says nothing is backed up")

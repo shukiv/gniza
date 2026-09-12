@@ -118,6 +118,15 @@ type loadedMsg struct {
 	err    error
 }
 
+// offeredMsg is the accounts page read with what there is to choose
+// from, for the key that asked: the list costs the server a look at its
+// databases and containers, so it is not part of every refresh.
+type offeredMsg struct {
+	key  string
+	page answer.Page
+	err  error
+}
+
 type postedMsg struct {
 	intent  intent
 	outcome Outcome
@@ -168,6 +177,13 @@ func (m Model) pathOf(which screen) string {
 	return "/"
 }
 
+func (m Model) offer(key string) tea.Cmd {
+	return func() tea.Msg {
+		page, err := m.api.Page("/accounts?add=1")
+		return offeredMsg{key: key, page: page, err: err}
+	}
+}
+
 func (m Model) post(path string, form url.Values, what intent) tea.Cmd {
 	return func() tea.Msg {
 		outcome, err := m.api.Post(path, form)
@@ -198,6 +214,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.clampCursor(msg.screen)
 		return m, nil
+	case offeredMsg:
+		if msg.err != nil {
+			m.err = msg.err.Error()
+			return m, nil
+		}
+		m.err = ""
+		m.pages[screenAccounts] = msg.page
+		m.loaded[screenAccounts] = true
+		m.clampCursor(screenAccounts)
+		return m.chooseWith(msg.key)
 	case postedMsg:
 		return m.posted(msg)
 	case tea.KeyMsg:

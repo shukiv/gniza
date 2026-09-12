@@ -37,15 +37,25 @@ func (v chooseView) Was(key string) bool      { return v.Ticked[key] }
 // any, into the view.
 func (s *Server) chooseViewFor(r *http.Request, chooser panel.Chooser, sources int, formError string) chooseView {
 	view := chooseView{Submitted: map[string]string{}, Ticked: map[string]bool{}, FormError: formError}
-	candidates, err := chooser.Candidates(r.Context())
-	if err != nil {
-		if formError == "" {
-			view.FormError = "Could not see what there is to choose from: " + err.Error()
+	asked := r.URL.Query().Get("add") != ""
+	view.Adding = asked || sources == 0 || formError != ""
+	// What there is to choose from costs a look at the databases and the
+	// containers: a size query on each MySQL and PostgreSQL client and a
+	// docker ps. It is read when the form is asked for or shown again
+	// after a refusal, and when a person opens an empty page -- not on
+	// the live refresh every three seconds while a backup runs, nor on
+	// the terminal's five-second read, which asks with add=1 when the
+	// operator presses a or c.
+	if view.Adding && r.Header.Get("X-Gniza-Live") == "" && (asked || formError != "" || !wantsData(r)) {
+		candidates, err := chooser.Candidates(r.Context())
+		if err != nil {
+			if formError == "" {
+				view.FormError = "Could not see what there is to choose from: " + err.Error()
+			}
 		}
+		view.Candidates = candidates
+		view.Offers = len(candidates.Folders)+len(candidates.MySQL)+len(candidates.PostgreSQL)+len(candidates.Containers) > 0
 	}
-	view.Candidates = candidates
-	view.Offers = len(candidates.Folders)+len(candidates.MySQL)+len(candidates.PostgreSQL)+len(candidates.Containers) > 0
-	view.Adding = r.URL.Query().Get("add") != "" || sources == 0 || formError != ""
 	if formError != "" {
 		for name, values := range r.PostForm {
 			switch name {

@@ -212,6 +212,19 @@
     });
   });
 
+  // A suggested folder is put into the field it names. The suggestions
+  // are in a form the drawer may fetch after this has run, so the page
+  // listens rather than each link.
+  document.addEventListener("click", function (event) {
+    var fill = event.target.closest("[data-fill]");
+    if (!fill) { return; }
+    var field = document.querySelector(fill.getAttribute("data-fill"));
+    if (!field) { return; }
+    event.preventDefault();
+    field.value = fill.getAttribute("data-value") || fill.textContent.trim();
+    field.focus();
+  });
+
   // Row menus.
   //
   // The panel is in normal flow to begin with, so it works with no

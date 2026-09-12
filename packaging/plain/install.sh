@@ -310,7 +310,7 @@ case "$WEB_LISTEN" in
 		say "            fingerprint the browser shows with:  openssl x509 -in $WEB_DIR/cert.pem -noout -fingerprint -sha256" ;;
 esac
 [ -z "$WEB_LISTEN" ] || say "  password: gniza-agent -web-set-password  changes it"
-say "  remove:   sh $SHARE_DIR/uninstall.sh"
+say "  remove:   sh $SHARE_DIR/uninstall.sh   (--everything deletes the key, the state and the cache too)"
 
 set -- "Run  gniza-agent -tui  as root, or sign in to the browser interface," \
 	"to add a destination and a schedule." \

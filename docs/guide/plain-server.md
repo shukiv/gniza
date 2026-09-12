@@ -252,4 +252,19 @@ sh /usr/local/share/gniza/uninstall.sh
 ```
 
 What was installed is moved under `/var/lib/gniza/removed/`, and the
-backups, the state database and `/etc/gniza` stay.
+backups, the state database and `/etc/gniza` stay, so a reinstall comes
+back with the same destinations, schedules and history.
+
+```bash
+sh /usr/local/share/gniza/uninstall.sh --everything
+```
+
+deletes those too: `/etc/gniza` with the master key, the browser
+password and the SSH keys, `/var/lib/gniza` with the state database and
+what was moved aside, `/var/cache/gniza`, `/usr/local/bin/restic` and
+`/usr/local/share/gniza`. Nothing of Gniza is left on the server. It
+asks for the phrase `delete everything` on the terminal first, because
+without the master key the recovery key you wrote down is the only way
+into the backups; `--yes` answers for a script. The backups at the
+destinations are never touched, and the public key an SFTP destination
+was given stays in its `authorized_keys` until removed there.

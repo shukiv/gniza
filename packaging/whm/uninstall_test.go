@@ -74,6 +74,44 @@ func TestUninstallStillDeletesWhatIsOnlyClutter(t *testing.T) {
 	}
 }
 
+// TestEverythingIsAFlagThatIsConfirmed: --everything takes off what an
+// uninstall leaves for a reinstall -- the configuration with the master
+// key, the state, restic's cache, restic -- and is confirmed on a
+// terminal, or with --yes, before the service is stopped. An option that
+// is not one of those is refused rather than taken for a plain
+// uninstall. Nothing else deletes anything beyond the clutter above.
+func TestEverythingIsAFlagThatIsConfirmed(t *testing.T) {
+	script := readScript(t, "uninstall.sh")
+	for _, want := range []string{
+		"--everything) EVERYTHING=yes ;;", "--yes) YES=yes ;;", `*) die "unknown option $arg`,
+		`tty_usable || die "--everything needs a terminal to confirm on, or --yes with it"`,
+		`[ "$reply" = "delete everything" ] || { say "Nothing was done."; exit 1; }`,
+		"delete_everything() {", "-rf -- /var/lib/gniza /etc/gniza /var/cache/gniza /var/run/gniza",
+		"-f -- /usr/local/bin/restic", "-rf -- /usr/local/share/gniza",
+		`[ "$EVERYTHING" = yes ] || cat <<'DONE'`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("the uninstaller lacks %q", want)
+		}
+	}
+	if strings.Index(script, `[ "$reply" = "delete everything" ]`) > strings.Index(script, "systemctl stop gniza") {
+		t.Error("the confirmation comes after the service is stopped")
+	}
+	// The purge runs after the share directory is retired, which is the
+	// script's own directory and the last thing the plain uninstall does.
+	if strings.Index(script, "\tdelete_everything\n") < strings.Index(script, "retire /usr/local/share/gniza share") {
+		t.Error("everything is deleted before the plain uninstall has finished")
+	}
+	body := script[strings.Index(script, "delete_everything() {"):]
+	body = body[:strings.Index(body, "\n}")]
+	outside := strings.Replace(script, body, "", 1)
+	outside = strings.ReplaceAll(outside, `rm -rf -- /var/cache/gniza`, "")
+	outside = strings.ReplaceAll(outside, `rm -rf -- "$PLUGIN_META"`, "")
+	if strings.Contains(outside, "rm -") {
+		t.Error("something else is deleted outside delete_everything")
+	}
+}
+
 func readScript(t *testing.T, name string) string {
 	t.Helper()
 	body, err := os.ReadFile(name)

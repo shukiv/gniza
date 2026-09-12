@@ -207,6 +207,13 @@ your backups: nothing on any destination is read, written or deleted. It
 also leaves `/etc/gniza/master.key` and `/var/lib/gniza/state.db`, so a
 reinstall picks up the same destinations, schedules and history.
 
+`sh /usr/local/share/gniza/uninstall.sh --everything` deletes those too,
+with restic's cache, restic and what the uninstall moved aside, so
+nothing of Gniza is left on the server. It asks first, since without the
+master key the recovery key you wrote down is the only way into the
+backups; `--yes` answers where there is no terminal. The backups at the
+destinations are never touched.
+
 ## What runs
 
 ```

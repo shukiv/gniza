@@ -199,6 +199,18 @@ read them another way.
 
 Backups already written to a destination are not touched either way.
 
+To leave nothing of Gniza on the server, add `--everything`:
+
+```bash
+sh /usr/local/share/gniza/uninstall.sh --everything
+```
+
+That deletes the key, the state database, restic's cache, restic and what
+the uninstall moved aside. It asks for the phrase `delete everything` first,
+because without the key the recovery key you wrote down is the only way into
+the backups; `--yes` answers where there is no terminal. Every installer's
+uninstaller takes the flag.
+
 ## Where things live
 
 | Path | What |

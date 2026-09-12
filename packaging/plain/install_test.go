@@ -136,6 +136,45 @@ func TestTheUninstallerIsWhereTheRemoveButtonLooks(t *testing.T) {
 	}
 }
 
+// TestEverythingIsAFlagThatIsConfirmed: --everything takes off what an
+// uninstall leaves for a reinstall -- the configuration with the master
+// key, the state, restic's cache, restic -- and nothing else deletes
+// anything. It is confirmed on a terminal, or with --yes, before the
+// service is stopped, and an option that is not one of those is refused
+// rather than taken for a plain uninstall.
+func TestEverythingIsAFlagThatIsConfirmed(t *testing.T) {
+	script := read(t, "uninstall.sh")
+	for _, want := range []string{
+		"--everything) EVERYTHING=yes ;;", "--yes) YES=yes ;;", `*) die "unknown option $arg`,
+		`tty_usable || die "--everything needs a terminal to confirm on, or --yes with it"`,
+		`[ "$reply" = "delete everything" ] || { say "Nothing was done."; exit 1; }`,
+		"delete_everything() {", "-rf -- /var/lib/gniza /etc/gniza /var/cache/gniza /var/run/gniza",
+		"-f -- /usr/local/bin/restic", "-rf -- /usr/local/share/gniza",
+		"The backups at the destinations are untouched",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("the uninstaller lacks %q", want)
+		}
+	}
+	if strings.Index(script, `[ "$reply" = "delete everything" ]`) > strings.Index(script, "systemctl stop gniza") {
+		t.Error("the confirmation comes after the service is stopped")
+	}
+	body := script[strings.Index(script, "delete_everything() {"):]
+	body = body[:strings.Index(body, "\n}")]
+	if outside := strings.Replace(script, body, "", 1); strings.Contains(outside, "rm -") {
+		t.Errorf("something is deleted outside delete_everything: %s", firstLineWith(outside, "rm -"))
+	}
+}
+
+func firstLineWith(text, containing string) string {
+	for _, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, containing) {
+			return strings.TrimSpace(line)
+		}
+	}
+	return ""
+}
+
 // TestAPanelServerIsRefused: the package for a server with no panel must
 // not be installed beside a panel's plugin. get.sh chooses correctly; a
 // tarball run by hand on the wrong machine is the case here.

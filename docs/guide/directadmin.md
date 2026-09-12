@@ -147,7 +147,11 @@ It is not on the releases page, and that is deliberate: a package one
 the unit file are moved into a dated directory under
 `/var/lib/gniza/removed`, which the script names as it finishes, so an
 uninstall can be undone by moving them back. Repositories, the state
-database and `/etc/gniza` are left alone either way.
+database and `/etc/gniza` are left alone either way. `uninstall.sh
+--everything` deletes the state, `/etc/gniza` with the master key,
+restic's cache, restic and what was moved aside, after a confirmation
+typed on the terminal (`--yes` stands for it in a script); the
+repositories are still not touched.
 
 The service runs as `gniza-agent -standalone -panel=directadmin`, and
 prints the remaining experimental limitations at startup. No production

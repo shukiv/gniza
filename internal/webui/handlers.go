@@ -1444,8 +1444,8 @@ func (s *Server) handleSchedule(w http.ResponseWriter, r *http.Request) {
 		Editing      *nodestore.Policy
 		Selected     map[string]bool
 		Chosen       map[string]bool
-		// Choose is the What to back up tables, drawn inside the form on
-		// a server without a panel in place of the account picker.
+		// Choose is the tables of what to back up, drawn inside the form
+		// on a server without a panel in place of the account picker.
 		Choose *chooseView
 		// ExcludePresets are the paths worth never storing, by the thing
 		// that puts them there. They are suggestions the operator can
@@ -1543,8 +1543,8 @@ func (s *Server) handleSaveSchedule(w http.ResponseWriter, r *http.Request) {
 	// accounts are included without an edit.
 	var notAdded []string
 	if chooser, ok := s.engine.Chooser(); ok {
-		// On a server without a panel the form is the What to back up
-		// tables: a chosen source is ticked by name, and a fresh row
+		// On a server without a panel the form is the tables of what to
+		// back up: a chosen source is ticked by name, and a fresh row
 		// ticked there is added now, then covered by this schedule. What
 		// is ticked is what the schedule covers, and every source ticked
 		// means everything, now and later, which is what "Back up all"
@@ -2364,25 +2364,36 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 	}
 	title := "Accounts"
 	if chooser, ok := s.engine.Chooser(); ok {
-		choose := s.chooseViewFor(r, chooser, len(accounts), "")
-		view.Choose = &choose
-		title = "What to back up"
+		title = "Sources"
+		// The terminal chooses on this screen with forms of its own,
+		// and reads what there is to choose from here, with add=1, when
+		// a key is pressed: that costs a look at the databases and the
+		// containers, so the five-second read of the list does not
+		// carry it, and neither does the live refresh.
+		if wantsData(r) {
+			choose := chooseView{}
+			if r.URL.Query().Get("add") != "" && r.Header.Get("X-Gniza-Live") == "" {
+				choose.load(r.Context(), chooser)
+			}
+			view.Choose = &choose
+		}
 	}
 	s.render(w, r, "accounts.html", title, "accounts", view)
 }
 
 // accountsView is the accounts page: the panel's list, or, on a server
-// without a panel, what the operator chose and what could be chosen.
+// without a panel, the sources the operator chose.
 type accountsView struct {
 	Accounts    []accountView
 	RunAll      *nodestore.Policy
 	Warnings    []string
 	Protected   int
 	Unprotected int
-	Choose      *chooseView
-	// FormError is the refused choice's reason, at the top of the view
-	// as well as inside Choose: the terminal reads it there, as it does
-	// for every form.
+	// Choose is carried as data for the terminal, on a server without a
+	// panel: its presence says the accounts are chosen, and with add=1
+	// it holds what there is to choose from.
+	Choose *chooseView
+	// FormError is a refused choice's reason, for the terminal's form.
 	FormError string
 }
 

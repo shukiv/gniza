@@ -8,14 +8,16 @@ neither panel directory and takes the plain package (ADR 0022).
 curl -fsSL https://github.com/shukiv/gniza/releases/latest/download/get.sh | sh
 ```
 
-## What to back up
+## Choosing what to back up
 
 Nothing on a server without a panel says what an account is, so you do.
 The choosing is in the schedule form, where a panel server's form asks
-which accounts, and on the page called **What to back up** (screen 4 in
-the terminal). Both draw the same tables, one tab per kind; each row
-ticked becomes a *source*, backed up on its own, under its name, the way
-a panel's account would be:
+which accounts: one tab per kind, and each row ticked becomes a
+*source*, backed up on its own, under its name, the way a panel's
+account would be. The **Sources** page (screen 4 in the terminal) lists
+what was chosen, with its state and last backup, and is where a source
+is removed; in the terminal it is also where the choosing is, with a
+form per kind.
 
 - **Folders.** The server's directories as a tree from `/`, with
   `/var/www`, `/srv` and `/opt` a click away and a path bar that opens
@@ -124,11 +126,11 @@ screen says what the keys do there. The first hour is:
 3. On Schedules, press `a`. The defaults are nightly at two, split
    shape, the server's own configuration included, seven daily, four
    weekly and six monthly backups kept, written to every destination,
-   over everything on the What to back up list. A schedule is refused
+   over everything on the Sources list. A schedule is refused
    until the destination's recovery key has been taken off the server
    (`K` on Destinations reads it, `n` says it is stored elsewhere); the
    screen says so above the form.
-4. On What to back up, `a` chooses folders, `m` MySQL databases, `p`
+4. On Sources, `a` chooses folders, `m` MySQL databases, `p`
    PostgreSQL databases and `c` containers with their stacks; the
    databases and containers come up ticked. `b` backs up the source
    under the cursor now, and `B` runs the schedule over every source.

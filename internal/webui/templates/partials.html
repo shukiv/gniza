@@ -260,14 +260,12 @@
 {{end}}
 {{end}}
 
-{{/* One box in a What to back up table: what it posts and how it is
+{{/* One box in a table of what to back up: what it posts and how it is
      drawn (webui.tickBox). */}}
-{{define "tickbox"}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="{{.Name}}" value="{{.Value}}" aria-label="{{.Label}}"{{if .Disabled}} disabled{{else if .Checked}} checked{{end}}{{if .Existing}} data-existing data-same="{{.Value}}"{{end}}>{{end}}
+{{define "tickbox"}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="{{.Name}}" value="{{.Value}}" aria-label="{{.Label}}"{{if .Checked}} checked{{end}}{{if .Existing}} data-existing data-same="{{.Value}}"{{end}}>{{end}}
 
-{{/* The What to back up tables, one tab per kind (webui.chooseView).
-     Drawn inside a form the caller owns: on the What to back up page
-     with one "Back these up" button under it, and in the schedule form
-     in place of the account picker. */}}
+{{/* The tables of what to back up, one tab per kind (webui.chooseView),
+     drawn inside the schedule form in place of the account picker. */}}
 {{define "choosetabs"}}
 {{$c := .}}
 {{$k := .Candidates}}
@@ -290,7 +288,7 @@
       </tr></thead>
       <tbody>
       {{range $c.FolderSources}}
-        <tr{{if $c.Dim .Name}} class="cpr:opacity-60"{{end}}>
+        <tr>
           <td>{{template "tickbox" ($c.Box "folder" .Path .Name false .Name)}}</td>
           <td class="cpr:mono">{{.Path}}{{with .Container}} <span class="cpr:text-xs cpr:text-base-content/60 cpr:font-sans">from container {{.Name}}</span>{{end}}</td>
           <td>{{.Name}}</td>
@@ -318,12 +316,12 @@
       <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-3">
         <div>
           <label class="cpr:field-label" for="folder_path">Folder</label>
-          <input type="text" class="cpr:input cpr:input-sm cpr:w-full cpr:mono" id="folder_path" name="folder_path" placeholder="/var/www/shop" value="{{$c.Field "folder_path"}}" autocomplete="off">
+          <input type="text" class="cpr:input cpr:input-sm cpr:w-full cpr:mono" id="folder_path" name="folder_path" placeholder="/var/www/shop" autocomplete="off">
           <small class="cpr:help">Any folder on this server, named from /.</small>
         </div>
         <div>
           <label class="cpr:field-label" for="folder_name">Its name</label>
-          <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="folder_name" name="folder_name" placeholder="after the folder, if left empty" value="{{$c.Field "folder_name"}}">
+          <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="folder_name" name="folder_name" placeholder="after the folder, if left empty">
           <small class="cpr:help">How that folder is called on these pages and in the backups. Letters, digits, dot, dash and underscore.</small>
         </div>
       </div>
@@ -348,7 +346,7 @@
         </tr>
       {{end}}
       {{range $k.MySQL}}
-        <tr data-db="{{.Name}}"{{if $c.Dim .ChosenAs}} class="cpr:opacity-60"{{end}}>
+        <tr data-db="{{.Name}}">
           <td>{{template "tickbox" ($c.Box "mysql" .Name .ChosenAs true .Name)}}</td>
           <td class="cpr:mono">{{.Name}}</td>
           <td class="cpr:text-right cpr:tabular-nums">{{bytes .Size}}</td>
@@ -373,8 +371,8 @@
       </tr></thead>
       <tbody>
       {{range $k.MySQLUsers}}
-        {{$a := .}}<tr{{if or .System ($c.Dim .AttachedTo)}} class="cpr:opacity-60"{{end}}>
-          <td>{{if .System}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" disabled aria-label="{{.Who}} is the server's own account">{{else}}{{$b := $c.Box "mysql_user" .Who .AttachedTo false .Who}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="{{$b.Name}}" value="{{$b.Value}}" aria-label="{{$b.Label}}"{{if $b.Disabled}} disabled{{else if $b.Checked}} checked{{end}}{{if $b.Existing}} data-existing data-same="{{$b.Value}}"{{end}} data-needs="{{range $i, $r := .Rights}}{{if $i}},{{end}}{{$r.Database}}{{end}}">{{end}}</td>
+        {{$a := .}}<tr{{if .System}} class="cpr:opacity-60"{{end}}>
+          <td>{{if .System}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" disabled aria-label="{{.Who}} is the server's own account">{{else}}{{$b := $c.Box "mysql_user" .Who .AttachedTo false .Who}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="{{$b.Name}}" value="{{$b.Value}}" aria-label="{{$b.Label}}"{{if $b.Checked}} checked{{end}}{{if $b.Existing}} data-existing data-same="{{$b.Value}}"{{end}} data-needs="{{range $i, $r := .Rights}}{{if $i}},{{end}}{{$r.Database}}{{end}}">{{end}}</td>
           <td class="cpr:mono">{{.Who}}</td>
           <td class="cpr:mono cpr:text-xs">{{.Plugin}}</td>
           <td class="cpr:text-xs">{{if .Global}}<span class="cpr:font-semibold">every database</span> <span class="cpr:text-base-content/60" title="{{join .Global ", "}}">{{if gt (len .Global) 8}}{{len .Global}} privileges{{else}}{{join .Global ", "}}{{end}}</span>{{end}}{{range $i, $r := .Rights}}{{if or $i $a.Global}}<br>{{end}}<span class="cpr:mono">{{$r.Database}}</span> <span class="cpr:text-base-content/60">{{join $r.Privileges ", "}}</span>{{end}}{{if and (not .Global) (not .Rights)}}<span class="cpr:text-base-content/50">connect only</span>{{end}}</td>
@@ -404,7 +402,7 @@
         </tr>
       {{end}}
       {{range $k.PostgreSQL}}
-        <tr{{if $c.Dim .ChosenAs}} class="cpr:opacity-60"{{end}}>
+        <tr>
           <td>{{template "tickbox" ($c.Box "postgresql" .Name .ChosenAs true .Name)}}</td>
           <td class="cpr:mono">{{.Name}}</td>
           <td class="cpr:text-right cpr:tabular-nums">{{bytes .Size}}</td>
@@ -437,7 +435,7 @@
         </tr>
         {{range $k.Containers}}{{if and (eq .Stack $stack.Name) (eq .Engine $stack.Engine)}}
         {{$as := $c.ContainerAs .Engine .Name}}
-        <tr{{if $c.Dim $as}} class="cpr:opacity-60"{{end}} data-group="{{$stack.Engine}}-{{$stack.Name}}">
+        <tr data-group="{{$stack.Engine}}-{{$stack.Name}}">
           <td class="cpr:pl-6">{{template "tickbox" ($c.Box "container" (printf "%s/%s" .Engine .Name) $as true .Name)}}</td>
           <td class="cpr:font-medium">{{.Name}}</td><td class="cpr:mono cpr:text-xs">{{.Image}}</td><td class="cpr:text-xs">{{.Status}}</td>
           <td class="cpr:text-right cpr:tabular-nums">{{.Mounts}}</td>
@@ -445,7 +443,7 @@
         </tr>
         {{end}}{{end}}
         {{with $stack.Dir}}
-        <tr{{if $c.Dim $stack.ChosenAs}} class="cpr:opacity-60"{{end}} data-group="{{$stack.Engine}}-{{$stack.Name}}">
+        <tr data-group="{{$stack.Engine}}-{{$stack.Name}}">
           <td class="cpr:pl-6">{{template "tickbox" ($c.Box "folder" . $stack.ChosenAs true (printf "configuration of %s" $stack.Name))}}</td>
           <td>configuration of {{$stack.Name}}</td><td class="cpr:mono cpr:text-xs" colspan="2">{{.}}</td>
           <td class="cpr:text-right cpr:text-xs cpr:text-base-content/60">compose, .env</td>
@@ -455,7 +453,7 @@
       {{end}}
       {{range $k.Containers}}{{if not .Stack}}
         {{$as := $c.ContainerAs .Engine .Name}}
-        <tr{{if $c.Dim $as}} class="cpr:opacity-60"{{end}}>
+        <tr>
           <td>{{template "tickbox" ($c.Box "container" (printf "%s/%s" .Engine .Name) $as true .Name)}}</td>
           <td class="cpr:font-medium">{{.Name}} <span class="cpr:text-xs cpr:text-base-content/60">{{.Engine}}</span></td><td class="cpr:mono cpr:text-xs">{{.Image}}</td><td class="cpr:text-xs">{{.Status}}</td>
           <td class="cpr:text-right cpr:tabular-nums">{{.Mounts}}</td>
@@ -463,7 +461,7 @@
         </tr>
       {{end}}{{end}}
       {{range $k.Engines}}{{if and .Present .ConfigDir}}
-        <tr{{if $c.Dim .ChosenAs}} class="cpr:opacity-60"{{end}}>
+        <tr>
           <td>{{template "tickbox" ($c.Box "folder" .ConfigDir .ChosenAs true (printf "%s configuration" .Name))}}</td>
           <td>{{.Name}} configuration</td><td class="cpr:mono cpr:text-xs" colspan="2">{{.ConfigDir}}</td>
           <td class="cpr:text-right cpr:text-xs cpr:text-base-content/60">daemon settings</td>

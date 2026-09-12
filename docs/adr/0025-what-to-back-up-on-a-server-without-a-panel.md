@@ -1,7 +1,7 @@
 # 0025 — What to back up on a server without a panel
 
-Status: accepted, 2026-09-12; amended the same day, three times (the choosing
-is by kind, and it sits in the schedule form, below). Amends
+Status: accepted, 2026-09-12; amended the same day, four times (the choosing
+is by kind, it sits in the schedule form, and the page is a list, below). Amends
 [ADR 0022](0022-a-server-without-a-panel.md).
 
 ## Context
@@ -223,9 +223,17 @@ refused rather than saved empty, since a nightly run over nothing would
 look like protection. The candidates are read when a person opens the
 form, not for the terminal's read of the page as data.
 
-The What to back up page stays: it is where a source is removed, where
-its last backup shows, and the only form the terminal has, whose
-schedule form has no picker at all.
+**Amended: the page is a list.** With the choosing in the schedule
+form, a page that offered it again was "useless": the same tables
+twice, and an Add button beside a form that did the same. The page is
+now *Sources*, the plain server's Accounts: the list of what was
+chosen, its state and last backup, Back up and Remove on each row, and
+a link into the schedule form while nothing is chosen. The tables,
+the add dialog and the code that drew a refused form again are gone
+from the browser. The terminal still chooses on its Sources screen,
+with a form per kind that posts `/accounts/add`, since its schedule
+form has no picker; the page as data carries the candidates for it
+when asked with `add=1`, and a refused choice's reason.
 
 ## Consequences
 

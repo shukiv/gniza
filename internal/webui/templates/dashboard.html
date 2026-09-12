@@ -38,11 +38,11 @@
       {{if not $d.Destinations}}
       <a class="cpr:btn cpr:btn-sm cpr:btn-primary" href="?p=destinations">Add a destination</a>
       {{else if $d.Attention}}
-      <a class="cpr:btn cpr:btn-sm {{if eq $d.Band "bad"}}cpr:btn-error{{else}}cpr:btn-warning{{end}}" href="?p=accounts">{{if $.Choosing}}Show what is backed up{{else}}Show the accounts{{end}}</a>
+      <a class="cpr:btn cpr:btn-sm {{if eq $d.Band "bad"}}cpr:btn-error{{else}}cpr:btn-warning{{end}}" href="?p=accounts">{{if $.Choosing}}Show the sources{{else}}Show the accounts{{end}}</a>
       {{else if $d.Unscheduled}}
       <a class="cpr:btn cpr:btn-sm cpr:btn-warning" href="?p=schedule">Review schedules</a>
       {{else}}
-      <a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=accounts">{{if $.Choosing}}What to back up{{else}}All accounts{{end}}</a>
+      <a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=accounts">{{if $.Choosing}}All sources{{else}}All accounts{{end}}</a>
       {{end}}
     </div>
   </div>
@@ -100,7 +100,7 @@
       <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
         <h2 class="cpr:section-title">Worth acting on</h2>
         <span class="cpr:pill {{if eq $d.Band "bad"}}cpr:badge-error{{else}}cpr:badge-warning{{end}} cpr:tabular-nums">{{len $d.Attention}}{{if $d.AttentionMore}}+{{end}}</span>
-        <a class="cpr:link cpr:link-hover cpr:text-xs cpr:ml-auto" href="?p=accounts">{{if $.Choosing}}What to back up{{else}}All accounts{{end}}</a>
+        <a class="cpr:link cpr:link-hover cpr:text-xs cpr:ml-auto" href="?p=accounts">{{if $.Choosing}}All sources{{else}}All accounts{{end}}</a>
       </div>
       <div class="cpr:overflow-x-auto" data-tablewrap>
         <table class="cpr:table cpr:table-sm">
@@ -169,7 +169,7 @@
     <div class="cpr:panel">
       <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
         <h2 class="cpr:section-title">Accounts with the worst record</h2>
-        <a class="cpr:link cpr:link-hover cpr:text-xs cpr:ml-auto" href="?p=accounts">{{if $.Choosing}}What to back up{{else}}All accounts{{end}}</a>
+        <a class="cpr:link cpr:link-hover cpr:text-xs cpr:ml-auto" href="?p=accounts">{{if $.Choosing}}All sources{{else}}All accounts{{end}}</a>
       </div>
       <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
         <thead><tr><th>Account</th><th>Record</th><th class="cpr:text-right">Failed</th></tr></thead>
@@ -276,7 +276,7 @@
         <p class="cpr:mb-3"><b class="cpr:text-base-content">No restore has been rehearsed yet.</b><br>
           Verifying an account rebuilds its backup in scratch space, checks it and throws it away.
           The live account is not touched.</p>
-        <a class="cpr:btn cpr:btn-xs" href="?p=accounts">Choose an account</a>
+        <a class="cpr:btn cpr:btn-xs" href="?p=accounts">{{if $.Choosing}}Choose a source{{else}}Choose an account{{end}}</a>
       </div>
       {{end}}
     </div>

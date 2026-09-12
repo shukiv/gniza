@@ -77,7 +77,7 @@ again upgrades in place. Then:
 |---|---|
 | cPanel/WHM | WHM sidebar, **Plugins → Gniza Backups**. Customers get a tile in cPanel with their own restore points. |
 | DirectAdmin | **Admin Tools → Gniza**, in the Evolution skin. |
-| No panel | `gniza-agent -tui` as root, or a browser at the address the installer asks about, behind a password. Nothing is backed up until chosen on **What to back up**: folders, MySQL and PostgreSQL databases, docker and podman containers. |
+| No panel | `gniza-agent -tui` as root, or a browser at the address the installer asks about, behind a password. Nothing is backed up until chosen in a schedule: folders, MySQL and PostgreSQL databases, docker and podman containers. |
 
 From there: add a destination, add a schedule, and the server backs itself
 up. Destinations are SFTP, S3, a restic REST server or a local disk.

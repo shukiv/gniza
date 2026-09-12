@@ -396,7 +396,7 @@ func TestOnAServerWithoutAPanelTheScreenIsWhatToBackUp(t *testing.T) {
 	m := fresh(t, api)
 	m = press(t, m, "4")
 	view := m.View()
-	for _, want := range []string{"4 What to back up", "Nothing is backed up yet", "a folders", "m MySQL", "p PostgreSQL", "c containers"} {
+	for _, want := range []string{"4 Sources", "Nothing is backed up yet", "a folders", "m MySQL", "p PostgreSQL", "c containers"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the empty screen lacks %q:\n%s", want, view)
 		}

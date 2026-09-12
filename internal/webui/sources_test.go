@@ -108,12 +108,12 @@ func postForm(server *Server, handler http.Handler, path string, form url.Values
 	return recorder
 }
 
-// TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp: nothing is
-// backed up until chosen; the page opens on the form, offers what the
-// server has, records a choice, refuses the same folder twice, and
-// forgets a choice on request. The same page answers as data with the
-// candidates for the terminal.
-func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
+// TestOnAServerWithoutAPanelTheAccountsPageListsTheSources: the page is
+// the list of what was chosen, named Sources, with Remove on each row
+// and nothing to choose from -- the choosing is the schedule form's.
+// As data it carries what there is to choose from when asked with
+// add=1, for the terminal, and a refused choice's reason.
+func TestOnAServerWithoutAPanelTheAccountsPageListsTheSources(t *testing.T) {
 	server, handler, shop := newPlainServer(t)
 
 	page := getPage(handler, "/accounts", false)
@@ -121,20 +121,16 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 	if page.Code != http.StatusOK {
 		t.Fatalf("GET /accounts = %d", page.Code)
 	}
-	// One tab per kind; the databases are ticked by default and say whose
-	// they are; a client that is not there says so on its tab.
-	for _, want := range []string{"What to back up", "Nothing is backed up yet",
-		`data-tab="folders"`, `data-tab="mysql"`, `data-tab="postgresql"`, `data-tab="containers"`,
-		`data-folder-browser data-browse="?p=accounts/browse"`, `data-go="` + filepath.Dir(shop) + `"`,
-		`name="mysql" value="shop" aria-label="shop" checked`,
-		`name="mysql" value="blog" aria-label="blog" checked`, `<span class="cpr:mono">shop_app@localhost</span> <span class="cpr:text-base-content/60">INSERT, SELECT</span>`,
-		"No PostgreSQL database is offered", "data-tick-all", "data-tick-count"} {
+	for _, want := range []string{">Sources<", `aria-label="Sources"`, "Nothing is backed up yet", `href="?p=schedule"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the empty page lacks %q", want)
 		}
 	}
-	if strings.Contains(body, "No Plain server accounts found") || strings.Contains(body, "/var/cpanel/users") {
-		t.Error("the page still talks about a panel's accounts")
+	for _, gone := range []string{"What to back up", "data-tab=", "accounts/add", "add=1", `name="mysql"`,
+		"No Plain server accounts found", "/var/cpanel/users"} {
+		if strings.Contains(body, gone) {
+			t.Errorf("the page still carries %q", gone)
+		}
 	}
 
 	var answered struct {
@@ -175,13 +171,6 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 	if polled.Data.Choose == nil || len(polled.Data.Choose.Candidates.Folders)+len(polled.Data.Choose.Candidates.MySQL) != 0 {
 		t.Errorf("the list as data looks at the candidates: %+v", polled.Data.Choose)
 	}
-	// The tabs and the boxes are driven by the page's own script, which
-	// listens on the document since the form may be fetched later.
-	for _, want := range []string{`closest("[data-tab]")`, "data-tick-all", "gniza:loaded"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("the script does not handle %s", want)
-		}
-	}
 
 	added := postForm(server, handler, "/accounts/add", url.Values{"tab": {"folders"}, "folder": {shop}})
 	if added.Code != http.StatusSeeOther || !strings.Contains(added.Header().Get("Location"), "kind=ok") || !strings.Contains(added.Header().Get("Location"), "1+source%3A+shop") {
@@ -192,52 +181,45 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 		t.Fatalf("adding the databases = %d %s", databases.Code, location)
 	}
 	body = getPage(handler, "/accounts", false).Body.String()
-	for _, want := range []string{">shop</a>", shop, ">mysql-shop</a>", "MySQL: shop", `href="?p=accounts&amp;add=1" data-dialog="add-source" data-dialog-fetch`, "?p=accounts/remove"} {
+	for _, want := range []string{">shop</a>", shop, ">mysql-shop</a>", "MySQL: shop", "?p=accounts/remove"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page with a source lacks %q", want)
 		}
 	}
-	// A database chosen already is shown greyed on its tab, not offered
-	// again; the tab asked for is the one that opens.
-	form := getPage(handler, "/accounts?add=1&tab=mysql", false).Body.String()
-	if !strings.Contains(form, `name="mysql" value="shop" aria-label="shop" disabled`) || !strings.Contains(form, `data-tabs="mysql"`) || !strings.Contains(form, ">mysql-shop<") {
-		t.Errorf("the MySQL tab after choosing: %s", firstLine(form, `value="shop"`))
-	}
-	// With a source chosen the list does not look at the candidates
-	// either: Add fetches the form, which does.
-	if strings.Contains(body, "blog</option>") || strings.Contains(body, `name="mysql"`) {
-		t.Error("the list page carries the form's offer")
-	}
-	if asked := getPage(handler, "/accounts?add=1", false).Body.String(); !strings.Contains(asked, `name="mysql" value="blog"`) || !strings.Contains(asked, "data-drawer-content") {
-		t.Errorf("the asked-for form lacks the offer or the drawer content:\n%s", firstLine(asked, "mysql"))
-	}
-	if strings.Contains(body, "Nothing is backed up yet") {
-		t.Error("the page still says nothing is backed up")
+	if strings.Contains(body, "Nothing is backed up yet") || strings.Contains(body, `name="mysql"`) {
+		t.Error("the page with a source still says nothing is backed up, or offers the choosing")
 	}
 
+	// A refusal is said with its reason: to a script, on the page it is
+	// sent back to; to the terminal, as the form's error, so its form
+	// stays open.
 	again := postForm(server, handler, "/accounts/add", url.Values{"tab": {"folders"}, "folder_path": {shop}, "folder_name": {"shop2"}})
-	if again.Code != http.StatusOK || !strings.Contains(again.Body.String(), "already backed up as shop") || !strings.Contains(again.Body.String(), `data-tabs="folders"`) {
-		t.Errorf("the same folder twice = %d, %q", again.Code, firstLine(again.Body.String(), "already"))
+	if reason := refusal(t, again); !strings.Contains(reason, "already backed up as shop") {
+		t.Errorf("the same folder twice is refused with %q", reason)
 	}
 	// Part of a tab refused is said with the part that was added.
 	mixed := postForm(server, handler, "/accounts/add", url.Values{"tab": {"folders"}, "folder": {filepath.Join(shop, "public"), filepath.Join(shop, "index.php")}})
 	if location := mixed.Header().Get("Location"); mixed.Code != http.StatusSeeOther || !strings.Contains(location, "kind=warn") || !strings.Contains(location, "Not+added") {
 		t.Errorf("a folder refused beside one added = %d %s", mixed.Code, location)
 	}
-	nothing := postForm(server, handler, "/accounts/add", url.Values{"tab": {"mysql"}})
-	if nothing.Code != http.StatusOK || !strings.Contains(nothing.Body.String(), "nothing was chosen") || !strings.Contains(nothing.Body.String(), `data-tabs="mysql"`) {
-		t.Errorf("an empty form = %d", nothing.Code)
+	if reason := refusal(t, postForm(server, handler, "/accounts/add", url.Values{"tab": {"mysql"}})); !strings.Contains(reason, "nothing was chosen") {
+		t.Errorf("an empty form is refused with %q", reason)
+	}
+	nothing := postData(server, handler, "/accounts/add", url.Values{"tab": {"mysql"}})
+	var drawn struct{ Data struct{ FormError string } }
+	if err := json.Unmarshal(nothing.Body.Bytes(), &drawn); nothing.Code != http.StatusOK || err != nil || !strings.Contains(drawn.Data.FormError, "nothing was chosen") {
+		t.Errorf("an empty form as data = %d %v %q", nothing.Code, err, drawn.Data.FormError)
 	}
 
 	removed := postForm(server, handler, "/accounts/remove", url.Values{"account": {"shop"}})
 	if removed.Code != http.StatusSeeOther || !strings.Contains(removed.Header().Get("Location"), "kind=ok") {
 		t.Fatalf("removing = %d %s", removed.Code, removed.Header().Get("Location"))
 	}
-	// The folder is offered again by the browser, the databases chosen
-	// stay chosen.
-	after := getPage(handler, "/accounts?add=1", false).Body.String()
-	if strings.Contains(after, ">shop</a>") || strings.Contains(after, `name="folder" value="`+shop+`"`) {
-		t.Errorf("after removing, the folder is still on the list: %s", firstLine(after, `name="folder"`))
+	// The folder leaves the list and is the browser's to offer again;
+	// the databases chosen stay chosen.
+	after := getPage(handler, "/accounts", false).Body.String()
+	if strings.Contains(after, ">shop</a>") || !strings.Contains(after, ">mysql-shop</a>") {
+		t.Errorf("after removing, the list says: %s", firstLine(after, "</a>"))
 	}
 	if listing := browse(t, handler, filepath.Dir(shop)); len(listing.Entries) != 1 || listing.Entries[0].ChosenAs != "" {
 		t.Errorf("after removing, the browser says %+v", listing.Entries)
@@ -249,8 +231,31 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 		}
 	}
 	if !strings.Contains(getPage(handler, "/accounts", false).Body.String(), "Nothing is backed up yet") {
-		t.Error("after removing everything, the page does not go back to the form")
+		t.Error("after removing everything, the page does not say so")
 	}
+}
+
+// refusal is the reason a post was sent back with, from the page it was
+// sent to.
+func refusal(t *testing.T, response *httptest.ResponseRecorder) string {
+	t.Helper()
+	location, err := url.Parse(response.Header().Get("Location"))
+	if response.Code != http.StatusSeeOther || err != nil || location.Query().Get("kind") != "error" {
+		t.Fatalf("a refusal = %d %s", response.Code, response.Header().Get("Location"))
+	}
+	return location.Query().Get("msg")
+}
+
+// postData posts a form the way the terminal does, asking for the answer
+// as data.
+func postData(server *Server, handler http.Handler, path string, form url.Values) *httptest.ResponseRecorder {
+	form.Set("csrf", server.csrfToken)
+	request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("Accept", "application/json")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	return recorder
 }
 
 // TestAPanelServerKeepsItsAccountsPage: the choosing is not offered where
@@ -336,7 +341,7 @@ func firstLine(body, containing string) string {
 }
 
 // TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp: the
-// What to back up tables sit in the schedule form where the account
+// tables of what to back up sit in the schedule form where the account
 // picker is on a panel server. A fresh row ticked there is added when
 // the schedule is saved; a row already on the list is ticked by name.
 func TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp(t *testing.T) {
@@ -423,7 +428,7 @@ func TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp(t *testing.T) 
 	list := getPage(handler, "/accounts", false).Body.String()
 	for _, want := range []string{">shop</a>", ">mysql-shop</a>"} {
 		if !strings.Contains(list, want) {
-			t.Errorf("the What to back up list lacks %q after the schedule was saved", want)
+			t.Errorf("the Sources list lacks %q after the schedule was saved", want)
 		}
 	}
 
@@ -559,7 +564,15 @@ func TestASourceWhoseContainerIsGoneKeepsAFolderRow(t *testing.T) {
 // name, and the server's own are not offered.
 func TestAnAccountTickedIsKeptWithItsDatabases(t *testing.T) {
 	server, handler, _ := newPlainServer(t)
-	page := getPage(handler, "/accounts", false).Body.String()
+	noted := time.Now()
+	destination, err := server.engine.Store().PutDestination(nodestore.Destination{Name: "usb", Type: "local", Config: map[string]string{"root": t.TempDir()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := server.engine.Store().PutRepository(nodestore.Repository{DestinationID: destination.ID, Path: "gniza", RecoveryNotedAt: &noted, InitialisedAt: &noted}); err != nil {
+		t.Fatal(err)
+	}
+	page := getPage(handler, "/schedule", false).Body.String()
 	for _, want := range []string{
 		`name="mysql_user" value="shop_app@localhost" aria-label="shop_app@localhost" data-needs="shop"`,
 		`aria-label="root@localhost is the server's own account"`,
@@ -572,8 +585,8 @@ func TestAnAccountTickedIsKeptWithItsDatabases(t *testing.T) {
 	}
 	// Ticked alone, the account has no source to be kept with.
 	alone := postForm(server, handler, "/accounts/add", url.Values{"mysql_user": {"shop_app@localhost"}})
-	if alone.Code != http.StatusOK || !strings.Contains(alone.Body.String(), "has rights on no database that is backed up; tick shop with it") {
-		t.Errorf("an account without its database = %d %s", alone.Code, firstLine(alone.Body.String(), "rights on no database"))
+	if reason := refusal(t, alone); !strings.Contains(reason, "has rights on no database that is backed up; tick shop with it") {
+		t.Errorf("an account without its database is refused with %q", reason)
 	}
 	// Ticked with its database, it is kept with the fresh source.
 	both := postForm(server, handler, "/accounts/add", url.Values{"mysql": {"shop"}, "mysql_user": {"shop_app@localhost"}})
@@ -585,19 +598,7 @@ func TestAnAccountTickedIsKeptWithItsDatabases(t *testing.T) {
 	if err != nil || len(list) != 1 || strings.Join(list[0].MySQLUsers, ",") != "shop_app@localhost" {
 		t.Fatalf("sources = %+v, %v", list, err)
 	}
-	page = getPage(handler, "/accounts?add=1", false).Body.String()
-	if !strings.Contains(page, `name="mysql_user" value="shop_app@localhost" aria-label="shop_app@localhost" disabled`) || !strings.Contains(page, "<td>mysql-shop</td>") {
-		t.Errorf("after keeping, the account row is not disabled and with mysql-shop: %s", firstLine(page, "mysql_user"))
-	}
-	// In the schedule form the kept account is the source's row too.
-	noted := time.Now()
-	destination, err := server.engine.Store().PutDestination(nodestore.Destination{Name: "usb", Type: "local", Config: map[string]string{"root": t.TempDir()}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := server.engine.Store().PutRepository(nodestore.Repository{DestinationID: destination.ID, Path: "gniza", RecoveryNotedAt: &noted, InitialisedAt: &noted}); err != nil {
-		t.Fatal(err)
-	}
+	// In the schedule form the kept account is the source's row.
 	form := getPage(handler, "/schedule", false).Body.String()
 	if !strings.Contains(form, `name="source" value="mysql-shop" aria-label="shop_app@localhost"`) {
 		t.Errorf("the schedule form does not tick the account with its source: %s", firstLine(form, "shop_app@localhost"))

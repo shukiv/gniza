@@ -68,7 +68,7 @@ func (m Model) header() string {
 	for which := screen(0); which < screenCount; which++ {
 		name := screenNames[which]
 		if which == screenAccounts && m.choosing() {
-			name = "What to back up"
+			name = "Sources"
 		}
 		label := fmt.Sprintf("%d %s", which+1, name)
 		if which == m.screen {

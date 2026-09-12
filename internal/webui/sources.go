@@ -97,8 +97,10 @@ func (v chooseView) FolderSources() []panel.Source {
 	for _, engine := range v.Candidates.Engines {
 		elsewhere[engine.ChosenAs] = true
 	}
-	for _, names := range v.containerAs {
-		for _, name := range strings.Split(names, ",") {
+	// A source from a container that is still there is that container's
+	// row; one whose container is gone keeps its folder row here.
+	for _, container := range v.Candidates.Containers {
+		for _, name := range strings.Split(v.ContainerAs(container.Engine, container.Name), ",") {
 			elsewhere[name] = true
 		}
 	}
@@ -391,7 +393,9 @@ func (s *Server) scheduleChoices(r *http.Request, chooser panel.Chooser) (names,
 			names = append(names, name)
 		}
 	}
-	for _, ticked := range r.PostForm["source"] {
+	// The TUI and a script name what is covered as account=, the way a
+	// panel's schedule form does; the page's rows post source=.
+	for _, ticked := range append(r.PostForm["source"], r.PostForm["account"]...) {
 		for _, name := range strings.Split(ticked, ",") {
 			name = strings.TrimSpace(name)
 			switch {

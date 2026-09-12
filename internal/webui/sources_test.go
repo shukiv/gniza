@@ -453,6 +453,23 @@ func TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp(t *testing.T) 
 	if got := strings.Join(policies[0].Accounts, ","); got != "mysql-shop,mysql-blog" {
 		t.Errorf("after the edit the schedule covers %q", got)
 	}
+	// The TUI edits a schedule the way a panel's form does: scope=
+	// selected with the covered names as account=, no source= at all.
+	tui := withScope(base, "selected")
+	tui.Set("id", policies[0].ID)
+	tui["account"] = []string{"mysql-shop"}
+	fromTUI := postForm(server, handler, "/schedule/save", tui)
+	if location := fromTUI.Header().Get("Location"); fromTUI.Code != http.StatusSeeOther || !strings.Contains(location, "kind=ok") {
+		t.Fatalf("saving the edit as the TUI posts it = %d %s", fromTUI.Code, location)
+	}
+	policies, _ = store.Policies()
+	if got := strings.Join(policies[0].Accounts, ","); got != "mysql-shop" {
+		t.Errorf("after the TUI's edit the schedule covers %q", got)
+	}
+	again["source"] = []string{"mysql-shop", "mysql-blog"}
+	if edited := postForm(server, handler, "/schedule/save", again); edited.Code != http.StatusSeeOther {
+		t.Fatalf("saving the edit again = %d", edited.Code)
+	}
 	// The schedules table calls them sources.
 	table := getPage(handler, "/schedule", false).Body.String()
 	if !strings.Contains(table, "mysql-shop, mysql-blog") {
@@ -508,4 +525,27 @@ func withScope(base url.Values, scope string) url.Values {
 		form.Set("scope", scope)
 	}
 	return form
+}
+
+// A source made from a container is that container's row while the
+// container is there; once the container is gone the source keeps a
+// row of its own on the folders tab, so it can still be seen and
+// removed.
+func TestASourceWhoseContainerIsGoneKeepsAFolderRow(t *testing.T) {
+	v := chooseView{
+		Candidates: panel.Candidates{Containers: []panel.ContainerCandidate{{Engine: "docker", Name: "web"}}},
+		Sources: []panel.Source{
+			{Name: "web-data", Path: "/var/lib/docker/volumes/web/_data", Container: &panel.ContainerRef{Engine: "docker", Name: "web"}},
+			{Name: "old-data", Path: "/var/lib/docker/volumes/old/_data", Container: &panel.ContainerRef{Engine: "docker", Name: "old"}},
+			{Name: "site", Path: "/srv/site"},
+		},
+		containerAs: map[string]string{"docker/web": "web-data", "docker/old": "old-data"},
+	}
+	var names []string
+	for _, source := range v.FolderSources() {
+		names = append(names, source.Name)
+	}
+	if got := strings.Join(names, ","); got != "old-data,site" {
+		t.Errorf("the folders tab rows are %q, want old-data,site", got)
+	}
 }

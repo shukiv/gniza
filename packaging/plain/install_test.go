@@ -45,6 +45,33 @@ func TestTheServiceRunsThePlainPanelFromItsRoots(t *testing.T) {
 	}
 }
 
+// TestTheInstallerAsksWhereTheBrowserInterfaceListens: the operator is
+// offered this machine only, every address, or none; the answer is kept
+// in the environment file the unit already reads, so the unit stays as
+// it is; an answer given before the script, or on an earlier install,
+// is not asked for again; and the password goes through the agent.
+func TestTheInstallerAsksWhereTheBrowserInterfaceListens(t *testing.T) {
+	script := read(t, "install.sh")
+	for _, want := range []string{
+		"Where should the browser interface listen?",
+		"127.0.0.1:8443",
+		"0.0.0.0:8443",
+		`if [ -n "${GNIZA_WEB_LISTEN+set}" ]; then`,
+		`elif grep -q '^GNIZA_WEB_LISTEN=' "$ENV_FILE"; then`,
+		"GNIZA_WEB_LISTEN=$WEB_LISTEN",
+		`-web-set-password -web-password-file "$WEB_DIR/password"`,
+		"stty -echo < /dev/tty",
+		"stty echo < /dev/tty",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("the installer does not contain %q", want)
+		}
+	}
+	if strings.Contains(script, "-web-listen") {
+		t.Error("the unit names the address itself; it should come from the environment file")
+	}
+}
+
 // TestTheUninstallerIsWhereTheRemoveButtonLooks: the node runs
 // /usr/local/share/gniza/uninstall.sh for a panel that is not
 // DirectAdmin, and the installer has to have put it there.

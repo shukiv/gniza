@@ -49,6 +49,10 @@ type page struct {
 	// that name it say {{$.Panel}}: the same page is served on cPanel and
 	// on DirectAdmin, and it used to say cPanel on both.
 	Panel string
+	// Document says the page arrived through the browser door, where no
+	// panel wraps it, so the layout has to open and close a document of
+	// its own around what is otherwise a fragment.
+	Document bool
 	// Cpanel says the panel is cPanel, for the pages that name one of
 	// its mechanisms -- pkgacct, restorepkg, Restricted Restore, the WHM
 	// plugin, the cPanel hooks. Those are not products with another
@@ -100,6 +104,7 @@ func (s *Server) renderStatus(
 		LiveURL:        liveURLFor(r),
 		RunningVersion: agent.Version,
 		Panel:          s.panelName(),
+		Document:       documentOf(r),
 		Cpanel:         s.panelName() == "cPanel",
 	}
 	// An account-facing request is confined to the account that opened

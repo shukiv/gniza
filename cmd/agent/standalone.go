@@ -112,6 +112,13 @@ func runStandalone(ctx context.Context, cfg config, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	if cfg.webListen != "" {
+		uiOptions = append(uiOptions, webui.WithBrowser(webui.BrowserConfig{
+			Listen: cfg.webListen, PasswordFile: cfg.webPasswordFile,
+			CertFile: cfg.webCertFile, KeyFile: cfg.webKeyFile,
+			Hostname: cfg.hostname,
+		}))
+	}
 	ui, err := webui.New(engine, log, uiOptions...)
 	if err != nil {
 		return err
@@ -119,6 +126,18 @@ func runStandalone(ctx context.Context, cfg config, log *slog.Logger) error {
 
 	errs := make(chan error, 5)
 	go func() { errs <- ui.Listen(ctx, cfg.socketPath) }()
+	// The browser door, on a server with no panel. A port that cannot be
+	// opened -- no password set yet, the address in use -- is said in the
+	// log and costs the backups nothing: the socket and the terminal
+	// still work, and a service that exited over its own front door
+	// would restart into the same refusal forever.
+	if cfg.webListen != "" {
+		go func() {
+			if err := ui.ListenBrowser(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Error("the browser interface is not available", "address", cfg.webListen, "error", err)
+			}
+		}()
+	}
 	// DirectAdmin's own page. It is a third socket rather than the
 	// root-only one above widened: that one's mode is its authorization,
 	// and this one's owner is a service account that is nobody in

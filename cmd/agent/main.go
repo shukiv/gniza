@@ -31,6 +31,7 @@ import (
 	"github.com/shukiv/gniza/internal/resticrun"
 	"github.com/shukiv/gniza/internal/staging"
 	"github.com/shukiv/gniza/internal/tui"
+	"github.com/shukiv/gniza/internal/webui"
 )
 
 type config struct {
@@ -75,6 +76,14 @@ type config struct {
 	// tui opens the terminal interface over the admin socket and exits
 	// when it is left. It touches no state of its own.
 	tui bool
+	// The browser interface: a TCP address behind a password, for a
+	// server with no panel to put the pages behind. See docs/adr/0024.
+	webListen       string
+	webPasswordFile string
+	webCertFile     string
+	webKeyFile      string
+	// webSetPassword writes the browser interface's password and exits.
+	webSetPassword bool
 	// level is the running log level, shared with the handler the logger
 	// was built on so the interface can move it.
 	level *slog.LevelVar
@@ -91,6 +100,20 @@ func main() {
 			fmt.Fprintln(os.Stderr, "gniza:", err)
 			os.Exit(1)
 		}
+		return
+	}
+	if cfg.webSetPassword {
+		// Likewise a client of the service, which reads the file on
+		// every sign-in: no restart, and no state of its own touched.
+		password, err := readNewPassword(os.Stdin, os.Stderr)
+		if err == nil {
+			err = webui.SetPassword(cfg.webPasswordFile, password)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "gniza:", err)
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "password written to %s; it applies to the next sign-in\n", cfg.webPasswordFile)
 		return
 	}
 	if cfg.cpanelHookDescribe {
@@ -238,6 +261,20 @@ func parseFlags() config {
 		"open the terminal interface over the admin socket (-socket) instead of running the service")
 	flag.BoolVar(&cfg.standalone, "standalone", false,
 		"run this server on its own, with local state and the WHM interface, and no controller")
+	// The address comes from the environment by default so the plain
+	// package's unit, which already reads /etc/gniza/plain.env, need
+	// not change when the answer does.
+	flag.StringVar(&cfg.webListen, "web-listen", os.Getenv("GNIZA_WEB_LISTEN"),
+		"standalone: host:port the browser interface listens on, behind a password; "+
+			"loopback is plain HTTP, anything else TLS; empty serves none (default $GNIZA_WEB_LISTEN)")
+	flag.StringVar(&cfg.webPasswordFile, "web-password-file", "/etc/gniza/web/password",
+		"standalone: the browser interface's password, hashed; written by -web-set-password")
+	flag.StringVar(&cfg.webCertFile, "web-tls-cert", "/etc/gniza/web/cert.pem",
+		"standalone: the browser interface's TLS certificate; made self-signed when absent with its key")
+	flag.StringVar(&cfg.webKeyFile, "web-tls-key", "/etc/gniza/web/key.pem",
+		"standalone: the browser interface's TLS key")
+	flag.BoolVar(&cfg.webSetPassword, "web-set-password", false,
+		"set the browser interface's password from $GNIZA_WEB_PASSWORD, the terminal or stdin, and exit")
 	flag.StringVar(&cfg.statePath, "state", "/var/lib/gniza/state.db",
 		"standalone: where this server keeps its own configuration and history")
 	flag.StringVar(&cfg.userSocketPath, "user-socket", "/var/run/gniza/account/user.sock",

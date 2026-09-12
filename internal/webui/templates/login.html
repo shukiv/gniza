@@ -1,0 +1,57 @@
+{{/* The sign-in page of the browser interface. It is a document of its
+     own rather than a page in the layout: nothing in the rail means
+     anything to somebody who has not signed in yet. */}}
+{{define "layout"}}<!doctype html>
+<html lang="en" class="cpr:bg-base-200">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · Gniza</title>
+<script>
+(function () {
+  var choice = "light";
+  try {
+    var stored = localStorage.getItem("gniza.theme");
+    if (stored === "light" || stored === "dark" || stored === "system") { choice = stored; }
+  } catch (e) {}
+  if (choice !== "system") {
+    document.documentElement.setAttribute("data-theme", choice);
+  }
+})();
+</script>
+<style>{{.Fonts}}
+{{.Assets.CSS}}</style>
+</head>
+<body class="cpr:m-0">
+<div class="gniza cpr:bg-base-200 cpr:text-base-content cpr:min-h-screen cpr:grid cpr:place-items-center cpr:p-4">
+  <main class="cpr:w-full cpr:max-w-sm">
+    <div class="cpr:flex cpr:items-center cpr:gap-2.5 cpr:mb-4 cpr:px-1">
+      <span class="cpr:grid cpr:size-9 cpr:shrink-0 cpr:place-items-center cpr:text-primary" aria-hidden="true"><svg class="cpr:h-8 cpr:w-auto cpr:fill-current cpr:[fill-rule:evenodd]" viewBox="1.25 0.14 10.22 12.48" focusable="false"><g transform="translate(-97.367 -139.17)"><path transform="matrix(.23378 0 0 -.23378 50.654 216.38)" d="m219.89 325.53h14.261v2.3h-14.261zm0-16.189h14.261v2.3h-14.261zm-14.721 4.14h43.703v-12.881h-43.703zm14.721-18.029h14.261v-2.3h-14.261zm7.13-19.157 2.663 4.609 2.024 3.507h17.165v12.881h-43.703v-12.881h17.166l2.023-3.507zm-21.851 53.375h43.703v-12.881h-43.703z"/></g></svg></span>
+      <span class="cpr:flex cpr:flex-col cpr:gap-px">
+        <span class="cpr:text-[15px] cpr:font-semibold cpr:leading-tight">Gniza</span>
+        <span class="cpr:text-[11px] cpr:leading-tight cpr:text-base-content/60">Backup. Restore. Repeat.</span>
+      </span>
+    </div>
+    <div class="cpr:panel cpr:pad">
+      <h1 class="cpr:page-title">Sign in</h1>
+      <p class="cpr:page-sub">The backup service on <span class="cpr:mono">{{.Data.Hostname}}</span>.</p>
+      {{with .Data.Error}}<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:mt-3" role="alert"><div>{{.}}</div></div>{{end}}
+      <form method="post" action="?p=login" class="cpr:grid cpr:gap-3 cpr:mt-4">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <div>
+          <label class="cpr:field-label" for="password">Password</label>
+          <input class="cpr:input cpr:w-full" type="password" id="password" name="password"
+                 autocomplete="current-password" required autofocus>
+        </div>
+        <button class="cpr:btn cpr:btn-primary cpr:w-full" type="submit">
+          <svg class="cpr:size-4 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="16" r="1"/><rect x="3" y="10" width="18" height="12" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3"/></svg>
+          Sign in
+        </button>
+      </form>
+      <p class="cpr:hint cpr:mt-4">Forgotten? On the server, as root: <span class="cpr:mono">gniza-agent -web-set-password</span>. The new password applies to the next sign-in.</p>
+    </div>
+  </main>
+</div>
+</body>
+</html>
+{{end}}

@@ -89,6 +89,10 @@ type Server struct {
 	// authorization on that socket. Nil on a cPanel server, where no
 	// DirectAdmin socket is opened.
 	daSessions daVerifier
+	// browser is the door on the TCP listener, for a server with no
+	// panel: a password, sessions and a lockout. Nil where nothing
+	// listens on a port. See browser.go.
+	browser *browserDoor
 }
 
 // assets is the stylesheet and script, embedded in the page.
@@ -202,13 +206,17 @@ func parseTemplates() (map[string]*template.Template, error) {
 			continue
 		}
 		// An account's pages wear their own layout: none of the
-		// operator's navigation means anything to a customer.
-		layout := "templates/layout.html"
+		// operator's navigation means anything to a customer. The
+		// sign-in page of the browser interface wears none: it is a
+		// document of its own, for somebody not yet let in.
+		files := []string{"templates/layout.html", "templates/partials.html", page}
 		if strings.HasPrefix(name, "user_") {
-			layout = "templates/user_layout.html"
+			files[0] = "templates/user_layout.html"
 		}
-		set, err := template.New(name).Funcs(templateFuncs()).ParseFS(templateFS,
-			layout, "templates/partials.html", page)
+		if name == "login.html" {
+			files = files[1:]
+		}
+		set, err := template.New(name).Funcs(templateFuncs()).ParseFS(templateFS, files...)
 		if err != nil {
 			return nil, fmt.Errorf("webui: parse %s: %w", name, err)
 		}
@@ -217,8 +225,14 @@ func parseTemplates() (map[string]*template.Template, error) {
 	return sets, nil
 }
 
-// Handler returns the routed interface.
+// Handler returns the routed interface, as the sockets serve it.
 func (s *Server) Handler() http.Handler {
+	return s.recoverPanics(s.route(s.operatorMux()))
+}
+
+// operatorMux is every route of the operator's interface, before the
+// query-string routing and whatever door a listener puts in front of it.
+func (s *Server) operatorMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST "+adminCapabilityEndpoint, s.issueAdminUserCapability)
 	mux.Handle("GET /static/", http.FileServerFS(staticFS))
@@ -285,7 +299,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /settings/channels/test", s.guard(s.handleTestChannel))
 	mux.HandleFunc("POST /settings/channels/delete", s.guard(s.handleDeleteChannel))
 
-	return s.recoverPanics(s.route(mux))
+	return mux
 }
 
 // route turns the "p" query parameter into a request path.

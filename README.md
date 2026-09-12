@@ -77,7 +77,7 @@ again upgrades in place. Then:
 |---|---|
 | cPanel/WHM | WHM sidebar, **Plugins → Gniza Backups**. Customers get a tile in cPanel with their own restore points. |
 | DirectAdmin | **Admin Tools → Gniza**, in the Evolution skin. |
-| No panel | `gniza-agent -tui`, as root. |
+| No panel | `gniza-agent -tui` as root, or a browser at the address the installer asks about, behind a password. |
 
 From there: add a destination, add a schedule, and the server backs itself
 up. Destinations are SFTP, S3, a restic REST server or a local disk.
@@ -117,6 +117,13 @@ configuration, the certificates, the unit files and a manifest of packages,
 containers and volumes. Restore of files and databases is written and not
 yet proved on a live server; the provider says so at start.
 
+The installer asks where a browser may reach the pages: this machine
+only on `127.0.0.1:8443`, over `ssh -L`; every address on `0.0.0.0:8443`,
+over TLS; or nowhere. Either way the door is a password, set on the
+terminal without echo and changed with `gniza-agent -web-set-password`,
+with a lockout behind it
+([ADR 24](docs/adr/0024-a-browser-on-a-server-without-a-panel.md)).
+
 ### The terminal interface
 
 ```bash
@@ -128,9 +135,9 @@ verdict, destinations, schedules, accounts, the five log tabs, restore and
 settings. It adds destinations — agreeing to an sftp host key before
 anything is sent, showing the recovery key once — adds, edits, runs and
 removes schedules, and backs an account up now. Asking for a restore or
-changing a setting from it is not written yet; the
-[plain-server guide](docs/guide/plain-server.md) keeps the `curl` forms for
-that.
+changing a setting from it is not written yet; the browser interface does
+both, and the [plain-server guide](docs/guide/plain-server.md) keeps the
+`curl` forms for scripts.
 
 Under it, every page answers as data when asked with
 `Accept: application/json`. That is what the terminal reads, and what a
@@ -228,7 +235,7 @@ directory, reachable only from the management network, recorded as
 |---|---|
 | cPanel/WHM: provider, plugin, customer tile, hooks, termination and suspension safety | working, in production |
 | DirectAdmin: provider, plugin, hooks, lean backup, restore of existing and deleted accounts | working, in production; granular restore and customer pages not built |
-| Plain server: provider, package, system backup | working; restore not yet proved live |
+| Plain server: provider, package, system backup, browser interface behind a password | working; restore not yet proved live |
 | Terminal interface | destinations, schedules, backups, logs; restore and settings read-only |
 | Standalone: scheduling, retention, drills, update from release or dist branch | working |
 | Fleet: controller API, mTLS, job leasing, scheduler, vault, maintenance runner | working, covered by the e2e suite |

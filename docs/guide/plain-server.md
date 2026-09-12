@@ -83,6 +83,59 @@ Any page reads as data with `-H 'Accept: application/json'`: `http://x/`,
 `http://x/accounts`, `http://x/destinations`, `http://x/schedule`,
 `http://x/logs?tab=backups`, `http://x/settings`.
 
+## From a browser
+
+The same pages the panels show, on a TCP address, behind a password
+([ADR 0024](../adr/0024-a-browser-on-a-server-without-a-panel.md)). The
+installer asks where it should listen:
+
+| Choice | Address | How to reach it |
+|---|---|---|
+| this machine only (the default) | `127.0.0.1:8443` | from your own machine, `ssh -L 8443:127.0.0.1:8443 root@<server>`, then open `http://127.0.0.1:8443/` |
+| every address | `0.0.0.0:8443` | `https://<server>:8443/` from anywhere; open port 8443 in the firewall |
+| nowhere | | the terminal interface only |
+
+The first choice is the safe one: the port never leaves the machine and
+ssh is the door. The second puts a root service on the internet with its
+password as the only door, so choose it knowingly, and with a password
+you would not use anywhere else.
+
+The installer asks for the password on the terminal, without echo, and
+keeps its hash in `/etc/gniza/web/password`. To change it later:
+
+```bash
+gniza-agent -web-set-password
+```
+
+It applies to the next sign-in; nothing restarts. A script sets it with
+`GNIZA_WEB_PASSWORD=... gniza-agent -web-set-password`, or pipes it on
+stdin. Five wrong passwords from one address start a wait of thirty
+seconds that doubles with each wrong one after it.
+
+On every address the interface is TLS. A self-signed certificate is made
+on the service's first start, at `/etc/gniza/web/cert.pem` with its key
+beside it, and the browser will say so the first time. Compare the
+fingerprint the browser shows with the server's before accepting it:
+
+```bash
+openssl x509 -in /etc/gniza/web/cert.pem -noout -fingerprint -sha256
+```
+
+The service log says the same fingerprint when it starts. To use a
+certificate of your own, put the pair at those two paths and restart the
+service.
+
+To change the address, or turn the interface off, edit
+`GNIZA_WEB_LISTEN` in `/etc/gniza/plain.env` and restart the service. An
+unattended install answers with the same variable set before the
+installer runs (`GNIZA_WEB_LISTEN=` empty means none) and
+`GNIZA_WEB_PASSWORD` for the password; with neither and no terminal it
+listens on `127.0.0.1:8443` and prints a generated password, once.
+
+A sign-out is in the rail's foot. A session ends twelve hours after it
+began, an hour after it was last used, or when the service restarts,
+which it does to upgrade itself.
+
 ## Restore
 
 There is no native restore to hand an archive to. What a plain server
@@ -92,8 +145,8 @@ database dump is loaded into a database the account owns by name,
 created first if it is gone. A whole-account restore is refused as
 unverified, on purpose. The terminal's Restore screen shows what has
 been restored; asking for one from the terminal is not written yet
-(bead `cprest-91g.2`), so the restore form is posted with `curl`
-until then. None of this has been proved on a live plain server yet;
+(bead `cprest-91g.2`), so a restore is asked for from the browser, or
+the form is posted with `curl`. None of this has been proved on a live plain server yet;
 the drill is bead `cprest-44s`.
 
 ## Remove

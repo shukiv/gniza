@@ -300,8 +300,7 @@ func TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp(t *testing.T) 
 	// ticked and the folder not, and says the ticks go on the list.
 	page := getPage(handler, "/schedule", false).Body.String()
 	for _, want := range []string{
-		"data-choose-in-schedule", `data-tabs="folders"`, "Nothing has been chosen yet",
-		"Everything on the What to back up list", "0 sources today", "Only what I tick below",
+		"data-choose-in-schedule", `data-tabs="folders"`,
 		`name="mysql" value="shop" aria-label="shop" checked`,
 		`name="folder" value="` + shop + `" aria-label="` + shop + `">`,
 		`id="folder_path"`,
@@ -310,8 +309,8 @@ func TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp(t *testing.T) 
 			t.Errorf("the schedule form on a plain server lacks %q", want)
 		}
 	}
-	if strings.Contains(page, "Which accounts") || strings.Contains(page, "<div data-account-picker") {
-		t.Error("the schedule form still carries the panel's account picker")
+	if strings.Contains(page, "Which accounts") || strings.Contains(page, "<div data-account-picker") || strings.Contains(page, `name="scope"`) {
+		t.Error("the schedule form still carries the panel's account picker, or a choice of scope")
 	}
 	// The terminal's read of the page as data does not look at the
 	// candidates.
@@ -325,10 +324,17 @@ func TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp(t *testing.T) 
 		t.Errorf("the schedule page as data looks at the candidates: %+v", polled.Data.Choose)
 	}
 
-	// A schedule over everything with nothing ticked backs up nothing,
-	// and is refused rather than saved empty.
+	// A schedule with nothing ticked backs up nothing, and is refused
+	// rather than saved empty; so is a script's "everything" while the
+	// list is empty.
 	base := url.Values{"name": {"Nightly"}, "cron": {"0 2 * * *"}, "mode": {"split"}, "enabled": {"1"},
 		"repository": {repository.ID}, "keep_daily": {"7"}, "keep_weekly": {"4"}, "keep_monthly": {"6"}}
+	for _, form := range []url.Values{withScope(base, ""), withScope(base, "all")} {
+		empty := postForm(server, handler, "/schedule/save", form)
+		if location := empty.Header().Get("Location"); empty.Code != http.StatusSeeOther || !strings.Contains(location, "kind=error") || !strings.Contains(location, "Tick+something") {
+			t.Fatalf("an empty schedule = %d %s", empty.Code, location)
+		}
+	}
 	empty := postForm(server, handler, "/schedule/save", withScope(base, "all"))
 	if location := empty.Header().Get("Location"); empty.Code != http.StatusSeeOther || !strings.Contains(location, "kind=error") || !strings.Contains(location, "Tick+something") {
 		t.Fatalf("an empty schedule = %d %s", empty.Code, location)
@@ -337,9 +343,10 @@ func TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp(t *testing.T) 
 		t.Fatalf("the empty schedule was saved: %+v", policies)
 	}
 
-	// Ticking the shop database and the folder on "only what I tick"
-	// adds both and puts them, by the names they got, under the schedule.
-	ticked := withScope(base, "selected")
+	// Ticking the shop database and the folder adds both. Every source
+	// on the list is ticked, so the schedule covers everything, now and
+	// later, the way "Back up all" needs it.
+	ticked := withScope(base, "")
 	ticked["mysql"] = []string{"shop"}
 	ticked["folder"] = []string{shop}
 	saved := postForm(server, handler, "/schedule/save", ticked)
@@ -350,8 +357,8 @@ func TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp(t *testing.T) 
 	if err != nil || len(policies) != 1 {
 		t.Fatalf("policies = %+v, %v", policies, err)
 	}
-	if got := strings.Join(policies[0].Accounts, ","); got != "shop,mysql-shop" {
-		t.Errorf("the schedule covers %q, not the folder and the database", got)
+	if !policies[0].AllAccounts() {
+		t.Errorf("with every source ticked the schedule covers %q, not everything", policies[0].Accounts)
 	}
 	list := getPage(handler, "/accounts", false).Body.String()
 	for _, want := range []string{">shop</a>", ">mysql-shop</a>"} {
@@ -368,18 +375,15 @@ func TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp(t *testing.T) 
 		`name="source" value="mysql-shop" aria-label="shop" checked data-existing data-same="mysql-shop"`,
 		`name="source" value="shop" aria-label="` + shop + `" checked data-existing data-same="shop"`,
 		`name="mysql" value="blog" aria-label="blog">`,
-		"2 sources today", `name="scope" value="selected" checked`,
 	} {
 		if !strings.Contains(edit, want) {
 			t.Errorf("the edit form lacks %q: %s", want, firstLine(edit, `name="source"`))
 		}
 	}
-	if strings.Contains(edit, "Nothing has been chosen yet") {
-		t.Error("the edit form says nothing is chosen")
-	}
-	// Saving the edit with the source ticked by name and the other
-	// database fresh adds that one too.
-	again := withScope(base, "selected")
+	// Saving the edit with one source ticked by name and the other
+	// database fresh adds that one, and the schedule covers only the
+	// two ticked, since the folder was left out.
+	again := withScope(base, "")
 	again.Set("id", policies[0].ID)
 	again["source"] = []string{"mysql-shop"}
 	again["mysql"] = []string{"blog"}
@@ -397,9 +401,9 @@ func TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp(t *testing.T) 
 		t.Error("the schedules table does not name the sources")
 	}
 
-	// Under "everything" a fresh row is still added; a source named that
-	// is not on the list is refused with the rest and the schedule is
-	// still saved, with a warning.
+	// A script's "everything" needs no ticks; a source named that is
+	// not on the list is refused with the rest and the schedule is still
+	// saved, with a warning.
 	everything := withScope(base, "all")
 	everything.Set("name", "Weekly")
 	everything.Set("cron", "0 3 * * 0")
@@ -442,6 +446,8 @@ func withScope(base url.Values, scope string) url.Values {
 	for key, values := range base {
 		form[key] = append([]string(nil), values...)
 	}
-	form.Set("scope", scope)
+	if scope != "" {
+		form.Set("scope", scope)
+	}
 	return form
 }

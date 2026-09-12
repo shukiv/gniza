@@ -185,20 +185,15 @@
   }
 
   // Reveal the account picker only when a schedule is not "all accounts".
-  // On a server without a panel the picker is the choosing tables,
-  // always shown: under "everything" the rows already on the
-  // list are ticked and disabled, since that covers them anyway, and a
-  // fresh row can still be ticked to be added.
+  // On a server without a panel there is no picker and no choice of
+  // scope: the choosing tables are the form, and what is ticked is
+  // what the schedule covers.
   Array.prototype.forEach.call(document.querySelectorAll("[data-scope-toggle]"), function (form) {
     var picker = form.querySelector("[data-account-picker]");
-    var existing = form.querySelectorAll("[data-existing]");
-    if (!picker && existing.length === 0) { return; }
+    if (!picker) { return; }
     var syncScope = function () {
       var selected = form.querySelector("input[name=scope]:checked");
-      var choosing = selected && selected.value === "selected";
-      if (picker) { picker.hidden = !choosing; }
-      existing.forEach(function (box) { box.disabled = !choosing; });
-      form.querySelectorAll("[data-tickable]").forEach(settle);
+      picker.hidden = !selected || selected.value !== "selected";
     };
     Array.prototype.forEach.call(form.querySelectorAll("input[name=scope]"), function (radio) {
       radio.addEventListener("change", syncScope);

@@ -1543,31 +1543,50 @@ func (s *Server) handleSaveSchedule(w http.ResponseWriter, r *http.Request) {
 	// accounts are included without an edit.
 	var notAdded []string
 	if chooser, ok := s.engine.Chooser(); ok {
-		// On a server without a panel the form carries the What to back
-		// up tables: a chosen source is ticked by name, and a fresh row
-		// ticked there is added now, then covered by this schedule.
+		// On a server without a panel the form is the What to back up
+		// tables: a chosen source is ticked by name, and a fresh row
+		// ticked there is added now, then covered by this schedule. What
+		// is ticked is what the schedule covers, and every source ticked
+		// means everything, now and later, which is what "Back up all"
+		// runs and what a source chosen later comes under. A form with
+		// no tables, the terminal's or a script's, says scope=all.
 		names, refused, err := s.scheduleChoices(r, chooser)
 		if err != nil {
 			s.redirect(w, r, "/schedule", "error", err.Error())
 			return
 		}
 		notAdded = refused
-		if r.PostFormValue("scope") == "selected" {
+		sources, err := chooser.Sources(r.Context())
+		if err != nil {
+			s.redirect(w, r, "/schedule", "error", err.Error())
+			return
+		}
+		ticked := map[string]bool{}
+		for _, name := range names {
+			ticked[name] = true
+		}
+		everything := r.PostFormValue("scope") == "all"
+		if !everything {
+			everything = true
+			for _, source := range sources {
+				if !ticked[source.Name] {
+					everything = false
+					break
+				}
+			}
+		}
+		if !everything {
 			policy.Accounts = names
 		}
-		// A schedule over nothing backs up nothing: "only what I tick"
-		// with nothing that could be ticked, or "everything" while the
-		// list is still empty, is refused rather than saved empty.
-		if len(names) == 0 {
-			sources, err := chooser.Sources(r.Context())
-			if r.PostFormValue("scope") == "selected" || (err == nil && len(sources) == 0) {
-				if len(refused) > 0 {
-					s.redirect(w, r, "/schedule", "error", "Nothing was added, so the schedule was not saved. "+strings.Join(refused, "; ")+".")
-					return
-				}
-				s.redirect(w, r, "/schedule", "error", "Tick something to back up: a schedule over nothing would back up nothing.")
+		// A schedule over nothing backs up nothing, and is refused
+		// rather than saved empty.
+		if len(names) == 0 && (!everything || len(sources) == 0) {
+			if len(refused) > 0 {
+				s.redirect(w, r, "/schedule", "error", "Nothing was added, so the schedule was not saved. "+strings.Join(refused, "; ")+".")
 				return
 			}
+			s.redirect(w, r, "/schedule", "error", "Tick something to back up: a schedule over nothing would back up nothing.")
+			return
 		}
 	} else if r.PostFormValue("scope") == "selected" {
 		policy.Accounts = r.PostForm["account"]

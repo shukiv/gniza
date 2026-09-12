@@ -85,9 +85,8 @@ type tickBox struct {
 	Name, Value, Label string
 	Checked, Disabled  bool
 	// Existing marks a box that stands for a source already chosen. The
-	// schedule form disables it under "everything", which covers the
-	// source anyway, and ticks every box with the same value together,
-	// since one source can stand behind several rows.
+	// schedule form ticks every box with the same value together, since
+	// one source can stand behind several rows.
 	Existing bool
 }
 
@@ -265,10 +264,9 @@ func (s *Server) chooseViewFor(r *http.Request, chooser panel.Chooser, sources i
 	return view
 }
 
-// chooseForSchedule draws the same tables inside the schedule form,
-// where a chosen source is a box that puts it under the schedule. A new
-// schedule starts with every source ticked; one being edited with what
-// it covers. When nothing has been chosen yet the databases and
+// chooseForSchedule draws the same tables as the schedule form, where
+// what is ticked is what the schedule covers. A new schedule starts
+// with every source ticked; one being edited with what it covers. When nothing has been chosen yet the databases and
 // containers come up ticked, so the first schedule backs something up.
 // The candidates are read for a person only, not for the terminal's
 // five-second read of the page.

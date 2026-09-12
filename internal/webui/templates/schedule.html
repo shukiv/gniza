@@ -87,18 +87,12 @@
     {{$selectedScope := false}}{{with $data.Editing}}{{if not .AllAccounts}}{{$selectedScope = true}}{{end}}{{end}}
     {{with $data.Choose}}
     {{/* A server without a panel: what to back up is chosen here, in
-         the same tables the What to back up page draws. A row already
-         on the list is ticked by name and, under "everything", disabled,
-         since that covers it anyway; a fresh row ticked is added to the
-         list when the schedule is saved. */}}
-    <h2 class="cpr:section-title cpr:mt-6">What to back up</h2>
-    <label class="cpr:check"><input type="radio" class="cpr:radio cpr:radio-sm cpr:mt-0.5" name="scope" value="all" {{if not $selectedScope}}checked{{end}}>
-      <span>Everything on the What to back up list <small class="cpr:help">{{len .Sources}} source{{if ne (len .Sources) 1}}s{{end}} today; anything chosen later is backed up by this schedule too.</small></span></label>
-    <label class="cpr:check"><input type="radio" class="cpr:radio cpr:radio-sm cpr:mt-0.5" name="scope" value="selected" {{if $selectedScope}}checked{{end}}>
-      <span>Only what I tick below</span></label>
-    <div class="cpr:mt-3" data-choose-in-schedule>
+         the same tables the What to back up page draws. What is ticked
+         is what the schedule covers; a fresh row ticked is added to the
+         list when the schedule is saved. Every row ticked means
+         everything, now and later. */}}
+    <div class="cpr:mt-6" data-choose-in-schedule>
       {{with .FormError}}<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:mb-4"><div>{{.}}</div></div>{{end}}
-      <p class="cpr:hint cpr:mt-0 cpr:mb-3">{{if .Fresh}}Nothing has been chosen yet. Tick what to back up, tab by tab; it goes on the list when the schedule is saved.{{else}}A row already on the list is ticked by its name there. A fresh row ticked here goes on the list when the schedule is saved.{{end}}</p>
       {{template "choosetabs" .}}
     </div>
     {{else}}

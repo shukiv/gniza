@@ -259,3 +259,193 @@
   <div class="cpr:sublabel">not measured yet</div>
 {{end}}
 {{end}}
+
+{{/* One box in a What to back up table: what it posts and how it is
+     drawn (webui.tickBox). */}}
+{{define "tickbox"}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="{{.Name}}" value="{{.Value}}" aria-label="{{.Label}}"{{if .Disabled}} disabled{{else if .Checked}} checked{{end}}{{if .Existing}} data-existing data-same="{{.Value}}"{{end}}>{{end}}
+
+{{/* The What to back up tables, one tab per kind (webui.chooseView).
+     Drawn inside a form the caller owns: on the What to back up page
+     with one "Back these up" button under it, and in the schedule form
+     in place of the account picker. */}}
+{{define "choosetabs"}}
+{{$c := .}}
+{{$k := .Candidates}}
+<div data-tabs="{{$c.Tab}}">
+  <div class="cpr:tabs cpr:tabs-border cpr:mb-4" role="tablist" aria-label="What kind of thing to back up">
+    <button type="button" role="tab" class="cpr:tab{{if eq $c.Tab "folders"}} cpr:tab-active{{end}}" data-tab="folders" aria-selected="{{eq $c.Tab "folders"}}">Folders</button>
+    <button type="button" role="tab" class="cpr:tab{{if eq $c.Tab "mysql"}} cpr:tab-active{{end}}" data-tab="mysql" aria-selected="{{eq $c.Tab "mysql"}}">MySQL <span class="cpr:badge cpr:badge-sm cpr:badge-ghost cpr:ml-1">{{len $k.MySQL}}</span></button>
+    <button type="button" role="tab" class="cpr:tab{{if eq $c.Tab "postgresql"}} cpr:tab-active{{end}}" data-tab="postgresql" aria-selected="{{eq $c.Tab "postgresql"}}">PostgreSQL <span class="cpr:badge cpr:badge-sm cpr:badge-ghost cpr:ml-1">{{len $k.PostgreSQL}}</span></button>
+    <button type="button" role="tab" class="cpr:tab{{if eq $c.Tab "containers"}} cpr:tab-active{{end}}" data-tab="containers" aria-selected="{{eq $c.Tab "containers"}}">Docker / Podman <span class="cpr:badge cpr:badge-sm cpr:badge-ghost cpr:ml-1">{{len $k.Containers}}</span></button>
+  </div>
+
+  <section role="tabpanel" data-tab-panel="folders" aria-label="Folders">
+    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Each folder becomes a source of its own, backed up from where it lies, files and all. Its name is the folder's.</p>
+    {{if or $k.Folders $c.ExtraFolders}}
+    <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-tickable>
+      <thead><tr>
+        <th class="cpr:w-8"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-tick-all aria-label="Tick every folder"></th>
+        <th>Folder{{with $k.Roots}} under {{range $i, $r := .}}{{if $i}}, {{end}}<span class="cpr:mono">{{$r}}</span>{{end}}{{end}}</th>
+        <th>Backed up as</th>
+      </tr></thead>
+      <tbody>
+      {{range $c.ExtraFolders}}
+        <tr>
+          <td>{{template "tickbox" ($c.Box "folder" .Path .Name false .Name)}}</td>
+          <td class="cpr:mono">{{.Path}}{{with .Container}} <span class="cpr:text-xs cpr:text-base-content/60 cpr:font-sans">from container {{.Name}}</span>{{end}}</td>
+          <td>{{.Name}}</td>
+        </tr>
+      {{end}}
+      {{range $k.Folders}}
+        <tr{{if $c.Dim .ChosenAs}} class="cpr:opacity-60"{{end}}>
+          <td>{{template "tickbox" ($c.Box "folder" .Path .ChosenAs false .Path)}}</td>
+          <td class="cpr:mono">{{.Path}}</td>
+          <td>{{if .ChosenAs}}{{.ChosenAs}}{{else}}<span class="cpr:text-base-content/50">not yet</span>{{end}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table></div>
+    {{else}}
+    <p class="cpr:hint">Nothing was found under {{range $i, $r := $k.Roots}}{{if $i}}, {{end}}<span class="cpr:mono">{{$r}}</span>{{end}}. Name a folder below.</p>
+    {{end}}
+    <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
+      <div>
+        <label class="cpr:field-label" for="folder_path">Another folder</label>
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full cpr:mono" id="folder_path" name="folder_path" placeholder="/var/www/shop" value="{{$c.Field "folder_path"}}" autocomplete="off">
+        <small class="cpr:help">Any folder on this server, named from /.</small>
+      </div>
+      <div>
+        <label class="cpr:field-label" for="folder_name">Its name</label>
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="folder_name" name="folder_name" placeholder="after the folder, if left empty" value="{{$c.Field "folder_name"}}">
+        <small class="cpr:help">How that folder is called on these pages and in the backups. Letters, digits, dot, dash and underscore.</small>
+      </div>
+    </div>
+  </section>
+
+  <section role="tabpanel" data-tab-panel="mysql" aria-label="MySQL">
+    {{if or $k.MySQL $c.ExtraMySQL}}
+    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Each database becomes a source of its own, dumped with mysqldump on every run. The accounts with rights on it are listed, and their grants are kept beside the dump for reference; they are not created again on restore.</p>
+    <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-tickable>
+      <thead><tr>
+        <th class="cpr:w-8"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-tick-all aria-label="Tick every database"></th>
+        <th>Database</th><th class="cpr:text-right">Size</th><th>Users</th><th>Backed up as</th>
+      </tr></thead>
+      <tbody>
+      {{range $c.ExtraMySQL}}
+        <tr>
+          <td>{{template "tickbox" ($c.Box "mysql" (index .MySQL 0) .Name true .Name)}}</td>
+          <td class="cpr:mono">{{join .MySQL ", "}}</td>
+          <td class="cpr:text-right cpr:text-base-content/50">&mdash;</td><td></td>
+          <td>{{.Name}}</td>
+        </tr>
+      {{end}}
+      {{range $k.MySQL}}
+        <tr{{if $c.Dim .ChosenAs}} class="cpr:opacity-60"{{end}}>
+          <td>{{template "tickbox" ($c.Box "mysql" .Name .ChosenAs true .Name)}}</td>
+          <td class="cpr:mono">{{.Name}}</td>
+          <td class="cpr:text-right cpr:tabular-nums">{{bytes .Size}}</td>
+          <td class="cpr:mono cpr:text-xs">{{if .Users}}{{range $i, $u := .Users}}{{if $i}}<br>{{end}}{{$u}}{{end}}{{else}}<span class="cpr:text-base-content/50">none at the schema level</span>{{end}}</td>
+          <td>{{if .ChosenAs}}{{.ChosenAs}}{{else}}<span class="cpr:text-base-content/50">not yet</span>{{end}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table></div>
+    {{else if $k.MySQLError}}
+    <p class="cpr:hint cpr:mt-0">No MySQL database is offered: the client did not answer. <span class="cpr:text-base-content/60">{{$k.MySQLError}}</span></p>
+    {{else}}
+    <p class="cpr:hint cpr:mt-0">The MySQL client answered with no databases beyond its own.</p>
+    {{end}}
+  </section>
+
+  <section role="tabpanel" data-tab-panel="postgresql" aria-label="PostgreSQL">
+    {{if or $k.PostgreSQL $c.ExtraPostgreSQL}}
+    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Each database becomes a source of its own, dumped with pg_dump on every run. The roles on the server are kept beside the dump as pg_dumpall writes them, for reference; they are not created again on restore.</p>
+    <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-tickable>
+      <thead><tr>
+        <th class="cpr:w-8"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-tick-all aria-label="Tick every database"></th>
+        <th>Database</th><th class="cpr:text-right">Size</th><th>Owner</th><th>Backed up as</th>
+      </tr></thead>
+      <tbody>
+      {{range $c.ExtraPostgreSQL}}
+        <tr>
+          <td>{{template "tickbox" ($c.Box "postgresql" (index .PostgreSQL 0) .Name true .Name)}}</td>
+          <td class="cpr:mono">{{join .PostgreSQL ", "}}</td>
+          <td class="cpr:text-right cpr:text-base-content/50">&mdash;</td><td></td>
+          <td>{{.Name}}</td>
+        </tr>
+      {{end}}
+      {{range $k.PostgreSQL}}
+        <tr{{if $c.Dim .ChosenAs}} class="cpr:opacity-60"{{end}}>
+          <td>{{template "tickbox" ($c.Box "postgresql" .Name .ChosenAs true .Name)}}</td>
+          <td class="cpr:mono">{{.Name}}</td>
+          <td class="cpr:text-right cpr:tabular-nums">{{bytes .Size}}</td>
+          <td class="cpr:mono cpr:text-xs">{{range .Users}}{{.}}{{end}}</td>
+          <td>{{if .ChosenAs}}{{.ChosenAs}}{{else}}<span class="cpr:text-base-content/50">not yet</span>{{end}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table></div>
+    {{else if $k.PostgreSQLError}}
+    <p class="cpr:hint cpr:mt-0">No PostgreSQL database is offered: the client did not answer. <span class="cpr:text-base-content/60">{{$k.PostgreSQLError}}</span></p>
+    {{else}}
+    <p class="cpr:hint cpr:mt-0">psql answered with no databases beyond its own.</p>
+    {{end}}
+  </section>
+
+  <section role="tabpanel" data-tab-panel="containers" aria-label="Docker and Podman">
+    {{if $k.Containers}}
+    <p class="cpr:hint cpr:mt-0 cpr:mb-3">A ticked container becomes one source per volume and bind mount, read where it lies on this machine, with the container's description and compose file kept beside each. A stack's configuration is the folder its compose file lives in; the engine's is under /etc. A database that lives inside a running container is not consistent when read this way: back it up from its own tab, or stop the container for the backup.</p>
+    <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-tickable>
+      <thead><tr>
+        <th class="cpr:w-8"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-tick-all aria-label="Tick everything"></th>
+        <th>Container</th><th>Image</th><th>Status</th><th class="cpr:text-right">Mounts</th><th>Backed up as</th>
+      </tr></thead>
+      <tbody>
+      {{range $stack := $k.Stacks}}
+        <tr class="cpr:bg-base-200/60">
+          <td><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-tick-group="{{$stack.Engine}}-{{$stack.Name}}" aria-label="Tick the whole stack {{$stack.Name}}"></td>
+          <td colspan="5"><span class="cpr:font-semibold">{{$stack.Name}}</span> <span class="cpr:text-xs cpr:text-base-content/60">stack · {{$stack.Engine}} · {{len $stack.Containers}} containers{{with $stack.Dir}} · compose in <span class="cpr:mono">{{.}}</span>{{end}}</span></td>
+        </tr>
+        {{range $k.Containers}}{{if and (eq .Stack $stack.Name) (eq .Engine $stack.Engine)}}
+        {{$as := $c.ContainerAs .Engine .Name}}
+        <tr{{if $c.Dim $as}} class="cpr:opacity-60"{{end}} data-group="{{$stack.Engine}}-{{$stack.Name}}">
+          <td class="cpr:pl-6">{{template "tickbox" ($c.Box "container" (printf "%s/%s" .Engine .Name) $as true .Name)}}</td>
+          <td class="cpr:font-medium">{{.Name}}</td><td class="cpr:mono cpr:text-xs">{{.Image}}</td><td class="cpr:text-xs">{{.Status}}</td>
+          <td class="cpr:text-right cpr:tabular-nums">{{.Mounts}}</td>
+          <td class="cpr:text-xs">{{if $as}}{{$as}}{{else}}<span class="cpr:text-base-content/50">not yet</span>{{end}}</td>
+        </tr>
+        {{end}}{{end}}
+        {{with $stack.Dir}}
+        <tr{{if $c.Dim $stack.ChosenAs}} class="cpr:opacity-60"{{end}} data-group="{{$stack.Engine}}-{{$stack.Name}}">
+          <td class="cpr:pl-6">{{template "tickbox" ($c.Box "folder" . $stack.ChosenAs true (printf "configuration of %s" $stack.Name))}}</td>
+          <td>configuration of {{$stack.Name}}</td><td class="cpr:mono cpr:text-xs" colspan="2">{{.}}</td>
+          <td class="cpr:text-right cpr:text-xs cpr:text-base-content/60">compose, .env</td>
+          <td>{{if $stack.ChosenAs}}{{$stack.ChosenAs}}{{else}}<span class="cpr:text-base-content/50">not yet</span>{{end}}</td>
+        </tr>
+        {{end}}
+      {{end}}
+      {{range $k.Containers}}{{if not .Stack}}
+        {{$as := $c.ContainerAs .Engine .Name}}
+        <tr{{if $c.Dim $as}} class="cpr:opacity-60"{{end}}>
+          <td>{{template "tickbox" ($c.Box "container" (printf "%s/%s" .Engine .Name) $as true .Name)}}</td>
+          <td class="cpr:font-medium">{{.Name}} <span class="cpr:text-xs cpr:text-base-content/60">{{.Engine}}</span></td><td class="cpr:mono cpr:text-xs">{{.Image}}</td><td class="cpr:text-xs">{{.Status}}</td>
+          <td class="cpr:text-right cpr:tabular-nums">{{.Mounts}}</td>
+          <td class="cpr:text-xs">{{if $as}}{{$as}}{{else}}<span class="cpr:text-base-content/50">not yet</span>{{end}}</td>
+        </tr>
+      {{end}}{{end}}
+      {{range $k.Engines}}{{if and .Present .ConfigDir}}
+        <tr{{if $c.Dim .ChosenAs}} class="cpr:opacity-60"{{end}}>
+          <td>{{template "tickbox" ($c.Box "folder" .ConfigDir .ChosenAs true (printf "%s configuration" .Name))}}</td>
+          <td>{{.Name}} configuration</td><td class="cpr:mono cpr:text-xs" colspan="2">{{.ConfigDir}}</td>
+          <td class="cpr:text-right cpr:text-xs cpr:text-base-content/60">daemon settings</td>
+          <td>{{if .ChosenAs}}{{.ChosenAs}}{{else}}<span class="cpr:text-base-content/50">not yet</span>{{end}}</td>
+        </tr>
+      {{end}}{{end}}
+      </tbody>
+    </table></div>
+    {{else}}
+    <p class="cpr:hint cpr:mt-0">{{range $i, $e := $k.Engines}}{{if $i}} {{end}}{{if not $e.Present}}{{$e.Name}} is not installed.{{else if $e.Error}}{{$e.Name}} did not answer: <span class="cpr:text-base-content/60">{{$e.Error}}</span>{{else}}{{$e.Name}} knows no containers.{{end}}{{end}}</p>
+    {{end}}
+  </section>
+</div>
+{{end}}

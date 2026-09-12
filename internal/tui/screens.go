@@ -648,8 +648,8 @@ func noneBecause(clientError, client string) string {
 // until ticked, and any other by its path.
 func folderForm(offered candidates) *form {
 	fields := []field{
-		textField("path", "Another folder", "", "Any folder on this server, named from /. Each folder becomes a source of its own, backed up from where it lies."),
-		textField("name", "Its name", "", "How that folder is called on these screens and in the backups. Empty names it after the folder."),
+		textField("folder_path", "Another folder", "", "Any folder on this server, named from /. Each folder becomes a source of its own, backed up from where it lies."),
+		textField("folder_name", "Its name", "", "How that folder is called on these screens and in the backups. Empty names it after the folder."),
 	}
 	for _, folder := range offered.Folders {
 		if folder.ChosenAs != "" {

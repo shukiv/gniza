@@ -439,7 +439,7 @@ func TestChoosingAFolderWithItsDatabases(t *testing.T) {
 		t.Fatalf("posted %+v", api.posted)
 	}
 	sent := api.posted[0]
-	if sent.path != "/accounts/add" || sent.form.Get("tab") != "folders" || sent.form.Get("path") != "/opt/stack" || sent.form.Get("name") != "" ||
+	if sent.path != "/accounts/add" || sent.form.Get("tab") != "folders" || sent.form.Get("folder_path") != "/opt/stack" || sent.form.Get("folder_name") != "" ||
 		strings.Join(sent.form["folder"], ",") != "/var/www/shop" {
 		t.Errorf("the form sent %v", sent.form)
 	}

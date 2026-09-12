@@ -1305,6 +1305,9 @@ type policyView struct {
 	nodestore.Policy
 	// AccountCount is how many accounts this schedule covers right now.
 	AccountCount int
+	// Choosing says the accounts are sources the operator chose (ADR
+	// 0025), which the row calls by that name.
+	Choosing bool
 	// Next is when it fires next, zero when it never will.
 	Next time.Time
 }
@@ -1337,6 +1340,9 @@ func (p policyView) NextIn() string {
 // Covers names what the schedule backs up.
 func (p policyView) Covers() string {
 	if p.AllAccounts() {
+		if p.Choosing {
+			return "Everything chosen"
+		}
 		return "Every account"
 	}
 	return strings.Join(p.Accounts, ", ")
@@ -1349,7 +1355,11 @@ func (p policyView) CoversDetail() string {
 	if !p.AllAccounts() {
 		return ""
 	}
-	return fmt.Sprintf("%d account%s", p.AccountCount, plural(p.AccountCount))
+	noun := "account"
+	if p.Choosing {
+		noun = "source"
+	}
+	return fmt.Sprintf("%d %s%s", p.AccountCount, noun, plural(p.AccountCount))
 }
 
 func plural(n int) string {
@@ -1415,7 +1425,7 @@ func (s *Server) handleSchedule(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	views := make([]policyView, 0, len(policies))
 	for _, policy := range policies {
-		view := policyView{Policy: policy, AccountCount: len(accounts)}
+		view := policyView{Policy: policy, AccountCount: len(accounts), Choosing: s.choosing()}
 		if !policy.AllAccounts() {
 			view.AccountCount = len(policy.Accounts)
 		}
@@ -1434,6 +1444,9 @@ func (s *Server) handleSchedule(w http.ResponseWriter, r *http.Request) {
 		Editing      *nodestore.Policy
 		Selected     map[string]bool
 		Chosen       map[string]bool
+		// Choose is the What to back up tables, drawn inside the form on
+		// a server without a panel in place of the account picker.
+		Choose *chooseView
 		// ExcludePresets are the paths worth never storing, by the thing
 		// that puts them there. They are suggestions the operator can
 		// edit, not rules this program applies on its own.
@@ -1458,6 +1471,10 @@ func (s *Server) handleSchedule(w http.ResponseWriter, r *http.Request) {
 		for _, account := range policy.Accounts {
 			view.Chosen[account] = true
 		}
+	}
+	if chooser, ok := s.engine.Chooser(); ok {
+		choose := s.chooseForSchedule(r, chooser, view.Editing)
+		view.Choose = &choose
 	}
 	s.render(w, r, "schedule.html", "Schedules", "schedule", view)
 }
@@ -1524,7 +1541,35 @@ func (s *Server) handleSaveSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 	// Empty means every account, resolved when the schedule fires so new
 	// accounts are included without an edit.
-	if r.PostFormValue("scope") == "selected" {
+	var notAdded []string
+	if chooser, ok := s.engine.Chooser(); ok {
+		// On a server without a panel the form carries the What to back
+		// up tables: a chosen source is ticked by name, and a fresh row
+		// ticked there is added now, then covered by this schedule.
+		names, refused, err := s.scheduleChoices(r, chooser)
+		if err != nil {
+			s.redirect(w, r, "/schedule", "error", err.Error())
+			return
+		}
+		notAdded = refused
+		if r.PostFormValue("scope") == "selected" {
+			policy.Accounts = names
+		}
+		// A schedule over nothing backs up nothing: "only what I tick"
+		// with nothing that could be ticked, or "everything" while the
+		// list is still empty, is refused rather than saved empty.
+		if len(names) == 0 {
+			sources, err := chooser.Sources(r.Context())
+			if r.PostFormValue("scope") == "selected" || (err == nil && len(sources) == 0) {
+				if len(refused) > 0 {
+					s.redirect(w, r, "/schedule", "error", "Nothing was added, so the schedule was not saved. "+strings.Join(refused, "; ")+".")
+					return
+				}
+				s.redirect(w, r, "/schedule", "error", "Tick something to back up: a schedule over nothing would back up nothing.")
+				return
+			}
+		}
+	} else if r.PostFormValue("scope") == "selected" {
 		policy.Accounts = r.PostForm["account"]
 		if len(policy.Accounts) == 0 {
 			s.redirect(w, r, "/schedule", "error", "Choose at least one account.")
@@ -1544,11 +1589,15 @@ func (s *Server) handleSaveSchedule(w http.ResponseWriter, r *http.Request) {
 		s.redirect(w, r, "/schedule", "error", err.Error())
 		return
 	}
+	saved := "Schedule saved."
 	if editing {
-		s.redirect(w, r, "/schedule", "ok", "Schedule updated.")
+		saved = "Schedule updated."
+	}
+	if len(notAdded) > 0 {
+		s.redirect(w, r, "/schedule", "warn", saved+" Not added: "+strings.Join(notAdded, "; ")+".")
 		return
 	}
-	s.redirect(w, r, "/schedule", "ok", "Schedule saved.")
+	s.redirect(w, r, "/schedule", "ok", saved)
 }
 
 // handleRunSchedule queues a schedule's accounts straight away, rather

@@ -1,7 +1,8 @@
 # 0025 — What to back up on a server without a panel
 
-Status: accepted, 2026-09-12; amended the same day (the choosing is by
-kind, below). Amends [ADR 0022](0022-a-server-without-a-panel.md).
+Status: accepted, 2026-09-12; amended the same day, twice (the choosing
+is by kind, and it sits in the schedule form, below). Amends
+[ADR 0022](0022-a-server-without-a-panel.md).
 
 ## Context
 
@@ -133,6 +134,48 @@ backup runs, and not on the terminal's five-second read; the terminal
 asks with `add=1` when `a`, `m`, `p` or `c` is pressed. The Add button
 fetches the form into the sheet the way Edit does on the destinations
 page.
+
+## Amended: the choosing sits in the schedule form too
+
+The operator's next answer was that the choosing "should be
+incorporated in the schedule where the Which accounts is". On a panel
+server the schedule form asks *every account* or *only the ones I
+choose* and lists the accounts; on a server without a panel the list is
+what has been chosen, so the question and the choosing are the same
+question, and the form asks it once.
+
+**The same tables, in the schedule form.** The four tabs are one
+template (`choosetabs` in `partials.html`) drawn by the What to back up
+page inside one form with a "Back these up" button, and by the schedule
+form in place of the account picker. The two radios stay: *everything
+on the list* is what "Back up all" and a source chosen later depend on
+(`Policy.AllAccounts`), and *only what I tick* is a selected scope.
+What differs is what a row posts. On the What to back up page a row
+already chosen is disabled, since it cannot be chosen twice. In the
+schedule form it is a box that posts `source=<name>`, ticked when the
+schedule covers it, and under *everything* ticked and disabled, since
+that covers it anyway; a fresh row posts `folder`, `mysql`, `postgresql`
+or `container` as before and is added when the schedule is saved, then
+covered. One source can stand behind several rows -- a folder chosen
+with its databases, in the form's first shape, is five rows on two tabs
+-- so rows with the same name tick together (`data-same`) rather than
+one of them silently bringing the rest. A source no row stands for, a
+folder outside the roots or a container that is gone, is drawn as a row
+of its own, or it could not be put under a selected schedule.
+
+**Saving adds first, then covers.** The save handler reads the names
+ticked, adds the fresh rows, and the schedule covers the union. What
+could not be added is said and the schedule is still saved, as the
+What to back up page does; a schedule that would cover nothing --
+*only what I tick* with nothing ticked, or *everything* while the list
+is still empty -- is refused rather than saved empty, since a nightly
+run over nothing would look like protection. The candidates are read
+when a person opens the form, not for the terminal's read of the page
+as data.
+
+The What to back up page stays: it is where a source is removed, where
+its last backup shows, and the only form the terminal has, whose
+schedule form has no picker at all.
 
 ## Consequences
 

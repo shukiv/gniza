@@ -11,9 +11,11 @@ curl -fsSL https://github.com/shukiv/gniza/releases/latest/download/get.sh | sh
 ## What to back up
 
 Nothing on a server without a panel says what an account is, so you do.
-The page called **What to back up** (screen 4 in the terminal) has one
-tab per kind; each row ticked becomes a *source*, backed up on its own,
-under its name, the way a panel's account would be:
+The choosing is in the schedule form, where a panel server's form asks
+which accounts, and on the page called **What to back up** (screen 4 in
+the terminal). Both draw the same tables, one tab per kind; each row
+ticked becomes a *source*, backed up on its own, under its name, the way
+a panel's account would be:
 
 - **Folders.** The folders under `/var/www`, `/srv` and `/opt` are
   listed, unticked; any other folder can be typed in. Each is backed up
@@ -39,9 +41,21 @@ under its name, the way a panel's account would be:
   for the backup.
 
 Nothing is backed up until it is chosen; the page opens on the form
-until something is. A source can be removed at any time; the backups
-already taken of it stay at the destinations, and choosing it again
-under the same name carries its history on.
+until something is. A source can be removed at any time, on the What to
+back up page; the backups already taken of it stay at the destinations,
+and choosing it again under the same name carries its history on.
+
+In the schedule form the same tables sit under **What to back up**,
+with two choices above them: *everything on the list*, which covers
+every source now and any chosen later, or *only what I tick below*. A
+row already on the list is ticked by its name there, and under
+*everything* it is ticked and greyed, since that covers it anyway; a
+fresh row ticked in either case goes on the list when the schedule is
+saved. A source that stands behind several rows -- a folder chosen
+together with its databases, in the form's first shape -- ticks and
+unticks as one. So the first schedule can be the whole setup: tick the
+databases, the folders and the stacks, save, and they are chosen and
+covered in one go.
 
 The database lists come from the `mysql` and `psql` clients on the
 server; a client that is not there, or cannot connect, is said on its
@@ -94,15 +108,17 @@ screen says what the keys do there. The first hour is:
    the backups exist for is also the one that destroys the only copy.
 3. On Schedules, press `a`. The defaults are nightly at two, split
    shape, the server's own configuration included, seven daily, four
-   weekly and six monthly backups kept, written to every destination.
-   A schedule is refused until the destination's recovery key has been
-   taken off the server (`K` on Destinations reads it, `n` says it is
-   stored elsewhere); the screen says so above the form.
+   weekly and six monthly backups kept, written to every destination,
+   over everything on the What to back up list. A schedule is refused
+   until the destination's recovery key has been taken off the server
+   (`K` on Destinations reads it, `n` says it is stored elsewhere); the
+   screen says so above the form.
 4. On What to back up, `a` chooses folders, `m` MySQL databases, `p`
    PostgreSQL databases and `c` containers with their stacks; the
    databases and containers come up ticked. `b` backs up the source
    under the cursor now, and `B` runs the schedule over every source.
-   Logs shows what happened.
+   Logs shows what happened. (In a browser the schedule form carries
+   the same tables, so steps 3 and 4 are one form there.)
 
 The same forms are posted with `curl` from a script. Every request
 carries the CSRF token from any page:
@@ -114,16 +130,23 @@ curl -s --unix-socket $S -X POST http://x/destinations/add \
   -d "csrf=$CSRF" -d "name=usb" -d "type=local" -d "root=/mnt/backups/gniza"
 curl -s --unix-socket $S -X POST http://x/schedule/save \
   -d "csrf=$CSRF" -d "name=Nightly" -d "cron=0 2 * * *" -d "mode=split" \
-  -d "enabled=1" -d "include_system=1" \
-  -d "keep_daily=7" -d "keep_weekly=4" -d "keep_monthly=6"
+  -d "enabled=1" -d "include_system=1" -d "scope=all" \
+  -d "keep_daily=7" -d "keep_weekly=4" -d "keep_monthly=6" \
+  -d "mysql=shop" -d "folder=/var/www/shop"
 curl -s --unix-socket $S -X POST http://x/accounts/add \
-  -d "csrf=$CSRF" -d "tab=folders" -d "folder=/var/www/shop" -d "path=/opt/stack"
+  -d "csrf=$CSRF" -d "tab=folders" -d "folder=/var/www/shop" -d "folder_path=/opt/stack"
 curl -s --unix-socket $S -X POST http://x/accounts/add \
   -d "csrf=$CSRF" -d "tab=mysql" -d "mysql=shop" -d "mysql=shop_wp"
 curl -s --unix-socket $S -X POST http://x/accounts/add \
   -d "csrf=$CSRF" -d "tab=containers" -d "container=docker/web" -d "folder=/srv/web"
 curl -s --unix-socket $S -X POST http://x/accounts/backup -d "csrf=$CSRF" -d "account=mysql-shop"
 ```
+
+The schedule form takes the same `folder`, `mysql`, `postgresql` and
+`container` fields as `/accounts/add`, adds them, and covers them;
+`source=<name>` ticks one already on the list, and `scope=selected`
+makes the schedule cover only what was ticked. A schedule over nothing
+is refused.
 
 Any page reads as data with `-H 'Accept: application/json'`: `http://x/`,
 `http://x/accounts` (`http://x/accounts?add=1` carries what there is to

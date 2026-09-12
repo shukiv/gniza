@@ -185,12 +185,20 @@
   }
 
   // Reveal the account picker only when a schedule is not "all accounts".
+  // On a server without a panel the picker is the choosing tables,
+  // always shown: under "everything" the rows already on the
+  // list are ticked and disabled, since that covers them anyway, and a
+  // fresh row can still be ticked to be added.
   Array.prototype.forEach.call(document.querySelectorAll("[data-scope-toggle]"), function (form) {
     var picker = form.querySelector("[data-account-picker]");
-    if (!picker) { return; }
+    var existing = form.querySelectorAll("[data-existing]");
+    if (!picker && existing.length === 0) { return; }
     var syncScope = function () {
       var selected = form.querySelector("input[name=scope]:checked");
-      picker.hidden = !selected || selected.value !== "selected";
+      var choosing = selected && selected.value === "selected";
+      if (picker) { picker.hidden = !choosing; }
+      existing.forEach(function (box) { box.disabled = !choosing; });
+      form.querySelectorAll("[data-tickable]").forEach(settle);
     };
     Array.prototype.forEach.call(form.querySelectorAll("input[name=scope]"), function (radio) {
       radio.addEventListener("change", syncScope);
@@ -222,6 +230,8 @@
   // the button counts what is ticked so "Back these up" says how many.
   function showTab(root, name) {
     root.dataset.tabs = name;
+    var remember = root.closest("form") && root.closest("form").querySelector("input[name=tab]");
+    if (remember) { remember.value = name; }
     root.querySelectorAll("[data-tab]").forEach(function (tab) {
       var active = tab.dataset.tab === name;
       tab.classList.toggle("cpr:tab-active", active);
@@ -257,8 +267,12 @@
     var form = table.closest("form");
     var button = form && form.querySelector("[data-tick-count]");
     if (button) {
+      var across = 0;
+      form.querySelectorAll("[data-tickable]").forEach(function (other) {
+        across += rowBoxes(other).filter(function (box) { return box.checked; }).length;
+      });
       if (!button.dataset.label) { button.dataset.label = button.textContent; }
-      button.textContent = ticked > 0 ? button.dataset.label + " (" + ticked + ")" : button.dataset.label;
+      button.textContent = across > 0 ? button.dataset.label + " (" + across + ")" : button.dataset.label;
     }
   }
   function prepare(scope) {
@@ -292,6 +306,16 @@
         var tr = row.closest("tr");
         if (tr && tr.dataset.group === box.dataset.tickGroup) { row.checked = box.checked; }
       });
+    }
+    // One source can stand behind several rows, on several tabs: a
+    // folder chosen with its databases is one name. They tick together.
+    if (box.dataset.same) {
+      var root = box.closest("[data-tabs]") || table;
+      root.querySelectorAll("input[data-same]").forEach(function (other) {
+        if (other.dataset.same === box.dataset.same) { other.checked = box.checked; }
+      });
+      root.querySelectorAll("[data-tickable]").forEach(settle);
+      return;
     }
     settle(table);
   });

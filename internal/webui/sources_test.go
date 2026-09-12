@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/shukiv/gniza/internal/node"
 	"github.com/shukiv/gniza/internal/nodestore"
@@ -211,7 +212,7 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 		t.Error("the page still says nothing is backed up")
 	}
 
-	again := postForm(server, handler, "/accounts/add", url.Values{"tab": {"folders"}, "path": {shop}, "name": {"shop2"}})
+	again := postForm(server, handler, "/accounts/add", url.Values{"tab": {"folders"}, "folder_path": {shop}, "folder_name": {"shop2"}})
 	if again.Code != http.StatusOK || !strings.Contains(again.Body.String(), "already backed up as shop") || !strings.Contains(again.Body.String(), `data-tabs="folders"`) {
 		t.Errorf("the same folder twice = %d, %q", again.Code, firstLine(again.Body.String(), "already"))
 	}
@@ -231,7 +232,7 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 	}
 	// The folder is offered again, the databases chosen stay chosen.
 	after := getPage(handler, "/accounts?add=1", false).Body.String()
-	if strings.Contains(after, ">shop</a>") || !strings.Contains(after, `name="folder" value="`+shop+`" aria-label="`+shop+`" >`) {
+	if strings.Contains(after, ">shop</a>") || !strings.Contains(after, `name="folder" value="`+shop+`" aria-label="`+shop+`">`) {
 		t.Errorf("after removing, the folder is not offered again: %s", firstLine(after, `name="folder"`))
 	}
 	for _, name := range []string{"mysql-shop", "mysql-blog", "public"} {
@@ -257,7 +258,7 @@ func TestAPanelServerKeepsItsAccountsPage(t *testing.T) {
 	if !strings.Contains(body, ">Accounts<") {
 		t.Error("the rail no longer says Accounts on a panel server")
 	}
-	refused := postForm(server, handler, "/accounts/add", url.Values{"path": {"/srv"}})
+	refused := postForm(server, handler, "/accounts/add", url.Values{"folder_path": {"/srv"}})
 	if refused.Code != http.StatusSeeOther || !strings.Contains(refused.Header().Get("Location"), "kind=error") {
 		t.Errorf("adding on a panel server = %d %s", refused.Code, refused.Header().Get("Location"))
 	}
@@ -270,4 +271,156 @@ func firstLine(body, containing string) string {
 		}
 	}
 	return ""
+}
+
+// TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp: the
+// What to back up tables sit in the schedule form where the account
+// picker is on a panel server. A fresh row ticked there is added when
+// the schedule is saved; a row already on the list is ticked by name.
+func TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp(t *testing.T) {
+	server, handler, shop := newPlainServer(t)
+	store := server.engine.Store()
+	destination, err := store.PutDestination(nodestore.Destination{
+		Name: "usb", Type: "local", Config: map[string]string{"root": t.TempDir()},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	noted := time.Now()
+	repository, err := store.PutRepository(nodestore.Repository{
+		DestinationID: destination.ID, Path: "gniza", RecoveryNotedAt: &noted, InitialisedAt: &noted,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Nothing chosen yet: the form carries the tables with the databases
+	// ticked and the folder not, and says the ticks go on the list.
+	page := getPage(handler, "/schedule", false).Body.String()
+	for _, want := range []string{
+		"data-choose-in-schedule", `data-tabs="folders"`, "Nothing has been chosen yet",
+		"Everything on the What to back up list", "0 sources today", "Only what I tick below",
+		`name="mysql" value="shop" aria-label="shop" checked`,
+		`name="folder" value="` + shop + `" aria-label="` + shop + `">`,
+		`id="folder_path"`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the schedule form on a plain server lacks %q", want)
+		}
+	}
+	if strings.Contains(page, "Which accounts") || strings.Contains(page, "<div data-account-picker") {
+		t.Error("the schedule form still carries the panel's account picker")
+	}
+	// The terminal's read of the page as data does not look at the
+	// candidates.
+	var polled struct {
+		Data struct{ Choose *chooseView }
+	}
+	if err := json.Unmarshal(getPage(handler, "/schedule", true).Body.Bytes(), &polled); err != nil {
+		t.Fatal(err)
+	}
+	if polled.Data.Choose != nil && len(polled.Data.Choose.Candidates.MySQL) != 0 {
+		t.Errorf("the schedule page as data looks at the candidates: %+v", polled.Data.Choose)
+	}
+
+	// A schedule over everything with nothing ticked backs up nothing,
+	// and is refused rather than saved empty.
+	base := url.Values{"name": {"Nightly"}, "cron": {"0 2 * * *"}, "mode": {"split"}, "enabled": {"1"},
+		"repository": {repository.ID}, "keep_daily": {"7"}, "keep_weekly": {"4"}, "keep_monthly": {"6"}}
+	empty := postForm(server, handler, "/schedule/save", withScope(base, "all"))
+	if location := empty.Header().Get("Location"); empty.Code != http.StatusSeeOther || !strings.Contains(location, "kind=error") || !strings.Contains(location, "Tick+something") {
+		t.Fatalf("an empty schedule = %d %s", empty.Code, location)
+	}
+	if policies, _ := store.Policies(); len(policies) != 0 {
+		t.Fatalf("the empty schedule was saved: %+v", policies)
+	}
+
+	// Ticking the shop database and the folder on "only what I tick"
+	// adds both and puts them, by the names they got, under the schedule.
+	ticked := withScope(base, "selected")
+	ticked["mysql"] = []string{"shop"}
+	ticked["folder"] = []string{shop}
+	saved := postForm(server, handler, "/schedule/save", ticked)
+	if location := saved.Header().Get("Location"); saved.Code != http.StatusSeeOther || !strings.Contains(location, "kind=ok") {
+		t.Fatalf("saving = %d %s", saved.Code, location)
+	}
+	policies, err := store.Policies()
+	if err != nil || len(policies) != 1 {
+		t.Fatalf("policies = %+v, %v", policies, err)
+	}
+	if got := strings.Join(policies[0].Accounts, ","); got != "shop,mysql-shop" {
+		t.Errorf("the schedule covers %q, not the folder and the database", got)
+	}
+	list := getPage(handler, "/accounts", false).Body.String()
+	for _, want := range []string{">shop</a>", ">mysql-shop</a>"} {
+		if !strings.Contains(list, want) {
+			t.Errorf("the What to back up list lacks %q after the schedule was saved", want)
+		}
+	}
+
+	// Editing it: the rows on the list are boxes that post the source's
+	// name, ticked as the schedule has them; the other database is a
+	// fresh row, not ticked.
+	edit := getPage(handler, "/schedule?edit="+policies[0].ID, false).Body.String()
+	for _, want := range []string{
+		`name="source" value="mysql-shop" aria-label="shop" checked data-existing data-same="mysql-shop"`,
+		`name="source" value="shop" aria-label="` + shop + `" checked data-existing data-same="shop"`,
+		`name="mysql" value="blog" aria-label="blog">`,
+		"2 sources today", `name="scope" value="selected" checked`,
+	} {
+		if !strings.Contains(edit, want) {
+			t.Errorf("the edit form lacks %q: %s", want, firstLine(edit, `name="source"`))
+		}
+	}
+	if strings.Contains(edit, "Nothing has been chosen yet") {
+		t.Error("the edit form says nothing is chosen")
+	}
+	// Saving the edit with the source ticked by name and the other
+	// database fresh adds that one too.
+	again := withScope(base, "selected")
+	again.Set("id", policies[0].ID)
+	again["source"] = []string{"mysql-shop"}
+	again["mysql"] = []string{"blog"}
+	edited := postForm(server, handler, "/schedule/save", again)
+	if location := edited.Header().Get("Location"); edited.Code != http.StatusSeeOther || !strings.Contains(location, "kind=ok") {
+		t.Fatalf("saving the edit = %d %s", edited.Code, location)
+	}
+	policies, _ = store.Policies()
+	if got := strings.Join(policies[0].Accounts, ","); got != "mysql-shop,mysql-blog" {
+		t.Errorf("after the edit the schedule covers %q", got)
+	}
+	// The schedules table calls them sources.
+	table := getPage(handler, "/schedule", false).Body.String()
+	if !strings.Contains(table, "mysql-shop, mysql-blog") {
+		t.Error("the schedules table does not name the sources")
+	}
+
+	// Under "everything" a fresh row is still added; a source named that
+	// is not on the list is refused with the rest and the schedule is
+	// still saved, with a warning.
+	everything := withScope(base, "all")
+	everything.Set("name", "Weekly")
+	everything.Set("cron", "0 3 * * 0")
+	everything["source"] = []string{"gone"}
+	warned := postForm(server, handler, "/schedule/save", everything)
+	if location := warned.Header().Get("Location"); warned.Code != http.StatusSeeOther || !strings.Contains(location, "kind=warn") || !strings.Contains(location, "gone%3A+nothing+of+that+name") {
+		t.Fatalf("saving with a name not on the list = %d %s", warned.Code, location)
+	}
+	policies, _ = store.Policies()
+	if len(policies) != 2 {
+		t.Fatalf("policies after the second save: %d", len(policies))
+	}
+	table = getPage(handler, "/schedule", false).Body.String()
+	if !strings.Contains(table, "Everything chosen") || !strings.Contains(table, "3 sources") {
+		t.Errorf("the schedules table does not say Everything chosen, 3 sources: %s", firstLine(table, "Everything"))
+	}
+}
+
+func withScope(base url.Values, scope string) url.Values {
+	form := url.Values{}
+	for key, values := range base {
+		form[key] = append([]string(nil), values...)
+	}
+	form.Set("scope", scope)
+	return form
 }

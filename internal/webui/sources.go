@@ -1,28 +1,37 @@
 package webui
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/shukiv/gniza/internal/nodestore"
 	"github.com/shukiv/gniza/internal/panel"
 )
 
 // The choosing of what to back up, on a server whose accounts are the
-// operator's choice rather than a panel's list (ADR 0025). The accounts
-// page carries it when the provider is a panel.Chooser, and the same
-// handlers serve the socket, the browser door and the terminal.
+// operator's choice rather than a panel's list (ADR 0025). The same
+// tables are drawn in two places: on the What to back up page, where a
+// ticked row is added, and in the schedule form, where they say what
+// one schedule covers and a fresh row ticked there is added on save.
+// The handlers serve the socket, the browser door and the terminal.
 //
-// The form is one tab per kind -- folders, MySQL, PostgreSQL, containers
-// -- each a table of what there is with a box per row, and each ticked
-// row becomes a source of its own.
+// The tables are one tab per kind -- folders, MySQL, PostgreSQL,
+// containers -- each a table of what there is with a box per row, and
+// each ticked row is a source of its own.
 
 // chooseTabs are the kinds, in the order the tabs show them.
 var chooseTabs = []string{"folders", "mysql", "postgresql", "containers"}
 
-// chooseView is what the accounts page shows about choosing.
+// chooseView is what a page shows about choosing.
 type chooseView struct {
 	Candidates panel.Candidates
+	// Mode is "add" on the What to back up page, where a row already
+	// chosen is greyed out because it cannot be chosen twice, or
+	// "schedule" in the schedule form, where such a row is a box that
+	// puts the source under the schedule and posts its name.
+	Mode string
 	// Adding opens the form: asked for, or nothing chosen yet, or a
 	// choice was refused and the form is shown again with the reason.
 	Adding    bool
@@ -40,6 +49,21 @@ type chooseView struct {
 	// Offers says whether any candidate at all was found, so an empty
 	// form can say why it is empty.
 	Offers bool
+	// Sources is what has been chosen already. Extra are the ones no
+	// candidate row stands for -- a folder outside the roots, a
+	// container that is gone -- which the schedule form draws as rows
+	// of their own, or it could not put them under a schedule.
+	Sources []panel.Source
+	Extra   []panel.Source
+	// Chosen is which sources the schedule form draws ticked, by name.
+	Chosen map[string]bool
+	// Fresh says nothing has been chosen yet, so the schedule form ticks
+	// the databases and containers the way the What to back up page
+	// does, and the first schedule saved backs something up.
+	Fresh bool
+	// containerAs names the sources made from each container, comma
+	// joined, keyed "<engine>/<name>".
+	containerAs map[string]string
 }
 
 func (v chooseView) Field(name string) string { return v.Submitted[name] }
@@ -56,10 +80,146 @@ func (v chooseView) On(key string, byDefault bool) bool {
 	return byDefault
 }
 
-// chooseViewFor reads the candidates and folds the submitted form, if
-// any, into the view.
+// tickBox is one box in a table: what it posts and how it is drawn.
+type tickBox struct {
+	Name, Value, Label string
+	Checked, Disabled  bool
+	// Existing marks a box that stands for a source already chosen. The
+	// schedule form disables it under "everything", which covers the
+	// source anyway, and ticks every box with the same value together,
+	// since one source can stand behind several rows.
+	Existing bool
+}
+
+// Box is the box for one row: on the What to back up page a chosen row
+// is disabled and a fresh one posts its kind; in the schedule form a
+// chosen row posts the source's name and a fresh one posts its kind, to
+// be added on save.
+func (v chooseView) Box(kind, value, chosenAs string, byDefault bool, label string) tickBox {
+	box := tickBox{Name: kind, Value: value, Label: label}
+	if v.Mode != "schedule" {
+		if chosenAs != "" {
+			box.Disabled = true
+			return box
+		}
+		box.Checked = v.On(kind+"/"+value, byDefault)
+		return box
+	}
+	if chosenAs != "" {
+		box.Name, box.Value, box.Existing = "source", chosenAs, true
+		for _, name := range strings.Split(chosenAs, ",") {
+			if v.Chosen[name] {
+				box.Checked = true
+			}
+		}
+		return box
+	}
+	box.Checked = v.Fresh && byDefault
+	return box
+}
+
+// Dim says a row is drawn greyed out: chosen already, on the page where
+// that means it cannot be chosen again.
+func (v chooseView) Dim(chosenAs string) bool { return v.Mode != "schedule" && chosenAs != "" }
+
+// ContainerAs names the sources a container was chosen as, comma
+// joined, or is empty.
+func (v chooseView) ContainerAs(engine, name string) string {
+	return v.containerAs[engine+"/"+name]
+}
+
+// load reads what there is to choose from and what has been chosen.
+func (v *chooseView) load(ctx context.Context, chooser panel.Chooser) {
+	candidates, err := chooser.Candidates(ctx)
+	if err != nil && v.FormError == "" {
+		v.FormError = "Could not see what there is to choose from: " + err.Error()
+	}
+	v.Candidates = candidates
+	v.Offers = len(candidates.Folders)+len(candidates.MySQL)+len(candidates.PostgreSQL)+len(candidates.Containers) > 0
+	sources, err := chooser.Sources(ctx)
+	if err != nil {
+		return
+	}
+	v.Sources = sources
+	v.containerAs = map[string]string{}
+	for _, source := range sources {
+		if source.Container == nil {
+			continue
+		}
+		key := source.Container.Engine + "/" + source.Container.Name
+		if v.containerAs[key] != "" {
+			v.containerAs[key] += ","
+		}
+		v.containerAs[key] += source.Name
+	}
+}
+
+// extra is every source no candidate row stands for.
+func (v chooseView) extra() []panel.Source {
+	reachable := map[string]bool{}
+	for _, folder := range v.Candidates.Folders {
+		reachable[folder.ChosenAs] = true
+	}
+	for _, database := range v.Candidates.MySQL {
+		reachable[database.ChosenAs] = true
+	}
+	for _, database := range v.Candidates.PostgreSQL {
+		reachable[database.ChosenAs] = true
+	}
+	for _, stack := range v.Candidates.Stacks {
+		reachable[stack.ChosenAs] = true
+	}
+	for _, engine := range v.Candidates.Engines {
+		reachable[engine.ChosenAs] = true
+	}
+	for _, names := range v.containerAs {
+		for _, name := range strings.Split(names, ",") {
+			reachable[name] = true
+		}
+	}
+	var extra []panel.Source
+	for _, source := range v.Sources {
+		if !reachable[source.Name] {
+			extra = append(extra, source)
+		}
+	}
+	return extra
+}
+
+// ExtraFolders, ExtraMySQL and ExtraPostgreSQL split the sources no
+// candidate row stands for by the tab they belong on: a folder, a
+// source of MySQL databases only, a source of PostgreSQL databases only.
+func (v chooseView) ExtraFolders() []panel.Source { return v.extraOf(0) }
+func (v chooseView) ExtraMySQL() []panel.Source   { return v.extraOf(1) }
+func (v chooseView) ExtraPostgreSQL() []panel.Source {
+	return v.extraOf(2)
+}
+
+func (v chooseView) extraOf(kind int) []panel.Source {
+	var of []panel.Source
+	for _, source := range v.Extra {
+		switch {
+		case source.Path != "":
+			if kind == 0 {
+				of = append(of, source)
+			}
+		case len(source.MySQL) > 0:
+			if kind == 1 {
+				of = append(of, source)
+			}
+		case len(source.PostgreSQL) > 0:
+			if kind == 2 {
+				of = append(of, source)
+			}
+		}
+	}
+	return of
+}
+
+// chooseViewFor reads the candidates for the What to back up page and
+// folds the submitted form, if any, into the view.
 func (s *Server) chooseViewFor(r *http.Request, chooser panel.Chooser, sources int, formError string) chooseView {
-	view := chooseView{Submitted: map[string]string{}, Ticked: map[string]bool{}, FormError: formError, Refused: formError != ""}
+	view := chooseView{Mode: "add", Submitted: map[string]string{}, Ticked: map[string]bool{}, FormError: formError, Refused: formError != ""}
 	asked := r.URL.Query().Get("add") != ""
 	view.Adding = asked || sources == 0 || formError != ""
 	view.Tab = r.URL.Query().Get("tab")
@@ -77,14 +237,7 @@ func (s *Server) chooseViewFor(r *http.Request, chooser panel.Chooser, sources i
 	// the terminal's five-second read, which asks with add=1 when the
 	// operator presses a key to choose.
 	if view.Adding && r.Header.Get("X-Gniza-Live") == "" && (asked || formError != "" || !wantsData(r)) {
-		candidates, err := chooser.Candidates(r.Context())
-		if err != nil {
-			if formError == "" {
-				view.FormError = "Could not see what there is to choose from: " + err.Error()
-			}
-		}
-		view.Candidates = candidates
-		view.Offers = len(candidates.Folders)+len(candidates.MySQL)+len(candidates.PostgreSQL)+len(candidates.Containers) > 0
+		view.load(r.Context(), chooser)
 	}
 	if formError != "" {
 		for name, values := range r.PostForm {
@@ -105,6 +258,32 @@ func (s *Server) chooseViewFor(r *http.Request, chooser panel.Chooser, sources i
 	return view
 }
 
+// chooseForSchedule draws the same tables inside the schedule form,
+// where a chosen source is a box that puts it under the schedule. A new
+// schedule starts with every source ticked; one being edited with what
+// it covers. When nothing has been chosen yet the databases and
+// containers come up ticked, so the first schedule backs something up.
+// The candidates are read for a person only, not for the terminal's
+// five-second read of the page.
+func (s *Server) chooseForSchedule(r *http.Request, chooser panel.Chooser, editing *nodestore.Policy) chooseView {
+	view := chooseView{Mode: "schedule", Tab: chooseTabs[0], Submitted: map[string]string{}, Chosen: map[string]bool{}}
+	if wantsData(r) || r.Header.Get("X-Gniza-Live") != "" {
+		return view
+	}
+	view.load(r.Context(), chooser)
+	view.Fresh = len(view.Sources) == 0
+	for _, source := range view.Sources {
+		view.Chosen[source.Name] = editing == nil || editing.AllAccounts()
+	}
+	if editing != nil {
+		for _, name := range editing.Accounts {
+			view.Chosen[name] = true
+		}
+	}
+	view.Extra = view.extra()
+	return view
+}
+
 func knownTab(name string) bool {
 	for _, tab := range chooseTabs {
 		if tab == name {
@@ -114,17 +293,11 @@ func knownTab(name string) bool {
 	return false
 }
 
-// handleAddSource records what the operator ticked on one tab: each
-// folder, each database and each container as a source of its own, and
-// a folder typed in by hand. What could be added is added; what could
-// not is said, with the rest.
-func (s *Server) handleAddSource(w http.ResponseWriter, r *http.Request) {
-	chooser, ok := s.engine.Chooser()
-	if !ok {
-		s.redirect(w, r, "/accounts", "error", "Accounts on this server are "+s.panelName()+"'s to list, not chosen here.")
-		return
-	}
-	var added, refused []string
+// addTicked records every fresh row the form ticked as a source of its
+// own -- each folder, each database and each container -- and a folder
+// typed in by hand. It says what was added, by name, and what was not,
+// with why.
+func (s *Server) addTicked(r *http.Request, chooser panel.Chooser) (added, refused []string) {
 	try := func(shown string, add func() ([]string, error)) {
 		names, err := add()
 		if err != nil {
@@ -145,7 +318,7 @@ func (s *Server) handleAddSource(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimSpace(path)
 		try(path, one(panel.Source{Path: path}))
 	}
-	if path, name := strings.TrimSpace(r.PostFormValue("path")), strings.TrimSpace(r.PostFormValue("name")); path != "" || name != "" {
+	if path, name := strings.TrimSpace(r.PostFormValue("folder_path")), strings.TrimSpace(r.PostFormValue("folder_name")); path != "" || name != "" {
 		shown := path
 		if shown == "" {
 			shown = name
@@ -175,6 +348,56 @@ func (s *Server) handleAddSource(w http.ResponseWriter, r *http.Request) {
 			return names, nil
 		})
 	}
+	return added, refused
+}
+
+// scheduleChoices reads what the schedule form ticked: the sources
+// named outright, and the fresh rows, which are added first. The names
+// come back in the order ticked, each once.
+func (s *Server) scheduleChoices(r *http.Request, chooser panel.Chooser) (names, refused []string, err error) {
+	sources, err := chooser.Sources(r.Context())
+	if err != nil {
+		return nil, nil, err
+	}
+	known := map[string]bool{}
+	for _, source := range sources {
+		known[source.Name] = true
+	}
+	seen := map[string]bool{}
+	keep := func(name string) {
+		if !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	for _, ticked := range r.PostForm["source"] {
+		for _, name := range strings.Split(ticked, ",") {
+			name = strings.TrimSpace(name)
+			switch {
+			case name == "":
+			case !known[name]:
+				refused = append(refused, name+": nothing of that name is chosen")
+			default:
+				keep(name)
+			}
+		}
+	}
+	added, notAdded := s.addTicked(r, chooser)
+	for _, name := range added {
+		keep(name)
+	}
+	return names, append(refused, notAdded...), nil
+}
+
+// handleAddSource records what the operator ticked: what could be
+// added is added; what could not is said, with the rest.
+func (s *Server) handleAddSource(w http.ResponseWriter, r *http.Request) {
+	chooser, ok := s.engine.Chooser()
+	if !ok {
+		s.redirect(w, r, "/accounts", "error", "Accounts on this server are "+s.panelName()+"'s to list, not chosen here.")
+		return
+	}
+	added, refused := s.addTicked(r, chooser)
 	switch {
 	case len(added) == 0 && len(refused) == 0:
 		s.refuseSource(w, r, chooser, fmt.Errorf("Tick something, or name a folder: nothing was chosen."))

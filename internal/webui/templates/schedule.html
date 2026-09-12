@@ -84,8 +84,25 @@
     <small class="cpr:help">Pick more than one and each backup is uploaded to each of them.
     If one is unreachable the others still succeed.</small>
 
-    <label class="cpr:field-label cpr:mt-4">Which accounts</label>
     {{$selectedScope := false}}{{with $data.Editing}}{{if not .AllAccounts}}{{$selectedScope = true}}{{end}}{{end}}
+    {{with $data.Choose}}
+    {{/* A server without a panel: what to back up is chosen here, in
+         the same tables the What to back up page draws. A row already
+         on the list is ticked by name and, under "everything", disabled,
+         since that covers it anyway; a fresh row ticked is added to the
+         list when the schedule is saved. */}}
+    <h2 class="cpr:section-title cpr:mt-6">What to back up</h2>
+    <label class="cpr:check"><input type="radio" class="cpr:radio cpr:radio-sm cpr:mt-0.5" name="scope" value="all" {{if not $selectedScope}}checked{{end}}>
+      <span>Everything on the What to back up list <small class="cpr:help">{{len .Sources}} source{{if ne (len .Sources) 1}}s{{end}} today; anything chosen later is backed up by this schedule too.</small></span></label>
+    <label class="cpr:check"><input type="radio" class="cpr:radio cpr:radio-sm cpr:mt-0.5" name="scope" value="selected" {{if $selectedScope}}checked{{end}}>
+      <span>Only what I tick below</span></label>
+    <div class="cpr:mt-3" data-choose-in-schedule>
+      {{with .FormError}}<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:mb-4"><div>{{.}}</div></div>{{end}}
+      <p class="cpr:hint cpr:mt-0 cpr:mb-3">{{if .Fresh}}Nothing has been chosen yet. Tick what to back up, tab by tab; it goes on the list when the schedule is saved.{{else}}A row already on the list is ticked by its name there. A fresh row ticked here goes on the list when the schedule is saved.{{end}}</p>
+      {{template "choosetabs" .}}
+    </div>
+    {{else}}
+    <label class="cpr:field-label cpr:mt-4">Which accounts</label>
     <label class="cpr:check"><input type="radio" class="cpr:radio cpr:radio-sm cpr:mt-0.5" name="scope" value="all" {{if not $selectedScope}}checked{{end}}>
       <span>Every account on this server <small class="cpr:help">Accounts added later are included automatically.</small></span></label>
     <label class="cpr:check"><input type="radio" class="cpr:radio cpr:radio-sm cpr:mt-0.5" name="scope" value="selected" {{if $selectedScope}}checked{{end}}>
@@ -96,6 +113,7 @@
              {{if $data.Chosen}}{{if index $data.Chosen .User}}checked{{end}}{{end}}><span>{{.User}}</span></label>
       {{end}}
     </div>
+    {{end}}
 
     <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
       <div>
@@ -153,20 +171,27 @@
          own backup, and a schedule that asked for one would fail every
          night. The controls are not offered rather than offered and
          refused. */}}
-    <p class="cpr:text-xs cpr:text-base-content/60 cpr:mt-4">{{$.Panel}} backs up a whole account or none of it: the home directory,
+    <p class="cpr:text-xs cpr:text-base-content/60 cpr:mt-4">{{if $.Choosing}}A source is backed up whole: its folder read from where it lies, its
+    databases dumped beside it, and a container's description beside its volumes. What Gniza
+    chooses is how the backup is stored, not what is in it.{{else}}{{$.Panel}} backs up a whole account or none of it: the home directory,
     the databases, the mail and the account's own settings all travel, and there is no switch
-    that takes a part out. What Gniza chooses is how the backup is stored, not what is in it.</p>
+    that takes a part out. What Gniza chooses is how the backup is stored, not what is in it.{{end}}</p>
     {{end}}
 
     <label class="cpr:check">
       <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5" name="include_system" value="1" {{with $edit}}{{if .IncludeSystem}}checked{{end}}{{end}}>
       <span>Also back up the server's own settings
-      <small class="cpr:help">EasyApache's profile, the tweak settings, packages, feature lists,
+      <small class="cpr:help">{{if $.Choosing}}The web server's, PHP's, MySQL's, PostgreSQL's and the container engines' configuration under
+      <span class="cpr:mono">/etc</span>, the cron tables, the systemd units, the certificates and the
+      package list. A replacement server needs these before the sources restored onto it mean
+      anything. It is small and changes rarely.
+      <br>It is not a copy of the machine: the packages themselves and the sources' own data are not
+      in here — the sources travel in their own backups, and{{else}}EasyApache's profile, the tweak settings, packages, feature lists,
       resellers, the mail and DNS configuration, DNSSEC signing keys, the system users and
       root's cron. A replacement server needs these before the accounts restored onto it mean
       anything. It is small and changes rarely.
       <br>It is not a copy of the machine: {{$.Panel}} itself, anything installed outside it, and
-      each account's own data are not in here — the accounts travel in their own backups, and
+      each account's own data are not in here — the accounts travel in their own backups, and{{end}}
       Gniza's key in <span class="cpr:mono">/etc/gniza</span> is deliberately left out, because
       a backup holding the key to itself protects nothing.</small></span></label>
 

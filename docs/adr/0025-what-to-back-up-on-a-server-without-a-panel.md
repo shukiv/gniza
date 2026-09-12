@@ -168,16 +168,26 @@ one of them silently bringing the rest.
 
 **The folders tab is a browser.** "Folders should be showing me a file
 browser to select from, and add paths to backup." The tab is the
-server's directories one at a time from `/`, read as data from
-`/accounts/browse?dir=` (`panel.Browser`, which the plain provider
-implements over `os.ReadDir`, leaving symbolic links and the pseudo
-filesystems out), with a box on each; the roots are shortcuts. A box
-ticked puts the folder in the table above the browser as a row that
-posts `folder`, so the choice survives the browser moving on, and the
-table also holds every folder source already chosen. The list of
-folders under the roots (`Candidates.Folders`) stays for the terminal,
-whose form is toggles. A typed path stays too, for the folder one knows
-the name of.
+server's directories as a tree, from `/`, each level read as data from
+`/accounts/browse?dir=` when it is opened (`panel.Browser`, which the
+plain provider implements over `os.ReadDir`, leaving the pseudo
+filesystems out). A level lists its folders and then its files, the
+files dimmed and capped at two hundred, because a folder is recognised
+by what it holds; a symbolic link is shown as what it points at and
+marked. Every folder has a box. A box ticked puts the folder in the
+table above the tree as a row that posts `folder`, so the pick outlives
+whatever the tree does next, and the table also holds every folder
+source already chosen; the two are kept in step both ways. A folder
+already backed up, or inside one that is (the listing's `Within`, and
+the picks in the table), has its box disabled and says so, so the same
+files are not backed up twice one tick apart; picking a folder above one
+already chosen is allowed and both are marked. A path bar opens the tree
+down to a typed path, and the roots are shortcuts to it. The first
+shape, one directory at a time in a table, was "awful": two tables that
+looked the same, no hierarchy, no height, "not yet" on every row. The
+list of folders under the roots (`Candidates.Folders`) stays for the
+terminal, whose form is toggles. A typed path stays too, folded away,
+for the folder one knows the name of and the name one wants for it.
 
 **Saving adds first, then covers.** The save handler reads the names
 ticked, adds the fresh rows, and the schedule covers the union. What

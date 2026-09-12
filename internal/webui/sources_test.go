@@ -125,7 +125,7 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 	// they are; a client that is not there says so on its tab.
 	for _, want := range []string{"What to back up", "Nothing is backed up yet",
 		`data-tab="folders"`, `data-tab="mysql"`, `data-tab="postgresql"`, `data-tab="containers"`,
-		`data-folder-browser data-browse="?p=accounts/browse" data-dir="/"`, `data-go="` + filepath.Dir(shop) + `"`,
+		`data-folder-browser data-browse="?p=accounts/browse"`, `data-go="` + filepath.Dir(shop) + `"`,
 		`name="mysql" value="shop" aria-label="shop" checked`,
 		`name="mysql" value="blog" aria-label="blog" checked`, "&#39;shop_app&#39;@&#39;localhost&#39;",
 		"No PostgreSQL database is offered", "data-tick-all", "data-tick-count"} {
@@ -291,8 +291,11 @@ func TestTheFolderBrowserListsOneDirectoryAtATime(t *testing.T) {
 	if listing := browse(t, handler, www); listing.Entries[0].ChosenAs != "shop" {
 		t.Errorf("after adding, the browser says %+v", listing.Entries)
 	}
-	if inside := browse(t, handler, shop); len(inside.Entries) != 1 || inside.Entries[0].Name != "public" {
-		t.Errorf("browsing shop = %+v", inside.Entries)
+	// Inside the chosen folder: its folder first, then its file, and
+	// everything there is the source's already.
+	if inside := browse(t, handler, shop); len(inside.Entries) != 2 || inside.Entries[0].Name != "public" || inside.Entries[0].Kind != "folder" ||
+		inside.Entries[1].Name != "index.php" || inside.Entries[1].Kind != "file" || inside.Within != "shop" {
+		t.Errorf("browsing shop = %+v", inside)
 	}
 	file := getPage(handler, "/accounts/browse?dir="+url.QueryEscape(filepath.Join(shop, "index.php")), true)
 	if file.Code != http.StatusBadRequest || !strings.Contains(file.Body.String(), "is a file") {
@@ -303,7 +306,7 @@ func TestTheFolderBrowserListsOneDirectoryAtATime(t *testing.T) {
 	}
 	// The page's script drives the browser and the picked table.
 	page := getPage(handler, "/accounts", false).Body.String()
-	for _, want := range []string{`closest("[data-go]")`, "data-pick", "data-picked"} {
+	for _, want := range []string{"[data-toggle]", "data-pick", "data-picked", "data-path-error"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page does not carry %q", want)
 		}
@@ -359,7 +362,7 @@ func TestOnAServerWithoutAPanelTheScheduleFormChoosesWhatToBackUp(t *testing.T) 
 	for _, want := range []string{
 		"data-choose-in-schedule", `data-tabs="folders"`,
 		`name="mysql" value="shop" aria-label="shop" checked`,
-		`data-folder-browser data-browse="?p=accounts/browse" data-dir="/"`, "No folder yet",
+		`data-folder-browser data-browse="?p=accounts/browse"`, "No folder yet",
 		`id="folder_path"`,
 	} {
 		if !strings.Contains(page, want) {

@@ -57,9 +57,13 @@ func (p *Provider) pathAs(ctx context.Context) (map[string]string, error) {
 // leaves them out of the root.
 var pseudoFilesystems = map[string]bool{"/proc": true, "/sys": true, "/dev": true, "/run": true}
 
-// Browse lists the directories under one, for the folder browser, with
-// the ones chosen already marked. Symbolic links are not followed: a
-// link is not a folder to back up, its target is.
+// filesShown caps the files a listing carries: enough to recognise a
+// folder by, not a copy of a mail spool.
+const filesShown = 200
+
+// Browse lists what is under one directory, for the folder browser:
+// its folders, then its files, with the ones chosen already marked. A
+// symbolic link is shown as what it points at and says it is a link.
 func (p *Provider) Browse(ctx context.Context, dir string) (panel.Listing, error) {
 	if !filepath.IsAbs(dir) {
 		return panel.Listing{}, fmt.Errorf("%s is not an absolute path; a folder is named from /", dir)
@@ -80,21 +84,64 @@ func (p *Provider) Browse(ctx context.Context, dir string) (panel.Listing, error
 	if err != nil {
 		return panel.Listing{}, err
 	}
-	listing := panel.Listing{Dir: dir}
+	listing := panel.Listing{Dir: dir, Within: within(pathAs, dir)}
 	if dir != "/" {
 		listing.Parent = filepath.Dir(dir)
 	}
+	var folders, files []panel.FolderEntry
 	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
 		path := filepath.Join(dir, entry.Name())
 		if dir == "/" && pseudoFilesystems[path] {
 			continue
 		}
-		listing.Entries = append(listing.Entries, panel.FolderEntry{Name: entry.Name(), Path: path, ChosenAs: pathAs[path]})
+		item := panel.FolderEntry{Name: entry.Name(), Path: path}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			item.Link = true
+			if info, err = os.Stat(path); err != nil {
+				continue
+			}
+		}
+		switch {
+		case info.IsDir():
+			item.Kind = "folder"
+			item.ChosenAs = pathAs[path]
+			folders = append(folders, item)
+		case info.Mode().IsRegular():
+			item.Kind = "file"
+			item.Size = info.Size()
+			files = append(files, item)
+		}
 	}
+	byName := func(entries []panel.FolderEntry) func(i, j int) bool {
+		return func(i, j int) bool {
+			return strings.ToLower(entries[i].Name) < strings.ToLower(entries[j].Name)
+		}
+	}
+	sort.SliceStable(folders, byName(folders))
+	sort.SliceStable(files, byName(files))
+	if len(files) > filesShown {
+		listing.More = len(files) - filesShown
+		files = files[:filesShown]
+	}
+	listing.Entries = append(folders, files...)
 	return listing, nil
+}
+
+// within names the source whose folder is dir or holds it, or is empty.
+func within(pathAs map[string]string, dir string) string {
+	for {
+		if name := pathAs[dir]; name != "" {
+			return name
+		}
+		if dir == "/" {
+			return ""
+		}
+		dir = filepath.Dir(dir)
+	}
 }
 
 // source finds one choice by name.

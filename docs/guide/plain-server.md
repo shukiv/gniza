@@ -17,13 +17,16 @@ the terminal). Both draw the same tables, one tab per kind; each row
 ticked becomes a *source*, backed up on its own, under its name, the way
 a panel's account would be:
 
-- **Folders.** A browser of the server's directories, one at a time
-  from `/`, with `/var/www`, `/srv` and `/opt` a click away: open a
-  folder to look inside it, tick it to back it up. What is ticked
-  gathers in the table above the browser; any other folder can be typed
-  in below it. Each is backed up from where it lies, files and all, and
-  is named after itself. In the terminal the folders under those three
-  roots are offered as toggles instead.
+- **Folders.** The server's directories as a tree from `/`, with
+  `/var/www`, `/srv` and `/opt` a click away and a path bar that opens
+  the tree down to any folder typed: open a folder to look inside it
+  (its files are shown, greyed, so it can be recognised), tick it to back
+  it up. What is ticked gathers in the table above the tree. A folder
+  already backed up, or inside one that is, says so and cannot be ticked
+  again. Each is backed up from where it lies, files and all, and is
+  named after itself; a folder can also be named by hand, with a name of
+  one's choosing, under the tree. In the terminal the folders under
+  those three roots are offered as toggles instead.
 - **MySQL** and **PostgreSQL.** Every database the `mysql` or `psql`
   client can see, in a table with its size and its users -- MySQL's
   grantees, PostgreSQL's owner -- all ticked by default, with a box in
@@ -151,8 +154,11 @@ The schedule form takes the same `folder`, `mysql`, `postgresql` and
 `source=<name>` ticks one already on the list. With every source ticked,
 or with `scope=all` and nothing ticked, the schedule covers everything
 now and later; otherwise only what was ticked. A schedule over nothing
-is refused. `http://x/accounts/browse?dir=/var` lists the directories
-under one, as the folders tab's browser reads them.
+is refused. `http://x/accounts/browse?dir=/var` lists what is under
+one directory, folders then files, as the folders tab's tree reads it:
+each entry's kind, size and whether it is a link, which source backs it
+up already (`ChosenAs`), and which source the directory itself is inside
+(`Within`).
 
 Any page reads as data with `-H 'Accept: application/json'`: `http://x/`,
 `http://x/accounts` (`http://x/accounts?add=1` carries what there is to

@@ -794,15 +794,50 @@ func TestBrowseListsTheDirectoriesUnderOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Folders first, then files, each in order of name; the link to a
+	// folder is a folder that says it is a link.
 	var got []string
 	for _, entry := range listing.Entries {
-		got = append(got, entry.Name+":"+entry.ChosenAs)
+		item := entry.Name + ":" + entry.Kind
+		if entry.Link {
+			item += ":link"
+		}
+		if entry.ChosenAs != "" {
+			item += ":" + entry.ChosenAs
+		}
+		got = append(got, item)
 	}
-	if want := ".hidden: blog: shop:shop"; strings.Join(got, " ") != want {
+	if want := ".hidden:folder blog:folder link:folder:link shop:folder:shop notes.txt:file"; strings.Join(got, " ") != want {
 		t.Errorf("browse = %q, want %q", strings.Join(got, " "), want)
 	}
-	if listing.Parent != root || listing.Dir != filepath.Join(root, "www") {
-		t.Errorf("listing says dir %s under %s", listing.Dir, listing.Parent)
+	if listing.Parent != root || listing.Dir != filepath.Join(root, "www") || listing.Within != "" {
+		t.Errorf("listing says dir %s under %s, within %q", listing.Dir, listing.Parent, listing.Within)
+	}
+	if listing.Entries[4].Size != 1 {
+		t.Errorf("notes.txt is %d bytes", listing.Entries[4].Size)
+	}
+	// Inside the folder chosen, and under it, everything is that source's.
+	if inside, err := provider.Browse(context.Background(), filepath.Join(root, "www", "shop")); err != nil || inside.Within != "shop" {
+		t.Errorf("browsing the chosen folder = %+v, %v", inside, err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "www", "shop", "public", "img"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if deep, err := provider.Browse(context.Background(), filepath.Join(root, "www", "shop", "public")); err != nil || deep.Within != "shop" {
+		t.Errorf("browsing under the chosen folder = %+v, %v", deep, err)
+	}
+	// A folder of many files shows the first ones and counts the rest.
+	many := filepath.Join(root, "many")
+	if err := os.MkdirAll(many, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 205; i++ {
+		if err := os.WriteFile(filepath.Join(many, fmt.Sprintf("f%03d", i)), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if capped, err := provider.Browse(context.Background(), many); err != nil || len(capped.Entries) != 200 || capped.More != 5 {
+		t.Errorf("browsing 205 files = %d entries, %d more, %v", len(capped.Entries), capped.More, err)
 	}
 	if _, err := provider.Browse(context.Background(), filepath.Join(root, "www", "notes.txt")); err == nil || !strings.Contains(err.Error(), "is a file") {
 		t.Errorf("browsing a file: %v", err)

@@ -209,6 +209,23 @@
 @utility menu-panel { @apply cpr:flex cpr:flex-col cpr:gap-0.5 cpr:min-w-44 cpr:mt-1.5 cpr:p-1 cpr:bg-base-100 cpr:border cpr:border-base-300 cpr:rounded-box cpr:shadow-md cpr:text-left cpr:z-30; }
 @utility menu-item { @apply cpr:flex cpr:w-full cpr:min-h-8 cpr:items-center cpr:rounded-field cpr:px-2.5 cpr:text-left cpr:whitespace-nowrap cpr:cursor-pointer cpr:hover:bg-base-200; }
 
+/* The folder browser: a tree in a box of its own height, one row per
+   folder or file, indented by depth (app.js sets the padding). */
+@utility tree { @apply cpr:border cpr:border-base-300 cpr:rounded-box cpr:bg-base-100 cpr:max-h-[22rem] cpr:overflow-auto cpr:text-sm; }
+@utility tree-row {
+  @apply cpr:flex cpr:items-center cpr:gap-1.5 cpr:min-h-8 cpr:pr-3 cpr:border-b cpr:border-base-200 cpr:hover:bg-base-200/60;
+  &[data-picked-row] { @apply cpr:bg-primary/5; }
+}
+@utility tree-toggle {
+  @apply cpr:grid cpr:size-6 cpr:shrink-0 cpr:place-items-center cpr:rounded-field cpr:text-base-content/60 cpr:cursor-pointer cpr:hover:bg-base-300;
+  & svg { transition: transform .15s ease; }
+  &[aria-expanded="true"] svg { transform: rotate(90deg); }
+}
+@utility tree-name { @apply cpr:font-mono cpr:tabular-nums cpr:text-[0.92em] cpr:truncate cpr:min-w-0 cpr:text-left cpr:cursor-pointer; }
+@utility tree-file { @apply cpr:text-base-content/55 cpr:cursor-default; }
+@utility tree-meta { @apply cpr:ml-auto cpr:shrink-0 cpr:whitespace-nowrap cpr:text-xs cpr:text-base-content/55; }
+@utility tree-note { @apply cpr:py-1.5 cpr:text-xs cpr:text-base-content/50; }
+
 /* A fold: one summary line with a chevron that turns when it is open. */
 @utility fold {
   @apply cpr:flex cpr:items-center cpr:gap-2 cpr:font-medium cpr:cursor-pointer cpr:list-none;

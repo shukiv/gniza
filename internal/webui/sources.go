@@ -62,29 +62,9 @@ type chooseView struct {
 	// the databases and containers the way the What to back up page
 	// does, and the first schedule saved backs something up.
 	Fresh bool
-	// Listing is the folder browser's first directory, /, drawn with the
-	// page so the tab shows something before the script takes over.
-	Listing panel.Listing
 	// containerAs names the sources made from each container, comma
 	// joined, keyed "<engine>/<name>".
 	containerAs map[string]string
-}
-
-// folderCrumb is one step of the folder browser's path.
-type folderCrumb struct{ Name, Path string }
-
-// Crumbs is the listing's directory as steps from /.
-func (v chooseView) Crumbs() []folderCrumb {
-	crumbs := []folderCrumb{{Name: "/", Path: "/"}}
-	if v.Listing.Dir == "" || v.Listing.Dir == "/" {
-		return crumbs
-	}
-	path := ""
-	for _, part := range strings.Split(strings.Trim(v.Listing.Dir, "/"), "/") {
-		path += "/" + part
-		crumbs = append(crumbs, folderCrumb{Name: part, Path: path})
-	}
-	return crumbs
 }
 
 // FolderSources is every source with a folder that no container, stack
@@ -187,11 +167,6 @@ func (v *chooseView) load(ctx context.Context, chooser panel.Chooser) {
 		return
 	}
 	v.Sources = sources
-	if browser, ok := chooser.(panel.Browser); ok {
-		if listing, err := browser.Browse(ctx, "/"); err == nil {
-			v.Listing = listing
-		}
-	}
 	v.containerAs = map[string]string{}
 	for _, source := range sources {
 		if source.Container == nil {

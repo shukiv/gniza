@@ -314,16 +314,47 @@
     }
     settle(table);
   });
-  // The folder browser on the folders tab: one directory at a time,
-  // read from the service as data, with a box on each folder. A box
-  // ticked puts the folder in the table above it as a row that posts
-  // "folder", so what was ticked stays while the browser moves on.
+  // The folder browser on the folders tab: the server's directories as
+  // a tree, each level read from the service as data when it is opened,
+  // with a box on each folder. A box ticked puts the folder in the
+  // table above the tree as a row that posts "folder", so the pick
+  // outlives whatever the tree does next; the table's rows and the
+  // tree's boxes are kept in step both ways. A folder already backed
+  // up, or inside one that is, has its box disabled and says so.
+  var treeIcons = {
+    chevron: '<svg class="cpr:size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>',
+    folder: '<svg class="cpr:size-4 cpr:shrink-0 cpr:text-primary/80" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6c.4 0 .78.16 1.06.44L11.5 6.8h8A1.5 1.5 0 0 1 21 8.3v9.2a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/></svg>',
+    file: '<svg class="cpr:size-4 cpr:shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>',
+    link: '<svg class="cpr:size-3 cpr:shrink-0 cpr:text-base-content/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>'
+  };
+  function treeSize(bytes) {
+    var units = ["B", "KB", "MB", "GB", "TB"], i = 0, n = bytes;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return (i ? n.toFixed(n < 10 ? 1 : 0) : n) + " " + units[i];
+  }
+  function treeJoin(dir, name) { return dir === "/" ? "/" + name : dir + "/" + name; }
+  function treeClean(path) {
+    path = String(path || "").trim().replace(/\/+/g, "/");
+    if (path.charAt(0) !== "/") { path = "/" + path; }
+    if (path.length > 1) { path = path.replace(/\/$/, ""); }
+    return path;
+  }
+  function treeUnder(path, dir) { return dir === "/" ? path !== "/" : path.indexOf(dir + "/") === 0; }
+  function pickedTable(browser) {
+    var form = browser.closest("form");
+    return form && form.querySelector("[data-picked]");
+  }
   function pickedRow(table, path) {
     return Array.prototype.find.call(table.querySelectorAll("input[name=folder]"), function (box) { return box.value === path; });
   }
+  function pickedPaths(browser) {
+    var table = pickedTable(browser);
+    if (!table) { return []; }
+    return Array.prototype.filter.call(table.querySelectorAll("input[name=folder]"), function (box) { return box.checked; })
+      .map(function (box) { return box.value; });
+  }
   function pick(browser, path, on) {
-    var form = browser.closest("form");
-    var table = form && form.querySelector("[data-picked]");
+    var table = pickedTable(browser);
     if (!table) { return; }
     var box = pickedRow(table, path);
     if (!box) {
@@ -335,92 +366,223 @@
       cell.appendChild(box); row.appendChild(cell);
       var name = document.createElement("td"); name.className = "cpr:mono"; name.textContent = path; row.appendChild(name);
       var as = document.createElement("td"); as.innerHTML = '<span class="cpr:text-base-content/50">when saved</span>'; row.appendChild(as);
+      var drop = document.createElement("td");
+      var button = document.createElement("button");
+      button.type = "button"; button.className = "cpr:btn cpr:btn-xs cpr:btn-ghost cpr:btn-square"; button.dataset.unpick = path;
+      button.setAttribute("aria-label", "Take " + path + " off the list"); button.textContent = "×";
+      drop.appendChild(button); row.appendChild(drop);
       var empty = table.querySelector("[data-picked-empty]");
       table.querySelector("tbody").insertBefore(row, empty);
-      if (empty) { empty.hidden = true; }
     }
     box.checked = on;
+    settlePicked(table);
+  }
+  function settlePicked(table) {
+    var empty = table.querySelector("[data-picked-empty]");
+    if (empty) { empty.hidden = table.querySelectorAll("input[name=folder]").length > 0; }
     settle(table);
+    var form = table.closest("form");
+    if (form) { form.querySelectorAll("[data-folder-browser]").forEach(refreshTree); }
   }
-  function drawListing(browser, listing) {
-    browser.dataset.dir = listing.Dir;
-    var form = browser.closest("form");
-    var picked = form && form.querySelector("[data-picked]");
-    var crumbs = browser.querySelector("[data-crumbs]");
-    crumbs.textContent = "";
-    var parts = listing.Dir === "/" ? [] : listing.Dir.replace(/^\//, "").split("/");
-    var path = "";
-    [{ name: "/", path: "/" }].concat(parts.map(function (part) { path += "/" + part; return { name: part, path: path }; })).forEach(function (step, i) {
-      if (i) { var slash = document.createElement("span"); slash.className = "cpr:text-base-content/40"; slash.textContent = "/"; crumbs.appendChild(slash); }
-      var button = document.createElement("button");
-      button.type = "button"; button.className = "cpr:btn cpr:btn-xs cpr:btn-ghost cpr:mono"; button.dataset.go = step.path; button.textContent = step.name;
-      crumbs.appendChild(button);
-    });
-    var label = browser.querySelector("[data-crumb-dir]");
-    if (label) { label.textContent = listing.Dir; }
-    var body = browser.querySelector("[data-entries]");
-    body.textContent = "";
-    (listing.Entries || []).forEach(function (entry) {
-      var row = document.createElement("tr");
-      var cell = document.createElement("td");
+  function treeNode(browser, path) {
+    return Array.prototype.find.call(browser.querySelectorAll("[data-node]"), function (el) { return el.dataset.node === path; });
+  }
+  function makeNode(entry, depth) {
+    var el = document.createElement("div");
+    el.setAttribute("role", "treeitem");
+    var row = document.createElement("div");
+    row.className = "cpr:tree-row";
+    row.style.paddingLeft = (0.5 + depth * 1.25) + "rem";
+    el.appendChild(row);
+    if (entry.Kind === "folder") {
+      el.dataset.node = entry.Path;
+      el.dataset.depth = depth;
+      el.dataset.chosen = entry.ChosenAs || "";
+      el.dataset.within = entry.Within || "";
+      var toggle = document.createElement("button");
+      toggle.type = "button"; toggle.className = "cpr:tree-toggle"; toggle.dataset.toggle = ""; toggle.innerHTML = treeIcons.chevron;
+      toggle.setAttribute("aria-expanded", "false"); toggle.setAttribute("aria-label", "Open " + entry.Path);
+      row.appendChild(toggle);
       var box = document.createElement("input");
-      box.type = "checkbox"; box.className = "cpr:checkbox cpr:checkbox-sm"; box.setAttribute("aria-label", entry.Path);
-      if (entry.ChosenAs) { box.checked = true; box.disabled = true; }
-      else {
-        box.dataset.pick = entry.Path;
-        var already = picked && pickedRow(picked, entry.Path);
-        box.checked = !!(already && already.checked);
-      }
-      cell.appendChild(box); row.appendChild(cell);
-      var name = document.createElement("td");
-      var open = document.createElement("button");
-      open.type = "button"; open.className = "cpr:link cpr:link-hover cpr:mono"; open.dataset.go = entry.Path; open.textContent = entry.Name + "/";
-      name.appendChild(open); row.appendChild(name);
-      var as = document.createElement("td");
-      if (entry.ChosenAs) { as.textContent = entry.ChosenAs; } else { as.innerHTML = '<span class="cpr:text-base-content/50">not yet</span>'; }
-      row.appendChild(as);
-      body.appendChild(row);
-    });
-    if (!(listing.Entries || []).length) {
-      var none = document.createElement("tr");
-      none.innerHTML = '<td colspan="3" class="cpr:text-base-content/50">No folder under it.</td>';
-      body.appendChild(none);
+      box.type = "checkbox"; box.className = "cpr:checkbox cpr:checkbox-sm"; box.dataset.pick = entry.Path; box.setAttribute("aria-label", "Back up " + entry.Path);
+      row.appendChild(box);
+      row.insertAdjacentHTML("beforeend", treeIcons.folder);
+      var name = document.createElement("button");
+      name.type = "button"; name.className = "cpr:tree-name"; name.dataset.toggle = ""; name.textContent = entry.Name; name.title = entry.Path;
+      row.appendChild(name);
+      if (entry.Link) { row.insertAdjacentHTML("beforeend", treeIcons.link); }
+      var meta = document.createElement("span"); meta.className = "cpr:tree-meta"; meta.dataset.meta = "";
+      row.appendChild(meta);
+      var children = document.createElement("div");
+      children.setAttribute("role", "group"); children.dataset.children = ""; children.hidden = true;
+      el.appendChild(children);
+    } else {
+      row.insertAdjacentHTML("beforeend", '<span class="cpr:size-6 cpr:shrink-0"></span><span class="cpr:size-5 cpr:shrink-0"></span>');
+      row.insertAdjacentHTML("beforeend", treeIcons.file);
+      var file = document.createElement("span"); file.className = "cpr:tree-name cpr:tree-file"; file.textContent = entry.Name; file.title = entry.Path;
+      row.appendChild(file);
+      if (entry.Link) { row.insertAdjacentHTML("beforeend", treeIcons.link); }
+      var size = document.createElement("span"); size.className = "cpr:tree-meta"; size.textContent = treeSize(entry.Size || 0);
+      row.appendChild(size);
     }
+    return el;
   }
-  function browse(browser, dir) {
+  function treeNote(depth, text, className) {
+    var note = document.createElement("div");
+    note.className = "cpr:tree-row cpr:tree-note" + (className ? " " + className : "");
+    note.style.paddingLeft = (0.5 + depth * 1.25 + 3) + "rem";
+    note.textContent = text;
+    return note;
+  }
+  function fetchListing(browser, dir) {
     var url = browser.dataset.browse + (browser.dataset.browse.indexOf("?") >= 0 ? "&" : "?") + "dir=" + encodeURIComponent(dir);
-    fetch(url, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
+    return fetch(url, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
       .then(function (response) { return response.json().then(function (data) { return { ok: response.ok, data: data }; }); })
       .then(function (result) {
-        if (!result.ok) { throw new Error(result.data && result.data.error ? result.data.error : "could not read the folder"); }
-        drawListing(browser, result.data);
-      })
-      .catch(function (err) {
-        var body = browser.querySelector("[data-entries]");
-        body.textContent = "";
-        var row = document.createElement("tr");
-        var cell = document.createElement("td"); cell.colSpan = 3; cell.className = "cpr:text-error"; cell.textContent = String(err.message || err);
-        row.appendChild(cell); body.appendChild(row);
+        if (!result.ok) { throw new Error(result.data && result.data.error ? result.data.error : "could not read " + dir); }
+        return result.data;
       });
   }
+  function loadNode(browser, el) {
+    if (el.dataset.loaded) { return Promise.resolve(); }
+    var children = el.querySelector("[data-children]");
+    var depth = Number(el.dataset.depth) || 0;
+    children.textContent = "";
+    children.appendChild(treeNote(depth, "Reading…"));
+    return fetchListing(browser, el.dataset.node).then(function (listing) {
+      children.textContent = "";
+      if (listing.Dir === "/" && listing.Within) { el.dataset.chosen = listing.Within; }
+      (listing.Entries || []).forEach(function (entry) {
+        entry.Within = listing.Within || "";
+        children.appendChild(makeNode(entry, depth + 1));
+      });
+      if (listing.More) { children.appendChild(treeNote(depth, "and " + listing.More + " more files")); }
+      if (!(listing.Entries || []).length) { children.appendChild(treeNote(depth, "Empty")); }
+      el.dataset.loaded = "1";
+      refreshTree(browser);
+    }, function (err) {
+      children.textContent = "";
+      children.appendChild(treeNote(depth, String(err.message || err), "cpr:text-error"));
+      throw err;
+    });
+  }
+  function expandNode(el, open) {
+    el.querySelector("[data-children]").hidden = !open;
+    el.querySelector("[data-toggle]").setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  function toggleNode(browser, el) {
+    var open = el.querySelector("[data-toggle]").getAttribute("aria-expanded") === "true";
+    if (open) { expandNode(el, false); return; }
+    expandNode(el, true);
+    loadNode(browser, el).catch(function () {});
+  }
+  // The state of every folder's box: backed up already, inside a folder
+  // that is or that was just picked, or free to pick.
+  function refreshTree(browser) {
+    var picks = pickedPaths(browser);
+    browser.querySelectorAll("[data-node]").forEach(function (el) {
+      var path = el.dataset.node;
+      var box = el.querySelector("[data-pick]");
+      var meta = el.querySelector("[data-meta]");
+      var row = el.firstElementChild;
+      var inside = el.dataset.within;
+      if (!inside && !el.dataset.chosen) {
+        picks.forEach(function (pick) { if (treeUnder(path, pick) && (!inside || inside.length < pick.length)) { inside = pick; } });
+      }
+      delete row.dataset.pickedRow;
+      if (el.dataset.chosen) {
+        box.checked = true; box.disabled = true; meta.textContent = "backed up as " + el.dataset.chosen;
+      } else if (inside) {
+        box.checked = false; box.disabled = true; meta.textContent = "inside " + inside;
+      } else {
+        box.disabled = false; box.checked = picks.indexOf(path) >= 0; meta.textContent = box.checked ? "picked" : "";
+        if (box.checked) { row.dataset.pickedRow = ""; }
+      }
+    });
+  }
+  function pathError(browser, text) {
+    var error = browser.querySelector("[data-path-error]");
+    if (!error) { return; }
+    error.textContent = text || "";
+    error.hidden = !text;
+  }
+  // Opens the tree down to a path, reading each level on the way, and
+  // brings the folder into view.
+  function openPath(browser, path) {
+    path = treeClean(path);
+    var input = browser.querySelector("[data-path]");
+    if (input) { input.value = path; }
+    pathError(browser, "");
+    var parts = path === "/" ? [] : path.slice(1).split("/");
+    var current = "/";
+    function step(i) {
+      var el = treeNode(browser, current);
+      if (!el) {
+        return fetchListing(browser, current).then(function () {
+          throw new Error(current + " is not in the folder above it; open that folder again");
+        });
+      }
+      expandNode(el, true);
+      return loadNode(browser, el).then(function () {
+        if (i === parts.length) {
+          // The folder's row goes to the top of the box, with what it
+          // holds under it; the box itself is only scrolled into view.
+          var tree = browser.querySelector("[data-tree]");
+          tree.scrollTop += el.firstElementChild.getBoundingClientRect().top - tree.getBoundingClientRect().top;
+          tree.scrollIntoView({ block: "nearest" });
+          var box = el.querySelector("[data-pick]");
+          if (box && !box.disabled) { box.focus({ preventScroll: true }); }
+          return;
+        }
+        current = treeJoin(current, parts[i]);
+        return step(i + 1);
+      });
+    }
+    return step(0).catch(function (err) { pathError(browser, String(err.message || err)); });
+  }
+  function plantTree(browser) {
+    var tree = browser.querySelector("[data-tree]");
+    if (!tree || tree.querySelector("[data-node]")) { return; }
+    tree.textContent = "";
+    var root = makeNode({ Name: "/", Path: "/", Kind: "folder" }, 0);
+    tree.appendChild(root);
+    expandNode(root, true);
+    loadNode(browser, root).catch(function () {});
+  }
   document.addEventListener("click", function (event) {
-    var go = event.target.closest("[data-go]");
-    if (!go) { return; }
-    var browser = go.closest("[data-folder-browser]");
-    if (browser) { browse(browser, go.dataset.go); }
+    var hit = event.target.closest("[data-toggle], [data-go], [data-open], [data-unpick]");
+    if (!hit) { return; }
+    if (hit.dataset.unpick !== undefined) {
+      var table = hit.closest("[data-picked]");
+      hit.closest("tr").remove();
+      if (table) { settlePicked(table); }
+      return;
+    }
+    var browser = hit.closest("[data-folder-browser]");
+    if (!browser) { return; }
+    if (hit.dataset.toggle !== undefined) { toggleNode(browser, hit.closest("[data-node]")); }
+    else if (hit.dataset.go !== undefined) { openPath(browser, hit.dataset.go); }
+    else { openPath(browser, browser.querySelector("[data-path]").value); }
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Enter" || !event.target.matches || !event.target.matches("[data-folder-browser] [data-path]")) { return; }
+    event.preventDefault();
+    openPath(event.target.closest("[data-folder-browser]"), event.target.value);
   });
   document.addEventListener("change", function (event) {
     var box = event.target;
-    if (!box.matches || !box.matches("input[type=checkbox][data-pick]")) { return; }
-    var browser = box.closest("[data-folder-browser]");
-    if (browser) { pick(browser, box.dataset.pick, box.checked); }
+    if (!box.matches) { return; }
+    if (box.matches("input[type=checkbox][data-pick]")) {
+      var browser = box.closest("[data-folder-browser]");
+      if (browser) { pick(browser, box.dataset.pick, box.checked); }
+    } else if (box.matches("[data-picked] input[name=folder], [data-picked] [data-tick-all]")) {
+      settlePicked(box.closest("[data-picked]"));
+    }
   });
-  // A browser drawn without a listing, on a page the drawer fetched
-  // later for instance, reads its directory now.
+  // A tree drawn without its rows, on a page the drawer fetched later
+  // for instance, reads / now.
   function wake(scope) {
-    scope.querySelectorAll("[data-folder-browser]").forEach(function (browser) {
-      if (browser.querySelector("[data-entries-empty]")) { browse(browser, browser.dataset.dir || "/"); }
-    });
+    scope.querySelectorAll("[data-folder-browser]").forEach(plantTree);
   }
   document.addEventListener("gniza:loaded", function (event) { prepare(event.detail || document); wake(event.detail || document); });
   prepare(document);

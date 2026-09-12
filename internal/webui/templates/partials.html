@@ -280,12 +280,13 @@
   </div>
 
   <section role="tabpanel" data-tab-panel="folders" aria-label="Folders">
-    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Each folder becomes a source of its own, backed up from where it lies, files and all, under the folder's name. Open a folder below to look inside it; tick it to back it up.</p>
+    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Each folder ticked becomes a source of its own, backed up from where it lies, files and all, under the folder's name. Open folders below to look inside them; a folder already backed up, or inside one that is, says so.</p>
     <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-tickable data-picked>
       <thead><tr>
         <th class="cpr:w-8"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-tick-all aria-label="Tick every folder"></th>
-        <th>Folder</th>
+        <th>Folders to back up</th>
         <th>Backed up as</th>
+        <th class="cpr:w-8"></th>
       </tr></thead>
       <tbody>
       {{range $c.FolderSources}}
@@ -293,45 +294,40 @@
           <td>{{template "tickbox" ($c.Box "folder" .Path .Name false .Name)}}</td>
           <td class="cpr:mono">{{.Path}}{{with .Container}} <span class="cpr:text-xs cpr:text-base-content/60 cpr:font-sans">from container {{.Name}}</span>{{end}}</td>
           <td>{{.Name}}</td>
+          <td></td>
         </tr>
       {{end}}
-        <tr data-picked-empty{{if $c.FolderSources}} hidden{{end}}><td colspan="3" class="cpr:text-base-content/50">No folder yet. Tick one below, or name one.</td></tr>
+        <tr data-picked-empty{{if $c.FolderSources}} hidden{{end}}><td colspan="4" class="cpr:text-base-content/50">No folder yet. Tick one in the browser below.</td></tr>
       </tbody>
     </table></div>
 
-    <div class="cpr:mt-4" data-folder-browser data-browse="?p=accounts/browse" data-dir="{{with $c.Listing.Dir}}{{.}}{{else}}/{{end}}">
-      <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-1 cpr:mb-2 cpr:text-sm" data-crumbs aria-label="Where the browser is">
-        {{range $i, $crumb := $c.Crumbs}}{{if $i}}<span class="cpr:text-base-content/40">/</span>{{end}}<button type="button" class="cpr:btn cpr:btn-xs cpr:btn-ghost cpr:mono" data-go="{{$crumb.Path}}">{{$crumb.Name}}</button>{{end}}
+    <div class="cpr:mt-4" data-folder-browser data-browse="?p=accounts/browse">
+      <div class="cpr:flex cpr:gap-2 cpr:mb-2">
+        <input type="text" class="cpr:input cpr:input-sm cpr:mono cpr:flex-1 cpr:min-w-0" value="/" placeholder="/var/www" aria-label="Folder to open" autocomplete="off" spellcheck="false" data-path>
+        <button type="button" class="cpr:btn cpr:btn-sm" data-open>Open</button>
       </div>
+      <p class="cpr:text-xs cpr:text-error cpr:mb-2" data-path-error hidden></p>
       {{with $k.Roots}}<div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-1 cpr:mb-2 cpr:text-xs cpr:text-base-content/60">Usual places: {{range .}}<button type="button" class="cpr:btn cpr:btn-xs cpr:mono" data-go="{{.}}">{{.}}</button>{{end}}</div>{{end}}
-      <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">
-        <thead><tr><th class="cpr:w-8"></th><th>In <span class="cpr:mono" data-crumb-dir>{{with $c.Listing.Dir}}{{.}}{{else}}/{{end}}</span></th><th>Backed up as</th></tr></thead>
-        <tbody data-entries>
-        {{range $c.Listing.Entries}}
-          <tr>
-            <td>{{if .ChosenAs}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" checked disabled aria-label="{{.Path}}">{{else}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-pick="{{.Path}}" aria-label="{{.Path}}">{{end}}</td>
-            <td><button type="button" class="cpr:link cpr:link-hover cpr:mono" data-go="{{.Path}}">{{.Name}}/</button></td>
-            <td>{{if .ChosenAs}}{{.ChosenAs}}{{else}}<span class="cpr:text-base-content/50">not yet</span>{{end}}</td>
-          </tr>
-        {{else}}
-          <tr data-entries-empty><td colspan="3" class="cpr:text-base-content/50">{{if $c.Listing.Dir}}No folder under it.{{else}}The browser needs the page's script.{{end}}</td></tr>
-        {{end}}
-        </tbody>
-      </table></div>
+      <div class="cpr:tree" role="tree" aria-label="The folders on this server" data-tree>
+        <p class="cpr:p-3 cpr:text-base-content/50" data-tree-empty>The browser needs the page's script. A folder can still be named by hand below.</p>
+      </div>
     </div>
 
-    <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-4">
-      <div>
-        <label class="cpr:field-label" for="folder_path">Or name a folder</label>
-        <input type="text" class="cpr:input cpr:input-sm cpr:w-full cpr:mono" id="folder_path" name="folder_path" placeholder="/var/www/shop" value="{{$c.Field "folder_path"}}" autocomplete="off">
-        <small class="cpr:help">Any folder on this server, named from /.</small>
+    <details class="cpr:mt-4">
+      <summary class="cpr:fold cpr:text-sm">Name a folder by hand</summary>
+      <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2 cpr:mt-3">
+        <div>
+          <label class="cpr:field-label" for="folder_path">Folder</label>
+          <input type="text" class="cpr:input cpr:input-sm cpr:w-full cpr:mono" id="folder_path" name="folder_path" placeholder="/var/www/shop" value="{{$c.Field "folder_path"}}" autocomplete="off">
+          <small class="cpr:help">Any folder on this server, named from /.</small>
+        </div>
+        <div>
+          <label class="cpr:field-label" for="folder_name">Its name</label>
+          <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="folder_name" name="folder_name" placeholder="after the folder, if left empty" value="{{$c.Field "folder_name"}}">
+          <small class="cpr:help">How that folder is called on these pages and in the backups. Letters, digits, dot, dash and underscore.</small>
+        </div>
       </div>
-      <div>
-        <label class="cpr:field-label" for="folder_name">Its name</label>
-        <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="folder_name" name="folder_name" placeholder="after the folder, if left empty" value="{{$c.Field "folder_name"}}">
-        <small class="cpr:help">How that folder is called on these pages and in the backups. Letters, digits, dot, dash and underscore.</small>
-      </div>
-    </div>
+    </details>
   </section>
 
   <section role="tabpanel" data-tab-panel="mysql" aria-label="MySQL">

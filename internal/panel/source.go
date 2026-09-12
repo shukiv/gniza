@@ -141,21 +141,34 @@ type EngineCandidate struct {
 	Error string
 }
 
-// Listing is one directory of the server, for the folder browser: the
-// directories under it, with the ones chosen already marked.
+// Listing is one directory of the server, for the folder browser: what
+// is under it, folders first, with the ones chosen already marked.
 type Listing struct {
 	Dir string
 	// Parent is the directory above, or empty at /.
-	Parent  string
+	Parent string
+	// Within names the source whose folder is Dir or holds it, or is
+	// empty: everything under Dir is backed up already as part of it.
+	Within  string
 	Entries []FolderEntry
+	// More counts the files left out once the first ones are shown; a
+	// folder is never left out.
+	More int
 }
 
-// FolderEntry is one directory in a Listing.
+// FolderEntry is one folder or file in a Listing.
 type FolderEntry struct {
 	Name string
 	Path string
-	// ChosenAs names the source that already backs this directory up,
-	// or is empty.
+	// Kind is "folder" or "file". A file is shown so the folder can be
+	// recognised by what it holds; only a folder is chosen.
+	Kind string
+	// Size is the file's, in bytes; zero for a folder.
+	Size int64
+	// Link says the entry is a symbolic link, and Kind is its target's.
+	Link bool
+	// ChosenAs names the source that already backs this folder up, or
+	// is empty.
 	ChosenAs string
 }
 

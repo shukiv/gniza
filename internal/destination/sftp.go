@@ -1,10 +1,13 @@
 package destination
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -27,6 +30,9 @@ type SFTP struct {
 	// client's default, which Preflight rejects: an unpinned host key
 	// turns a DNS or routing compromise into a credential disclosure.
 	KnownHostsFile string
+	// SSHPath is the ssh client Preflight logs in with; empty means the
+	// one on PATH, which is also the one restic drives.
+	SSHPath string
 }
 
 var _ Destination = (*SFTP)(nil)
@@ -126,7 +132,62 @@ func (s *SFTP) Preflight(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("sftp: dial: %w", err)
 	}
-	return conn.Close()
+	if err := conn.Close(); err != nil {
+		return err
+	}
+	return s.login(ctx, port)
+}
+
+// login opens the sftp subsystem the way restic will and closes it
+// again, so a key the server does not know, or a host key that has
+// changed, is found out by Test and said in words rather than by the
+// first backup in restic's. The port answering was not proof of either.
+func (s *SFTP) login(ctx context.Context, port int) error {
+	ssh := s.SSHPath
+	if ssh == "" {
+		ssh = "ssh"
+	}
+	options, err := s.Options()
+	if err != nil {
+		return err
+	}
+	args := append([]string{"-p", strconv.Itoa(port), "-l", s.User},
+		strings.Fields(options["sftp.args"])...)
+	args = append(args, "-o", "ConnectTimeout=20", s.Host, "-s", "sftp")
+	cmd := exec.CommandContext(ctx, ssh, args...)
+	// sftp-server reads its first packet from stdin; at end of file it
+	// exits cleanly, which is all that is asked of it.
+	cmd.Stdin = strings.NewReader("")
+	var said bytes.Buffer
+	cmd.Stdout, cmd.Stderr = io.Discard, &said
+	if err := cmd.Run(); err != nil {
+		return s.explain(said.String(), err)
+	}
+	return nil
+}
+
+// explain turns ssh's complaint into what the operator has to do.
+func (s *SFTP) explain(said string, err error) error {
+	first := ""
+	for _, line := range strings.Split(said, "\n") {
+		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "Warning: Permanently added") {
+			first = line
+			break
+		}
+	}
+	switch {
+	case strings.Contains(said, "Permission denied (publickey"):
+		return fmt.Errorf("sftp: %s does not accept Gniza's key for %s: put the public key shown on this destination's card into %s's ~/.ssh/authorized_keys on that server, then test again",
+			s.Host, s.User, s.User)
+	case strings.Contains(said, "Host key verification failed"), strings.Contains(said, "REMOTE HOST IDENTIFICATION HAS CHANGED"):
+		return fmt.Errorf("sftp: %s's host key is not the one pinned when this destination was added; if that server was reinstalled, edit the destination to pin its new key",
+			s.Host)
+	case strings.Contains(said, "subsystem request failed"):
+		return fmt.Errorf("sftp: %s accepts the key but has no sftp subsystem for %s; restic needs one", s.Host, s.User)
+	case first != "":
+		return fmt.Errorf("sftp: ssh to %s@%s: %s", s.User, s.Host, first)
+	}
+	return fmt.Errorf("sftp: ssh to %s@%s: %w", s.User, s.Host, err)
 }
 
 func (s *SFTP) validate() error {

@@ -3,11 +3,13 @@ package destination
 import (
 	"context"
 	"crypto/tls"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -134,6 +136,65 @@ func TestSFTPPreflightRejectsLooseKeyPermissions(t *testing.T) {
 	err := dest.Preflight(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "world-accessible") {
 		t.Fatalf("err = %v, want a permissions complaint", err)
+	}
+}
+
+// The port answering is not proof the key is accepted: Preflight logs
+// in the way restic will, and says in words what ssh complained of.
+func TestSFTPPreflightLogsInAndExplainsARefusedKey(t *testing.T) {
+	dir := t.TempDir()
+	key := filepath.Join(dir, "id_ed25519")
+	known := filepath.Join(dir, "known_hosts")
+	for _, file := range []string{key, known} {
+		if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	port := listener.Addr().(*net.TCPAddr).Port
+	fake := func(script string) string {
+		path := filepath.Join(dir, "ssh-"+strconv.Itoa(len(script)))
+		if err := os.WriteFile(path, []byte("#!/bin/sh\n"+script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	dest := &SFTP{
+		Host: "127.0.0.1", Port: port, User: "backup", Root: "/b",
+		IdentityFile: key, KnownHostsFile: known,
+	}
+
+	dest.SSHPath = fake("echo \"$@\" > " + filepath.Join(dir, "args") + "; exit 0\n")
+	if err := dest.Preflight(context.Background()); err != nil {
+		t.Fatalf("a server that accepts the key: %v", err)
+	}
+	args, _ := os.ReadFile(filepath.Join(dir, "args"))
+	for _, want := range []string{"-p " + strconv.Itoa(port), "-l backup", "-i " + key, "BatchMode=yes", "127.0.0.1 -s sftp"} {
+		if !strings.Contains(string(args), want) {
+			t.Errorf("ssh was run as %q, without %q", strings.TrimSpace(string(args)), want)
+		}
+	}
+
+	dest.SSHPath = fake("echo 'backup@127.0.0.1: Permission denied (publickey,password).' >&2; exit 255\n")
+	err = dest.Preflight(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "does not accept Gniza's key for backup") || !strings.Contains(err.Error(), "authorized_keys") {
+		t.Errorf("a refused key: %v", err)
+	}
+
+	dest.SSHPath = fake("echo 'Host key verification failed.' >&2; exit 255\n")
+	err = dest.Preflight(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "host key is not the one pinned") {
+		t.Errorf("a changed host key: %v", err)
+	}
+
+	dest.SSHPath = fake("echo 'ssh: connect to host 127.0.0.1 port 22: Connection refused' >&2; exit 255\n")
+	err = dest.Preflight(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "ssh to backup@127.0.0.1: ssh: connect") {
+		t.Errorf("another complaint: %v", err)
 	}
 }
 

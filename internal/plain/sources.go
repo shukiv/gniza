@@ -51,19 +51,29 @@ func (p *Provider) source(name string) (panel.Source, error) {
 	return panel.Source{}, fmt.Errorf("plain: %s is %w: nothing of that name has been chosen to back up", name, panel.ErrNoSuchAccount)
 }
 
-// Candidates is what could be chosen now: the directories under the
-// roots that are not a source yet, the databases each client can see,
-// and the containers each engine knows about.
+// Candidates is what could be chosen now, by kind: the directories
+// under the roots, the databases each client can see with the users
+// that hold rights on them, and the containers each engine knows about
+// grouped into the stacks their compose files make. What is chosen
+// already is marked, not left out, so the pages can say so.
 func (p *Provider) Candidates(ctx context.Context) (panel.Candidates, error) {
 	sources, err := p.Sources(ctx)
 	if err != nil {
 		return panel.Candidates{}, err
 	}
-	chosenPath := map[string]bool{}
+	pathAs := map[string]string{}
+	mysqlAs := map[string]string{}
+	postgresAs := map[string]string{}
 	chosenContainer := map[string]bool{}
 	for _, source := range sources {
-		if source.Path != "" {
-			chosenPath[filepath.Clean(source.Path)] = true
+		if source.Path != "" && source.Container == nil {
+			pathAs[filepath.Clean(source.Path)] = source.Name
+		}
+		for _, name := range source.MySQL {
+			mysqlAs[name] = source.Name
+		}
+		for _, name := range source.PostgreSQL {
+			postgresAs[name] = source.Name
 		}
 		if source.Container != nil {
 			chosenContainer[source.Container.Engine+"/"+source.Container.Name] = true
@@ -84,39 +94,79 @@ func (p *Provider) Candidates(ctx context.Context) (panel.Candidates, error) {
 				continue
 			}
 			path := filepath.Join(root, name)
-			if !chosenPath[path] {
-				found.Folders = append(found.Folders, path)
-			}
+			found.Folders = append(found.Folders, panel.FolderCandidate{Path: path, ChosenAs: pathAs[path]})
 		}
 	}
 	if sizes, err := p.databaseSizes(ctx); err != nil {
 		found.MySQLError = err.Error()
 	} else {
-		for name := range sizes {
-			found.MySQL = append(found.MySQL, name)
+		users, err := p.mysqlUsers(ctx)
+		if err != nil {
+			p.log().Debug("the MySQL users could not be listed", "error", err)
 		}
-		sort.Strings(found.MySQL)
+		for name, size := range sizes {
+			found.MySQL = append(found.MySQL, panel.DatabaseCandidate{
+				Name: name, Size: size, Users: users[name], ChosenAs: mysqlAs[name]})
+		}
+		sort.Slice(found.MySQL, func(i, j int) bool { return found.MySQL[i].Name < found.MySQL[j].Name })
 	}
-	if sizes, err := p.postgresSizes(ctx); err != nil {
+	if sizes, owners, err := p.postgresList(ctx); err != nil {
 		found.PostgreSQLError = err.Error()
 	} else {
-		for name := range sizes {
-			found.PostgreSQL = append(found.PostgreSQL, name)
+		for name, size := range sizes {
+			candidate := panel.DatabaseCandidate{Name: name, Size: size, ChosenAs: postgresAs[name]}
+			if owner := owners[name]; owner != "" {
+				candidate.Users = []string{owner}
+			}
+			found.PostgreSQL = append(found.PostgreSQL, candidate)
 		}
-		sort.Strings(found.PostgreSQL)
+		sort.Slice(found.PostgreSQL, func(i, j int) bool { return found.PostgreSQL[i].Name < found.PostgreSQL[j].Name })
 	}
 	for _, engine := range []string{"docker", "podman"} {
-		containers, err := p.containers(ctx, engine)
-		if err != nil {
-			p.log().Debug("no containers listed", "engine", engine, "error", err)
-			continue
+		looked := panel.EngineCandidate{Name: engine}
+		if dir := engineConfigDir(engine); dir != "" {
+			looked.ConfigDir = dir
+			looked.ChosenAs = pathAs[dir]
 		}
+		containers, stacks, err := p.containers(ctx, engine)
+		switch {
+		case err == nil:
+			looked.Present = true
+		case errors.Is(err, exec.ErrNotFound), errors.Is(err, fs.ErrNotExist):
+			// Not installed: nothing to say beyond that.
+		default:
+			looked.Present = true
+			looked.Error = err.Error()
+			p.log().Debug("no containers listed", "engine", engine, "error", err)
+		}
+		found.Engines = append(found.Engines, looked)
 		for i := range containers {
 			containers[i].Chosen = chosenContainer[engine+"/"+containers[i].Name]
 		}
 		found.Containers = append(found.Containers, containers...)
+		for _, stack := range stacks {
+			stack.ChosenAs = pathAs[stack.Dir]
+			found.Stacks = append(found.Stacks, stack)
+		}
 	}
+	sort.Slice(found.Stacks, func(i, j int) bool {
+		if found.Stacks[i].Engine != found.Stacks[j].Engine {
+			return found.Stacks[i].Engine < found.Stacks[j].Engine
+		}
+		return found.Stacks[i].Name < found.Stacks[j].Name
+	})
 	return found, nil
+}
+
+// engineConfigDir is where an engine keeps its own configuration, when
+// that directory is there: the daemon's settings, registries, and on
+// podman the quadlets under systemd.
+func engineConfigDir(engine string) string {
+	dir := map[string]string{"docker": "/etc/docker", "podman": "/etc/containers"}[engine]
+	if stat, err := os.Stat(dir); err != nil || !stat.IsDir() {
+		return ""
+	}
+	return dir
 }
 
 // AddSource records a choice, after checking it is one this server can
@@ -182,15 +232,16 @@ func (p *Provider) AddSource(ctx context.Context, source panel.Source) error {
 }
 
 // suggestName names a source nobody named: after its folder, or its
-// first database.
+// first database with the engine in front, so a database and a folder
+// called the same do not fight over one name.
 func suggestName(source panel.Source) string {
 	switch {
 	case source.Path != "":
 		return sanitizeName(filepath.Base(source.Path))
 	case len(source.MySQL) > 0:
-		return sanitizeName(source.MySQL[0])
+		return sanitizeName("mysql-" + source.MySQL[0])
 	case len(source.PostgreSQL) > 0:
-		return sanitizeName(source.PostgreSQL[0])
+		return sanitizeName("pg-" + source.PostgreSQL[0])
 	}
 	return ""
 }
@@ -262,20 +313,39 @@ func (p *Provider) pgCommand(ctx context.Context, tool string, args ...string) *
 	return exec.CommandContext(ctx, "runuser", append([]string{"-u", user, "--", tool}, args...)...)
 }
 
+// pgdumpall is pg_dumpall: named, or beside pg_dump when that was, or
+// the one on PATH.
+func (p *Provider) pgdumpall() string {
+	switch {
+	case p.PgDumpallPath != "":
+		return p.PgDumpallPath
+	case p.PgDumpPath != "":
+		return filepath.Join(filepath.Dir(p.PgDumpPath), "pg_dumpall")
+	}
+	return "pg_dumpall"
+}
+
 // postgresSizes lists every PostgreSQL database with the bytes it holds.
-// The templates are not anybody's.
 func (p *Provider) postgresSizes(ctx context.Context) (map[string]uint64, error) {
+	sizes, _, err := p.postgresList(ctx)
+	return sizes, err
+}
+
+// postgresList lists every PostgreSQL database with the bytes it holds
+// and the role that owns it. The templates are not anybody's, and
+// neither is postgres itself.
+func (p *Provider) postgresList(ctx context.Context) (sizes map[string]uint64, owners map[string]string, err error) {
 	if _, err := exec.LookPath(p.psql()); err != nil {
-		return nil, fmt.Errorf("plain: no psql on this server")
+		return nil, nil, fmt.Errorf("plain: no psql on this server")
 	}
 	cmd := p.pgCommand(ctx, p.psql(), "-At", "-F", "\t", "-d", "postgres", "-c",
-		"SELECT datname, pg_database_size(datname) FROM pg_database WHERE NOT datistemplate")
+		"SELECT datname, pg_database_size(datname), pg_get_userbyid(datdba) FROM pg_database WHERE NOT datistemplate")
 	var out, complaint bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &complaint
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("plain: psql: %w%s", err, saidOnStderr(complaint.String()))
+		return nil, nil, fmt.Errorf("plain: psql: %w%s", err, saidOnStderr(complaint.String()))
 	}
-	sizes := map[string]uint64{}
+	sizes, owners = map[string]uint64{}, map[string]string{}
 	scanner := bufio.NewScanner(&out)
 	for scanner.Scan() {
 		fields := strings.Split(scanner.Text(), "\t")
@@ -287,8 +357,107 @@ func (p *Provider) postgresSizes(ctx context.Context) (map[string]uint64, error)
 			size, _ = strconv.ParseUint(strings.TrimSpace(fields[1]), 10, 64)
 		}
 		sizes[fields[0]] = size
+		if len(fields) > 2 && strings.TrimSpace(fields[2]) != "" {
+			owners[fields[0]] = strings.TrimSpace(fields[2])
+		}
 	}
-	return sizes, nil
+	return sizes, owners, nil
+}
+
+// postgresRoles is every role on the server with its attributes and
+// memberships, as pg_dumpall writes them, so a restore elsewhere can
+// create the owner before the dump is loaded. It is kept beside the
+// dump and not run on restore.
+func (p *Provider) postgresRoles(ctx context.Context) ([]byte, error) {
+	if _, err := exec.LookPath(p.pgdumpall()); err != nil {
+		return nil, fmt.Errorf("plain: no pg_dumpall on this server")
+	}
+	cmd := p.pgCommand(ctx, p.pgdumpall(), "--roles-only")
+	var out, complaint bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &complaint
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("plain: pg_dumpall --roles-only: %w%s", err, saidOnStderr(complaint.String()))
+	}
+	return out.Bytes(), nil
+}
+
+// --- MySQL users ---
+
+// mysqlUsers lists, for each database, the accounts granted rights on
+// it at the schema level. A user granted everything on every database
+// is not listed against any of them; root is the operator, not a
+// customer.
+func (p *Provider) mysqlUsers(ctx context.Context) (map[string][]string, error) {
+	cmd := exec.CommandContext(ctx, p.mysql(), "-N", "-B", "-e",
+		"SELECT table_schema, grantee FROM information_schema.schema_privileges GROUP BY table_schema, grantee ORDER BY 1, 2")
+	var out, complaint bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &complaint
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("plain: mysql: %w%s", err, saidOnStderr(complaint.String()))
+	}
+	users := map[string][]string{}
+	scanner := bufio.NewScanner(&out)
+	for scanner.Scan() {
+		fields := strings.Split(scanner.Text(), "\t")
+		if len(fields) < 2 || fields[0] == "" {
+			continue
+		}
+		grantee := strings.TrimSpace(fields[1])
+		if grantee == "" || !usableGrantee(grantee) {
+			continue
+		}
+		users[fields[0]] = append(users[fields[0]], grantee)
+	}
+	return users, nil
+}
+
+// usableGrantee says a grantee reads as 'user'@'host', as the server
+// writes it, and nothing else: it is handed back to the server inside
+// SHOW GRANTS, so it is not allowed to be anything a query could hide
+// in.
+func usableGrantee(grantee string) bool {
+	if len(grantee) > 200 {
+		return false
+	}
+	for _, r := range grantee {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '\'' || r == '@' || r == '_' || r == '-' || r == '.' || r == '%' || r == '`':
+		default:
+			return false
+		}
+	}
+	return strings.Count(grantee, "'") == 4 && strings.Contains(grantee, "'@'")
+}
+
+// mysqlGrants is the grants of every account with rights on the
+// database, as SHOW GRANTS writes them, one account after another. They
+// are kept beside the dump so a restore elsewhere knows who used the
+// database; they are not run on restore, and on MySQL 8 they do not
+// carry the password anyway.
+func (p *Provider) mysqlGrants(ctx context.Context, database string) ([]byte, error) {
+	users, err := p.mysqlUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var text bytes.Buffer
+	fmt.Fprintf(&text, "-- Accounts with rights on %s, as SHOW GRANTS listed them.\n", database)
+	fmt.Fprintf(&text, "-- Kept beside the dump for reference; not run on restore.\n")
+	for _, grantee := range users[database] {
+		cmd := exec.CommandContext(ctx, p.mysql(), "-N", "-B", "-e", "SHOW GRANTS FOR "+grantee)
+		var out, complaint bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &out, &complaint
+		if err := cmd.Run(); err != nil {
+			return nil, fmt.Errorf("plain: show grants for %s: %w%s", grantee, err, saidOnStderr(complaint.String()))
+		}
+		fmt.Fprintf(&text, "\n-- %s\n", grantee)
+		scanner := bufio.NewScanner(&out)
+		for scanner.Scan() {
+			text.WriteString(scanner.Text())
+			text.WriteString(";\n")
+		}
+	}
+	return text.Bytes(), nil
 }
 
 // dumpPostgres writes one PostgreSQL database's dump as plain SQL,
@@ -357,20 +526,23 @@ func (p *Provider) engine(name string) (string, error) {
 	return "", fmt.Errorf("plain: %q is not a container engine; docker or podman", name)
 }
 
-// containers lists what one engine knows about, running or not.
-func (p *Provider) containers(ctx context.Context, engine string) ([]panel.ContainerCandidate, error) {
+// containers lists what one engine knows about, running or not, with
+// the stack each belongs to and how many mounts it has. One ps for the
+// names and one inspect for the rest: the labels and mounts come from
+// the same description a backup keeps.
+func (p *Provider) containers(ctx context.Context, engine string) ([]panel.ContainerCandidate, []panel.StackCandidate, error) {
 	tool, err := p.engine(engine)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if _, err := exec.LookPath(tool); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	cmd := exec.CommandContext(ctx, tool, "ps", "-a", "--format", "{{.Names}}\t{{.Image}}\t{{.Status}}")
 	var out, complaint bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &complaint
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("plain: %s ps: %w%s", engine, err, saidOnStderr(complaint.String()))
+		return nil, nil, fmt.Errorf("plain: %s ps: %w%s", engine, err, saidOnStderr(complaint.String()))
 	}
 	var found []panel.ContainerCandidate
 	scanner := bufio.NewScanner(&out)
@@ -389,7 +561,71 @@ func (p *Provider) containers(ctx context.Context, engine string) ([]panel.Conta
 		found = append(found, candidate)
 	}
 	sort.Slice(found, func(i, j int) bool { return found[i].Name < found[j].Name })
-	return found, nil
+	if len(found) == 0 {
+		return nil, nil, nil
+	}
+	names := make([]string, len(found))
+	for i, c := range found {
+		names[i] = c.Name
+	}
+	described, err := p.inspectAll(ctx, engine, names)
+	if err != nil {
+		// The list is still worth showing without the stacks and the
+		// mount counts.
+		p.log().Debug("containers listed but not inspected", "engine", engine, "error", err)
+		return found, nil, nil
+	}
+	byName := map[string]inspection{}
+	for _, d := range described {
+		byName[strings.TrimPrefix(d.Name, "/")] = d
+	}
+	stacks := map[string]*panel.StackCandidate{}
+	for i := range found {
+		d, known := byName[found[i].Name]
+		if !known {
+			continue
+		}
+		for _, mount := range d.Mounts {
+			if mount.Source != "" {
+				found[i].Mounts++
+			}
+		}
+		project, dir := d.stack()
+		if project == "" {
+			continue
+		}
+		found[i].Stack = project
+		stack, seen := stacks[project]
+		if !seen {
+			stack = &panel.StackCandidate{Engine: engine, Name: project, Dir: dir}
+			stacks[project] = stack
+		}
+		stack.Containers = append(stack.Containers, found[i].Name)
+	}
+	var made []panel.StackCandidate
+	for _, stack := range stacks {
+		made = append(made, *stack)
+	}
+	return found, made, nil
+}
+
+// inspectAll describes every container named in one call.
+func (p *Provider) inspectAll(ctx context.Context, engine string, names []string) ([]inspection, error) {
+	tool, err := p.engine(engine)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, tool, append([]string{"inspect", "--type", "container"}, names...)...)
+	var out, complaint bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &complaint
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("plain: %s inspect: %w%s", engine, err, saidOnStderr(complaint.String()))
+	}
+	var described []inspection
+	if err := json.Unmarshal(out.Bytes(), &described); err != nil {
+		return nil, fmt.Errorf("plain: %s inspect: %w", engine, err)
+	}
+	return described, nil
 }
 
 // inspection is what a container says about itself, as much as a backup
@@ -431,6 +667,24 @@ func (p *Provider) inspect(ctx context.Context, engine, name string) (inspection
 	}
 	described[0].raw = out.Bytes()
 	return described[0], nil
+}
+
+// stack is the compose project the container belongs to and the
+// directory its compose file lives in, from the labels docker compose
+// and podman-compose both write. Empty for a container run by hand.
+func (i inspection) stack() (project, dir string) {
+	for key, value := range i.Config.Labels {
+		if strings.HasSuffix(key, "compose.project") && value != "" {
+			project = value
+			dir = i.Config.Labels[key+".working_dir"]
+		}
+	}
+	if dir != "" {
+		if stat, err := os.Stat(dir); err != nil || !stat.IsDir() {
+			dir = ""
+		}
+	}
+	return project, dir
 }
 
 // composeFiles are the compose files a container's labels name, that

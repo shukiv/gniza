@@ -212,18 +212,91 @@
     });
   });
 
-  // A suggested folder is put into the field it names. The suggestions
-  // are in a form the drawer may fetch after this has run, so the page
-  // listens rather than each link.
+  // Tabs, and tables with a box per row. Both live in forms the drawer
+  // may fetch after this has run, so the page listens for them rather
+  // than each control, and looks again when the drawer says it loaded.
+  //
+  // Tabs: the sections stack one under the other without script; with
+  // it, one shows at a time and the tab strip says which. Boxes: the
+  // header's box ticks the column, a stack's box ticks its rows, and
+  // the button counts what is ticked so "Back these up" says how many.
+  function showTab(root, name) {
+    root.dataset.tabs = name;
+    root.querySelectorAll("[data-tab]").forEach(function (tab) {
+      var active = tab.dataset.tab === name;
+      tab.classList.toggle("cpr:tab-active", active);
+      tab.setAttribute("aria-selected", active ? "true" : "false");
+      tab.setAttribute("tabindex", active ? "0" : "-1");
+    });
+    root.querySelectorAll("[data-tab-panel]").forEach(function (panel) {
+      panel.hidden = panel.dataset.tabPanel !== name;
+    });
+  }
+  function rowBoxes(table) {
+    return Array.prototype.filter.call(table.querySelectorAll("input[type=checkbox]"), function (box) {
+      return !box.hasAttribute("data-tick-all") && !box.hasAttribute("data-tick-group") && !box.disabled;
+    });
+  }
+  function settle(table) {
+    var boxes = rowBoxes(table);
+    var ticked = boxes.filter(function (box) { return box.checked; }).length;
+    var all = table.querySelector("[data-tick-all]");
+    if (all) {
+      all.checked = boxes.length > 0 && ticked === boxes.length;
+      all.indeterminate = ticked > 0 && ticked < boxes.length;
+    }
+    table.querySelectorAll("[data-tick-group]").forEach(function (group) {
+      var own = boxes.filter(function (box) {
+        var row = box.closest("tr");
+        return row && row.dataset.group === group.dataset.tickGroup;
+      });
+      var on = own.filter(function (box) { return box.checked; }).length;
+      group.checked = own.length > 0 && on === own.length;
+      group.indeterminate = on > 0 && on < own.length;
+    });
+    var form = table.closest("form");
+    var button = form && form.querySelector("[data-tick-count]");
+    if (button) {
+      if (!button.dataset.label) { button.dataset.label = button.textContent; }
+      button.textContent = ticked > 0 ? button.dataset.label + " (" + ticked + ")" : button.dataset.label;
+    }
+  }
+  function prepare(scope) {
+    scope.querySelectorAll("[data-tabs]").forEach(function (root) { showTab(root, root.dataset.tabs); });
+    scope.querySelectorAll("[data-tickable]").forEach(settle);
+  }
   document.addEventListener("click", function (event) {
-    var fill = event.target.closest("[data-fill]");
-    if (!fill) { return; }
-    var field = document.querySelector(fill.getAttribute("data-fill"));
-    if (!field) { return; }
-    event.preventDefault();
-    field.value = fill.getAttribute("data-value") || fill.textContent.trim();
-    field.focus();
+    var tab = event.target.closest("[data-tab]");
+    if (!tab) { return; }
+    var root = tab.closest("[data-tabs]");
+    if (root) { showTab(root, tab.dataset.tab); }
   });
+  document.addEventListener("keydown", function (event) {
+    var tab = event.target.closest && event.target.closest("[data-tab]");
+    if (!tab || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) { return; }
+    var tabs = Array.prototype.slice.call(tab.parentNode.querySelectorAll("[data-tab]"));
+    var next = tabs[(tabs.indexOf(tab) + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+    event.preventDefault();
+    next.focus();
+    next.click();
+  });
+  document.addEventListener("change", function (event) {
+    var box = event.target;
+    if (!box.matches || !box.matches("input[type=checkbox]")) { return; }
+    var table = box.closest("[data-tickable]");
+    if (!table) { return; }
+    if (box.hasAttribute("data-tick-all")) {
+      rowBoxes(table).forEach(function (row) { row.checked = box.checked; });
+    } else if (box.hasAttribute("data-tick-group")) {
+      rowBoxes(table).forEach(function (row) {
+        var tr = row.closest("tr");
+        if (tr && tr.dataset.group === box.dataset.tickGroup) { row.checked = box.checked; }
+      });
+    }
+    settle(table);
+  });
+  document.addEventListener("gniza:loaded", function (event) { prepare(event.detail || document); });
+  prepare(document);
 
   // Row menus.
   //
@@ -722,6 +795,7 @@
         var content = fetched.querySelector("[data-drawer-content]");
         if (!content) { throw new Error("no form"); }
         drawerBody.innerHTML = content.innerHTML;
+        document.dispatchEvent(new CustomEvent("gniza:loaded", { detail: dialog }));
         focusFirst(dialog);
       })
       .catch(function () {

@@ -1,6 +1,7 @@
 # 0025 — What to back up on a server without a panel
 
-Status: accepted, 2026-09-12. Amends [ADR 0022](0022-a-server-without-a-panel.md).
+Status: accepted, 2026-09-12; amended the same day (the choosing is by
+kind, below). Amends [ADR 0022](0022-a-server-without-a-panel.md).
 
 ## Context
 
@@ -75,6 +76,64 @@ panel's list where it does not. The rail calls the page *What to back
 up* there. The terminal reads the candidates from the page's data and
 builds its forms from them.
 
+## Amended: the choosing is by kind
+
+The first form was one folder with the databases ticked beside it, and
+the operator's answer to it was: "There should be in tabs: Files/Folder,
+MySQL, Postgresql, Docker/Podman ... in the mysql it should be in a
+table, with the ability to select all. and also list the db users.
+docker/podman should be offering to backup containers/stacks and
+configurations." That is a different unit of choice, and it is the
+right one: what an operator of a LAMP box wants is *all the databases*,
+not a database beside a folder.
+
+**One tab per kind, one source per row.** The form is four tabs --
+Folders, MySQL, PostgreSQL, Docker / Podman -- each a table of what
+there is with a box per row and a box in the header that ticks the
+column. Every ticked row becomes a source of its own. Databases and
+containers are ticked by default, since backing them up is what the
+operator came for; folders are not, since the roots hold things like
+`/opt/containerd` too. A source of one database is named
+`mysql-<name>` or `pg-<name>` so it does not fight a folder of the same
+name for the one name space the snapshot tags are. The old shape, a
+folder with databases beside it, is still legal in `panel.Source` and
+still staged; the form no longer makes it.
+
+**The users are listed and their grants are kept, not restored.** The
+MySQL tab shows the grantees `information_schema.schema_privileges`
+names for each database, the PostgreSQL tab the owner
+`pg_database.datdba` names. A backup of a MySQL database keeps `SHOW
+GRANTS` for each of those accounts beside the record as
+`metadata/gniza/mysql-grants-<db>.sql`; a backup of a PostgreSQL
+database keeps `pg_dumpall --roles-only` there as `pg-roles.sql`. They
+are beside the record and not under `databases/`, because the rehearsal
+expects every `.sql` there to create something, and a grants file
+creates nothing. Nothing runs them on restore: `LoadDatabase` loads a
+dump into a database that exists, and creating accounts on a machine
+that may already have them is a decision for whoever restores. MySQL 8
+does not put the password in `SHOW GRANTS` anyway. The pages say
+"kept beside the dump for reference; not created again on restore".
+
+**A stack is its containers and the folder its compose file lives in.**
+Containers are grouped under the compose project their labels name
+(`com.docker.compose.project`, which podman-compose writes too), with a
+box on the group that ticks its rows. The stack's `working_dir` -- the
+compose file and usually the `.env` beside it -- is offered as a folder
+under the group, ticked by default: that is the stack's configuration.
+The engine's own configuration, `/etc/docker` or `/etc/containers`, is
+offered the same way. Both are ordinary folder sources; nothing new is
+restored.
+
+**What there is to choose from is read when asked.** The candidate
+lists cost a size query on each database client, a `docker ps` and one
+`docker inspect` of every container. They are read when the form is
+asked for (`?add=1`), shown again after a refusal, or opened by a person
+on an empty page -- not on the live refresh every three seconds while a
+backup runs, and not on the terminal's five-second read; the terminal
+asks with `add=1` when `a`, `m`, `p` or `c` is pressed. The Add button
+fetches the form into the sheet the way Edit does on the destinations
+page.
+
 ## Consequences
 
 - A plain server upgraded to this release backs up nothing until
@@ -89,3 +148,9 @@ builds its forms from them.
   source's folder and the source's databases.
 - Bead `cprest-arj` (volumes discovered as accounts) is closed by this:
   they are chosen, not discovered.
+- A database chosen on the first form as part of a folder source keeps
+  that shape; one chosen on the MySQL or PostgreSQL tab is a source of
+  its own, `mysql-<name>` or `pg-<name>`. Both restore the same way.
+- The grants and roles files are reference, not restore. Making them
+  restore is a decision for a later ADR, with the password question it
+  carries.

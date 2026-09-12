@@ -84,6 +84,7 @@ type Provider struct {
 	MysqldumpPath string
 	PsqlPath      string
 	PgDumpPath    string
+	PgDumpallPath string
 	// PostgresUser is the unix account the PostgreSQL clients run as
 	// when this process is root, because a fresh PostgreSQL trusts that
 	// account and nobody else. Empty means postgres; "-" means run them
@@ -310,9 +311,13 @@ type Record struct {
 	Container  *panel.ContainerRef `json:"container,omitempty"`
 	// ComposeFiles are the compose files copied beside the record, by
 	// their original paths, for a source made from a container.
-	ComposeFiles []string  `json:"compose_files,omitempty"`
-	Hostname     string    `json:"hostname"`
-	TakenAt      time.Time `json:"taken_at"`
+	ComposeFiles []string `json:"compose_files,omitempty"`
+	// Grants names the files beside the record that hold the database
+	// accounts' grants (MySQL) or the roles (PostgreSQL), kept for
+	// reference and not run on restore.
+	Grants   []string  `json:"grants,omitempty"`
+	Hostname string    `json:"hostname"`
+	TakenAt  time.Time `json:"taken_at"`
 }
 
 // Stage writes the dumps and the record into StagingDir and points the
@@ -387,8 +392,33 @@ func (p *Provider) Stage(ctx context.Context, req panel.StageRequest) (pkgacct.P
 		}
 	}
 
+	// Who used the databases, kept beside the record -- not under the
+	// dumps, where every .sql is expected to create something -- so a
+	// restore on another machine can make the accounts before loading.
+	var grants []string
+	keep := func(file, what string, read func() ([]byte, error)) {
+		text, err := read()
+		if err != nil {
+			payload.Missing = append(payload.Missing, pkgacct.Omission{What: what, Why: err.Error()})
+			return
+		}
+		if err := os.WriteFile(filepath.Join(metadata, RecordDir, file), text, 0o600); err != nil {
+			payload.Missing = append(payload.Missing, pkgacct.Omission{What: what, Why: err.Error()})
+			return
+		}
+		grants = append(grants, file)
+	}
+	if !req.SkipDatabases {
+		for _, name := range source.MySQL {
+			keep(MySQLGrantsFile(name), "grants on "+name, func() ([]byte, error) { return p.mysqlGrants(ctx, name) })
+		}
+		if len(source.PostgreSQL) > 0 {
+			keep(PostgresRolesFile, "PostgreSQL roles", func() ([]byte, error) { return p.postgresRoles(ctx) })
+		}
+	}
+
 	record := Record{
-		Account: source.Name, Path: source.Path, Databases: dumped,
+		Account: source.Name, Path: source.Path, Databases: dumped, Grants: grants,
 		MySQL: source.MySQL, PostgreSQL: source.PostgreSQL, Container: source.Container,
 		TakenAt: time.Now().UTC(),
 	}

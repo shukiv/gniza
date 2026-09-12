@@ -8,6 +8,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/shukiv/gniza/internal/human"
 )
 
 // The pages' views, as much of each as the screens read. A field the
@@ -145,18 +147,40 @@ type sourceRow struct {
 	} `json:"container"`
 }
 
-// candidates is what could be chosen now.
+// candidates is what could be chosen now, by kind, as panel.Candidates
+// answers it.
 type candidates struct {
-	Roots           []string
-	Folders         []string
-	MySQL           []string
+	Roots   []string
+	Folders []struct {
+		Path, ChosenAs string
+	}
+	MySQL           []database
 	MySQLError      string
-	PostgreSQL      []string
+	PostgreSQL      []database
 	PostgreSQLError string
 	Containers      []struct {
-		Engine, Name, Image, Status string
-		Chosen                      bool
+		Engine, Name, Image, Status, Stack string
+		Mounts                             int
+		Chosen                             bool
 	}
+	Stacks []struct {
+		Engine, Name, Dir string
+		Containers        []string
+		ChosenAs          string
+	}
+	Engines []struct {
+		Name                       string
+		Present                    bool
+		ConfigDir, ChosenAs, Error string
+	}
+}
+
+// database is one database offered, with whose it is.
+type database struct {
+	Name     string
+	Size     uint64
+	Users    []string
+	ChosenAs string
 }
 
 type jobRow struct {
@@ -532,7 +556,7 @@ func (m Model) accountsKey(key string) (tea.Model, tea.Cmd) {
 	v := decode[accountsPage](m, screenAccounts)
 	if v.Choose != nil {
 		switch key {
-		case "a", "c":
+		case "a", "m", "p", "c":
 			m.busy = "Looking at what there is to choose from…"
 			return m, m.offer(key)
 		case "d":
@@ -574,77 +598,145 @@ func (m Model) accountsKey(key string) (tea.Model, tea.Cmd) {
 // under the roots are said in the help rather than offered as a choice,
 // because any folder on the server can be named.
 // chooseWith opens the form the key asked for, with what the server
-// offered just now.
+// offered just now: a for folders, m for MySQL, p for PostgreSQL, c for
+// containers.
 func (m Model) chooseWith(key string) (tea.Model, tea.Cmd) {
 	m.busy = ""
 	v := decode[accountsPage](m, screenAccounts)
 	if v.Choose == nil {
 		return m, nil
 	}
+	var form *form
+	var ok bool
 	switch key {
 	case "a":
-		m.form = sourceForm(v.Choose.Candidates)
-	case "c":
-		form, ok := containerForm(v.Choose.Candidates)
+		form, ok = folderForm(v.Choose.Candidates), true
+	case "m":
+		form, ok = databaseForm(v.Choose.Candidates, "mysql")
 		if !ok {
-			m.err = "No container is left to choose: none is running here, or every one is chosen already."
+			m.err = "No MySQL database is left to choose: " + noneBecause(v.Choose.Candidates.MySQLError, "mysql")
 			return m, nil
 		}
-		m.form = form
+	case "p":
+		form, ok = databaseForm(v.Choose.Candidates, "postgresql")
+		if !ok {
+			m.err = "No PostgreSQL database is left to choose: " + noneBecause(v.Choose.Candidates.PostgreSQLError, "psql")
+			return m, nil
+		}
+	case "c":
+		form, ok = containerForm(v.Choose.Candidates)
+		if !ok {
+			m.err = "No container is left to choose: no engine is installed, none is running here, or every one is chosen already."
+			return m, nil
+		}
 	default:
 		return m, nil
 	}
+	m.form = form
 	m.mode = modeForm
 	return m, nil
 }
 
-func sourceForm(offered candidates) *form {
-	folders := "Any folder on this server, from /."
-	if len(offered.Folders) > 0 {
-		folders = "Under the roots there is: " + strings.Join(offered.Folders, ", ") + ". Any other folder can be named too."
+func noneBecause(clientError, client string) string {
+	if clientError != "" {
+		return "the " + client + " client did not answer: " + clientError
 	}
+	return "the client answered with none beyond its own, or every one is chosen already."
+}
+
+// folderForm chooses folders: the ones under the roots as toggles, off
+// until ticked, and any other by its path.
+func folderForm(offered candidates) *form {
 	fields := []field{
-		textField("path", "Folder", "", folders+" Leave it empty for a source of databases only."),
-		textField("name", "Name", "", "How it is called on these screens and in the backups. Empty names it after the folder."),
+		textField("path", "Another folder", "", "Any folder on this server, named from /. Each folder becomes a source of its own, backed up from where it lies."),
+		textField("name", "Its name", "", "How that folder is called on these screens and in the backups. Empty names it after the folder."),
 	}
-	for _, name := range offered.MySQL {
-		fields = append(fields, toggleField("mysql", "MySQL "+name, name, false))
+	for _, folder := range offered.Folders {
+		if folder.ChosenAs != "" {
+			continue
+		}
+		fields = append(fields, toggleField("folder", folder.Path, folder.Path, false))
 	}
-	for _, name := range offered.PostgreSQL {
-		fields = append(fields, toggleField("postgresql", "PostgreSQL "+name, name, false))
-	}
-	f := newForm("Back up a folder, with its databases", "/accounts/add", fields...)
-	switch {
-	case offered.MySQLError != "" && offered.PostgreSQLError != "":
-		f.fields[0].help += " No MySQL or PostgreSQL client answered, so no database is offered."
-	case offered.MySQLError != "":
-		f.fields[0].help += " No MySQL client answered."
-	case offered.PostgreSQLError != "":
-		f.fields[0].help += " No PostgreSQL client answered."
+	f := newForm("Back up folders", "/accounts/add", fields...)
+	f.fixed.Set("tab", "folders")
+	if len(offered.Roots) > 0 {
+		f.fields[0].help += " The toggles are what was found under " + strings.Join(offered.Roots, ", ") + "."
 	}
 	return f
 }
 
-// containerForm chooses a container that is not chosen yet. Each of its
-// mounts becomes a source.
-func containerForm(offered candidates) (*form, bool) {
-	var choices []choice
-	for _, c := range offered.Containers {
-		if c.Chosen {
+// databaseForm chooses databases of one engine, every one not chosen
+// yet on by default, each with whose it is.
+func databaseForm(offered candidates, engine string) (*form, bool) {
+	databases, title, help := offered.MySQL, "Back up MySQL databases",
+		"Each database becomes a source of its own, dumped with mysqldump on every run. The accounts with rights on it are shown; their grants are kept beside the dump for reference and not created again on restore."
+	if engine == "postgresql" {
+		databases, title, help = offered.PostgreSQL, "Back up PostgreSQL databases",
+			"Each database becomes a source of its own, dumped with pg_dump on every run. The owner is shown; the roles are kept beside the dump as pg_dumpall writes them, for reference, and not created again on restore."
+	}
+	var fields []field
+	for _, d := range databases {
+		if d.ChosenAs != "" {
 			continue
 		}
-		choices = append(choices, choice{c.Engine + "/" + c.Name, fmt.Sprintf("%s (%s · %s · %s)", c.Name, c.Engine, c.Image, c.Status)})
+		label := d.Name
+		if d.Size > 0 {
+			label += " · " + human.Bytes(d.Size)
+		}
+		if len(d.Users) > 0 {
+			label += " · " + strings.Join(d.Users, ", ")
+		}
+		fields = append(fields, toggleField(engine, label, d.Name, true))
 	}
-	if len(choices) == 0 {
+	if len(fields) == 0 {
 		return nil, false
 	}
-	return newForm("Back up a container", "/accounts/add",
-		withHelp(choiceField("container", "Container", choices, choices[0].value),
-			"Each volume and bind mount of it becomes a source, read where it lies on this machine, "+
-				"with the container's description and compose file kept beside it. A database inside "+
-				"a running container is not consistent when read this way: choose its database as a "+
-				"folder source's database instead, or stop the container for the backup."),
-	), true
+	fields[0] = withHelp(fields[0], help)
+	f := newForm(title, "/accounts/add", fields...)
+	f.fixed.Set("tab", engine)
+	return f, true
+}
+
+// containerForm chooses containers, every one not chosen yet on by
+// default, grouped under the stack each belongs to, with the stack's
+// configuration folder and the engine's beside them.
+func containerForm(offered candidates) (*form, bool) {
+	var fields []field
+	inStack := map[string]bool{}
+	for _, stack := range offered.Stacks {
+		for _, c := range offered.Containers {
+			if c.Stack != stack.Name || c.Engine != stack.Engine || c.Chosen {
+				continue
+			}
+			inStack[c.Engine+"/"+c.Name] = true
+			fields = append(fields, toggleField("container", fmt.Sprintf("%s (%s · stack %s · %s · %s · %d mounts)", c.Name, c.Engine, stack.Name, c.Image, c.Status, c.Mounts), c.Engine+"/"+c.Name, true))
+		}
+		if stack.Dir != "" && stack.ChosenAs == "" {
+			fields = append(fields, toggleField("folder", fmt.Sprintf("configuration of %s: %s (compose, .env)", stack.Name, stack.Dir), stack.Dir, true))
+		}
+	}
+	for _, c := range offered.Containers {
+		if c.Chosen || inStack[c.Engine+"/"+c.Name] {
+			continue
+		}
+		fields = append(fields, toggleField("container", fmt.Sprintf("%s (%s · %s · %s · %d mounts)", c.Name, c.Engine, c.Image, c.Status, c.Mounts), c.Engine+"/"+c.Name, true))
+	}
+	for _, e := range offered.Engines {
+		if e.Present && e.ConfigDir != "" && e.ChosenAs == "" {
+			fields = append(fields, toggleField("folder", e.Name+" configuration: "+e.ConfigDir, e.ConfigDir, true))
+		}
+	}
+	if len(fields) == 0 {
+		return nil, false
+	}
+	fields[0] = withHelp(fields[0],
+		"A ticked container becomes one source per volume and bind mount, read where it lies on this machine, "+
+			"with the container's description and compose file kept beside each. A database inside a running "+
+			"container is not consistent when read this way: back it up with m or p instead, or stop the "+
+			"container for the backup.")
+	f := newForm("Back up containers", "/accounts/add", fields...)
+	f.fixed.Set("tab", "containers")
+	return f, true
 }
 
 // --- logs ---

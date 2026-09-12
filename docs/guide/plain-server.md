@@ -11,22 +11,32 @@ curl -fsSL https://github.com/shukiv/gniza/releases/latest/download/get.sh | sh
 ## What to back up
 
 Nothing on a server without a panel says what an account is, so you do.
-On the page called **What to back up** (screen 4 in the terminal) a
-*source* is chosen, and each source is backed up on its own, under its
-name, the way a panel's account would be:
+The page called **What to back up** (screen 4 in the terminal) has one
+tab per kind; each row ticked becomes a *source*, backed up on its own,
+under its name, the way a panel's account would be:
 
-- **A folder**, backed up from where it lies, with the **MySQL** and
-  **PostgreSQL** databases you tick beside it dumped into the same
-  backup. The folders under `/var/www`, `/srv` and `/opt` are offered;
-  any folder on the server can be named. A source may have databases
-  and no folder.
-- **A container**, docker or podman. Each of its volumes and bind mounts
-  becomes a source, read where it lies on this machine, with the
-  container's own description and its compose file kept beside every
-  backup. A database that lives inside a running container is not
-  consistent when read this way: tick its database as a folder source's
-  database instead, or stop the container for the backup. The pages
-  say so where the container is ticked.
+- **Folders.** The folders under `/var/www`, `/srv` and `/opt` are
+  listed, unticked; any other folder can be typed in. Each is backed up
+  from where it lies, files and all, and is named after itself.
+- **MySQL** and **PostgreSQL.** Every database the `mysql` or `psql`
+  client can see, in a table with its size and its users -- MySQL's
+  grantees, PostgreSQL's owner -- all ticked by default, with a box in
+  the header to tick or untick the column. Each becomes a source
+  called `mysql-<name>` or `pg-<name>`, dumped on every run. The
+  users' grants (`SHOW GRANTS`) or the roles (`pg_dumpall
+  --roles-only`) are kept beside the dump for reference; they are not
+  created again on restore.
+- **Docker / Podman.** Every container, grouped under the stack its
+  compose file makes, with its image, status and how many mounts it
+  has; a box on the stack ticks the whole stack. Each ticked container
+  becomes one source per volume and bind mount, read where it lies on
+  this machine, with the container's description and compose file kept
+  beside every backup. The stack's configuration -- the folder its
+  compose file and `.env` live in -- and the engine's (`/etc/docker`,
+  `/etc/containers`) are offered as folders under it. A database that
+  lives inside a running container is not consistent when its volume
+  is read: back it up from its own tab instead, or stop the container
+  for the backup.
 
 Nothing is backed up until it is chosen; the page opens on the form
 until something is. A source can be removed at any time; the backups
@@ -34,10 +44,12 @@ already taken of it stay at the destinations, and choosing it again
 under the same name carries its history on.
 
 The database lists come from the `mysql` and `psql` clients on the
-server; a client that is not there, or cannot connect, is said on the
-form and that kind is not offered. `psql` and `pg_dump` run as the
-`postgres` unix account. The container list comes from `docker ps -a`
-and `podman ps -a`.
+server; a client that is not there, or cannot connect, is said on its
+tab. `psql`, `pg_dump` and `pg_dumpall` run as the `postgres` unix
+account. The container list comes from `docker ps -a` and `podman ps
+-a`, and one `inspect` of them all for the stacks and the mounts. In
+the terminal the keys are `a` folders, `m` MySQL, `p` PostgreSQL, `c`
+containers, `d` remove.
 
 To change which folders are offered, edit `/etc/gniza/plain.env` and
 restart the service:
@@ -83,10 +95,14 @@ screen says what the keys do there. The first hour is:
 3. On Schedules, press `a`. The defaults are nightly at two, split
    shape, the server's own configuration included, seven daily, four
    weekly and six monthly backups kept, written to every destination.
-4. On What to back up, `a` chooses a folder and the databases beside
-   it, and `c` a container. `b` backs up the source under the cursor
-   now, and `B` runs the schedule over every source. Logs shows what
-   happened.
+   A schedule is refused until the destination's recovery key has been
+   taken off the server (`K` on Destinations reads it, `n` says it is
+   stored elsewhere); the screen says so above the form.
+4. On What to back up, `a` chooses folders, `m` MySQL databases, `p`
+   PostgreSQL databases and `c` containers with their stacks; the
+   databases and containers come up ticked. `b` backs up the source
+   under the cursor now, and `B` runs the schedule over every source.
+   Logs shows what happened.
 
 The same forms are posted with `curl` from a script. Every request
 carries the CSRF token from any page:
@@ -101,13 +117,17 @@ curl -s --unix-socket $S -X POST http://x/schedule/save \
   -d "enabled=1" -d "include_system=1" \
   -d "keep_daily=7" -d "keep_weekly=4" -d "keep_monthly=6"
 curl -s --unix-socket $S -X POST http://x/accounts/add \
-  -d "csrf=$CSRF" -d "path=/var/www/shop" -d "mysql=shop" -d "mysql=shop_wp"
-curl -s --unix-socket $S -X POST http://x/accounts/add -d "csrf=$CSRF" -d "container=docker/web"
-curl -s --unix-socket $S -X POST http://x/accounts/backup -d "csrf=$CSRF" -d "account=shop"
+  -d "csrf=$CSRF" -d "tab=folders" -d "folder=/var/www/shop" -d "path=/opt/stack"
+curl -s --unix-socket $S -X POST http://x/accounts/add \
+  -d "csrf=$CSRF" -d "tab=mysql" -d "mysql=shop" -d "mysql=shop_wp"
+curl -s --unix-socket $S -X POST http://x/accounts/add \
+  -d "csrf=$CSRF" -d "tab=containers" -d "container=docker/web" -d "folder=/srv/web"
+curl -s --unix-socket $S -X POST http://x/accounts/backup -d "csrf=$CSRF" -d "account=mysql-shop"
 ```
 
 Any page reads as data with `-H 'Accept: application/json'`: `http://x/`,
-`http://x/accounts`, `http://x/destinations`, `http://x/schedule`,
+`http://x/accounts` (`http://x/accounts?add=1` carries what there is to
+choose from), `http://x/destinations`, `http://x/schedule`,
 `http://x/logs?tab=backups`, `http://x/settings`.
 
 ## From a browser

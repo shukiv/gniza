@@ -374,13 +374,15 @@ func choosing(rows ...map[string]any) map[string]any {
 		"Accounts": accounts,
 		"Choose": map[string]any{"Candidates": map[string]any{
 			"Roots":      []string{"/var/www"},
-			"Folders":    []string{"/var/www/shop", "/var/www/blog"},
-			"MySQL":      []string{"shop", "shop_wp"},
-			"PostgreSQL": []string{"erp"},
+			"Folders":    []any{map[string]any{"Path": "/var/www/shop"}, map[string]any{"Path": "/var/www/blog"}},
+			"MySQL":      []any{map[string]any{"Name": "shop", "Size": 4096, "Users": []string{"'shop_app'@'localhost'"}}, map[string]any{"Name": "shop_wp", "Size": 0}},
+			"PostgreSQL": []any{map[string]any{"Name": "erp", "Size": 8192, "Users": []string{"erp_owner"}}},
 			"Containers": []any{
-				map[string]any{"Engine": "docker", "Name": "web", "Image": "nginx:1", "Status": "Up 2 hours"},
+				map[string]any{"Engine": "docker", "Name": "web", "Image": "nginx:1", "Status": "Up 2 hours", "Stack": "shop", "Mounts": 2},
 				map[string]any{"Engine": "docker", "Name": "db", "Image": "mysql:8", "Status": "Up 2 hours", "Chosen": true},
 			},
+			"Stacks":  []any{map[string]any{"Engine": "docker", "Name": "shop", "Dir": "/srv/shop", "Containers": []string{"web"}}},
+			"Engines": []any{map[string]any{"Name": "docker", "Present": true, "ConfigDir": "/etc/docker"}, map[string]any{"Name": "podman"}},
 		}},
 	}
 }
@@ -394,7 +396,7 @@ func TestOnAServerWithoutAPanelTheScreenIsWhatToBackUp(t *testing.T) {
 	m := fresh(t, api)
 	m = press(t, m, "4")
 	view := m.View()
-	for _, want := range []string{"4 What to back up", "Nothing is backed up yet", "add a folder", "add a container"} {
+	for _, want := range []string{"4 What to back up", "Nothing is backed up yet", "a folders", "m MySQL", "p PostgreSQL", "c containers"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the empty screen lacks %q:\n%s", want, view)
 		}
@@ -425,22 +427,50 @@ func TestChoosingAFolderWithItsDatabases(t *testing.T) {
 	api.pages["/accounts?add=1"] = choosing()
 	m := fresh(t, api)
 	m = press(t, m, "4", "a")
-	if view := m.View(); !strings.Contains(view, "/var/www/shop, /var/www/blog") {
-		t.Fatalf("the form does not say what was found under the roots:\n%s", view)
+	if view := m.View(); !strings.Contains(view, "/var/www/shop") || !strings.Contains(view, "found under /var/www") {
+		t.Fatalf("the form does not offer what was found under the roots:\n%s", view)
 	}
-	m = typed(t, m, "/var/www/shop")
+	m = typed(t, m, "/opt/stack")
 	m = press(t, m, "tab")      // name, left empty
-	m = press(t, m, "tab", " ") // MySQL shop: on
-	m = press(t, m, "tab")      // MySQL shop_wp: left off
-	m = press(t, m, "tab", " ") // PostgreSQL erp: on
+	m = press(t, m, "tab", " ") // /var/www/shop: on
+	m = press(t, m, "tab")      // /var/www/blog: left off
 	m = press(t, m, "enter")
 	if len(api.posted) != 1 {
 		t.Fatalf("posted %+v", api.posted)
 	}
 	sent := api.posted[0]
-	if sent.path != "/accounts/add" || sent.form.Get("path") != "/var/www/shop" || sent.form.Get("name") != "" ||
-		strings.Join(sent.form["mysql"], ",") != "shop" || strings.Join(sent.form["postgresql"], ",") != "erp" {
+	if sent.path != "/accounts/add" || sent.form.Get("tab") != "folders" || sent.form.Get("path") != "/opt/stack" || sent.form.Get("name") != "" ||
+		strings.Join(sent.form["folder"], ",") != "/var/www/shop" {
 		t.Errorf("the form sent %v", sent.form)
+	}
+}
+
+// TestChoosingDatabasesTicksThemAllByDefault: m offers every MySQL
+// database not chosen yet, on, with whose it is, and posts them; p does
+// the same for PostgreSQL.
+func TestChoosingDatabasesTicksThemAllByDefault(t *testing.T) {
+	api := fixture()
+	api.pages["/accounts"] = map[string]any{"Accounts": []any{}, "Choose": map[string]any{}}
+	api.pages["/accounts?add=1"] = choosing()
+	m := fresh(t, api)
+	m = press(t, m, "4", "m")
+	view := m.View()
+	for _, want := range []string{"shop · 4.0 KiB · 'shop_app'@'localhost'", "shop_wp", "not created again on restore"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the MySQL form lacks %q:\n%s", want, view)
+		}
+	}
+	m = press(t, m, "ctrl+s")
+	if len(api.posted) != 1 || api.posted[0].form.Get("tab") != "mysql" || strings.Join(api.posted[0].form["mysql"], ",") != "shop,shop_wp" {
+		t.Errorf("posted %+v", api.posted)
+	}
+	m = press(t, m, "p")
+	if view := m.View(); !strings.Contains(view, "erp · 8.0 KiB · erp_owner") {
+		t.Errorf("the PostgreSQL form does not say whose erp is:\n%s", view)
+	}
+	m = press(t, m, "enter")
+	if len(api.posted) != 2 || api.posted[1].form.Get("tab") != "postgresql" || strings.Join(api.posted[1].form["postgresql"], ",") != "erp" {
+		t.Errorf("posted %+v", api.posted)
 	}
 }
 
@@ -453,11 +483,17 @@ func TestChoosingAContainer(t *testing.T) {
 	m := fresh(t, api)
 	m = press(t, m, "4", "c")
 	view := m.View()
-	if !strings.Contains(view, "web (docker · nginx:1") || strings.Contains(view, "mysql:8") {
-		t.Fatalf("the container form offers the wrong containers:\n%s", view)
+	for _, want := range []string{"web (docker · stack shop · nginx:1", "2 mounts", "configuration of shop: /srv/shop", "docker configuration: /etc/docker"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the container form lacks %q:\n%s", want, view)
+		}
 	}
-	m = press(t, m, "enter")
-	if len(api.posted) != 1 || api.posted[0].path != "/accounts/add" || api.posted[0].form.Get("container") != "docker/web" {
+	if strings.Contains(view, "mysql:8") {
+		t.Fatalf("the container form offers a container chosen already:\n%s", view)
+	}
+	m = press(t, m, "ctrl+s")
+	if len(api.posted) != 1 || api.posted[0].path != "/accounts/add" || api.posted[0].form.Get("tab") != "containers" ||
+		api.posted[0].form.Get("container") != "docker/web" || strings.Join(api.posted[0].form["folder"], ",") != "/srv/shop,/etc/docker" {
 		t.Errorf("posted %+v", api.posted)
 	}
 }

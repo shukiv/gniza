@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,9 +39,13 @@ func fakeMySQL(t *testing.T, databases ...string) (mysql, mysqldump string) {
 	dir := t.TempDir()
 	mysql = filepath.Join(dir, "mysql")
 	mysqldump = filepath.Join(dir, "mysqldump")
+	// Every database has one account, <name>_app@localhost, with rights
+	// on it; SHOW GRANTS answers for any account with one line.
 	script := "#!/bin/sh\n" +
 		"case \"$*\" in\n" +
+		"  *schema_privileges*) for d in " + strings.Join(databases, " ") + "; do printf \"%s\\t'%s_app'@'localhost'\\n\" \"$d\" \"$d\"; done ;;\n" +
 		"  *information_schema*) for d in " + strings.Join(databases, " ") + "; do printf '%s\\t4096\\n' \"$d\"; done ;;\n" +
+		"  *SHOW\\ GRANTS*) printf 'GRANT ALL PRIVILEGES ON `x`.* TO %s\\n' \"${*##*FOR }\" ;;\n" +
 		"  *) cat > /dev/null; printf 'loaded %s\\n' \"$*\" >> \"$(dirname \"$0\")/mysql.log\" ;;\n" +
 		"esac\n"
 	if err := os.WriteFile(mysql, []byte(script), 0o755); err != nil {
@@ -64,9 +69,15 @@ func fakePostgres(t *testing.T, databases ...string) (psql, pgdump string) {
 	dir := t.TempDir()
 	psql = filepath.Join(dir, "psql")
 	pgdump = filepath.Join(dir, "pg_dump")
+	// Each database is owned by <name>_owner. pg_dumpall lives beside
+	// pg_dump and answers --roles-only with one role.
+	roles := "#!/bin/sh\nprintf 'CREATE ROLE erp_owner;\\n'\n"
+	if err := os.WriteFile(filepath.Join(dir, "pg_dumpall"), []byte(roles), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	script := "#!/bin/sh\n" +
 		"case \"$*\" in\n" +
-		"  *pg_database_size*) for d in " + strings.Join(databases, " ") + "; do printf '%s\\t8192\\n' \"$d\"; done ;;\n" +
+		"  *pg_database_size*) for d in " + strings.Join(databases, " ") + "; do printf '%s\\t8192\\t%s_owner\\n' \"$d\" \"$d\"; done ;;\n" +
 		"  *) cat > /dev/null; printf 'psql %s\\n' \"$*\" >> \"$(dirname \"$0\")/psql.log\" ;;\n" +
 		"esac\n"
 	if err := os.WriteFile(psql, []byte(script), 0o755); err != nil {
@@ -91,13 +102,31 @@ func fakeDocker(t *testing.T, inspectDir string, containers ...string) string {
 	script := "#!/bin/sh\n" +
 		"case \"$1\" in\n" +
 		"  ps) printf '" + strings.Join(lines, "\\n") + "\\n' ;;\n" +
-		"  inspect) for a; do name=$a; done; cat \"" + inspectDir + "/$name.json\" 2>/dev/null || { echo \"Error: no such container: $name\" >&2; exit 1; } ;;\n" +
+		// inspect answers one array for every name asked, the way the
+		// engines do; each file holds a one-element array.
+		"  inspect) shift; out=''; for name; do case $name in --type|container) continue;; esac; body=$(cat \"" + inspectDir + "/$name.json\" 2>/dev/null) || { echo \"Error: no such container: $name\" >&2; exit 1; }; body=${body#[}; body=${body%]}; out=\"${out:+$out,}$body\"; done; printf '[%s]\\n' \"$out\" ;;\n" +
 		"  *) exit 1 ;;\n" +
 		"esac\n"
 	if err := os.WriteFile(docker, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return docker
+}
+
+func folderPaths(c panel.Candidates) []string {
+	var paths []string
+	for _, f := range c.Folders {
+		paths = append(paths, f.Path)
+	}
+	return paths
+}
+
+func databaseNames(databases []panel.DatabaseCandidate) []string {
+	var names []string
+	for _, d := range databases {
+		names = append(names, d.Name)
+	}
+	return names
 }
 
 func site(t *testing.T, root, name string) string {
@@ -140,7 +169,7 @@ func TestNothingIsBackedUpUntilChosen(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{filepath.Join(www, "blog"), shop, filepath.Join(opt, "stack")}
-	if strings.Join(candidates.Folders, " ") != strings.Join(want, " ") {
+	if strings.Join(folderPaths(candidates), " ") != strings.Join(want, " ") {
 		t.Errorf("folders offered = %v, want %v", candidates.Folders, want)
 	}
 
@@ -151,8 +180,8 @@ func TestNothingIsBackedUpUntilChosen(t *testing.T) {
 	}
 	candidates, _ = provider.Candidates(context.Background())
 	for _, folder := range candidates.Folders {
-		if folder == shop {
-			t.Error("a folder already chosen is still offered")
+		if folder.Path == shop && folder.ChosenAs != "shop" {
+			t.Error("a folder already chosen is offered as if it were not")
 		}
 	}
 	if err := provider.RemoveSource(context.Background(), "shop"); err != nil {
@@ -193,8 +222,8 @@ func TestAChoiceIsChecked(t *testing.T) {
 		t.Errorf("a source of databases only was refused: %v", err)
 	}
 	sources, _ := provider.Sources(context.Background())
-	if len(sources) != 2 || sources[0].Name != "erp" || sources[0].Path != "" {
-		t.Errorf("sources = %+v; a database-only source should be named after its database", sources)
+	if len(sources) != 2 || sources[0].Name != "mysql-erp" || sources[0].Path != "" {
+		t.Errorf("sources = %+v; a database-only source should be named after its engine and database", sources)
 	}
 }
 
@@ -210,8 +239,13 @@ func TestASourceCarriesTheDatabasesTicked(t *testing.T) {
 		MySQLPath: mysql, MysqldumpPath: mysqldump, PsqlPath: psql, PgDumpPath: pgdump, PostgresUser: "-"}
 
 	candidates, _ := provider.Candidates(context.Background())
-	if strings.Join(candidates.MySQL, ",") != "blog,shop,shop_wp" || strings.Join(candidates.PostgreSQL, ",") != "crm,erp" {
+	if strings.Join(databaseNames(candidates.MySQL), ",") != "blog,shop,shop_wp" || strings.Join(databaseNames(candidates.PostgreSQL), ",") != "crm,erp" {
 		t.Errorf("databases offered: mysql %v, postgresql %v", candidates.MySQL, candidates.PostgreSQL)
+	}
+	// Whose data each is: MySQL's grantees, PostgreSQL's owner.
+	if candidates.MySQL[1].Users == nil || candidates.MySQL[1].Users[0] != "'shop_app'@'localhost'" ||
+		candidates.PostgreSQL[1].Users == nil || candidates.PostgreSQL[1].Users[0] != "erp_owner" {
+		t.Errorf("users listed: mysql %+v, postgresql %+v", candidates.MySQL[1], candidates.PostgreSQL[1])
 	}
 	chosen(t, provider, panel.Source{Name: "shop", Path: shop, MySQL: []string{"shop_wp", "shop"}, PostgreSQL: []string{"erp"}})
 
@@ -335,6 +369,21 @@ func TestASourceOfDatabasesOnlyStillHasAFilesPart(t *testing.T) {
 	}
 	if _, ok := payload.DumpPaths["erp"]; !ok {
 		t.Error("the database was not dumped")
+	}
+	// Who used it is kept beside the record, not under the dumps where
+	// every .sql is expected to create something.
+	grants, err := os.ReadFile(filepath.Join(staging, "metadata", plain.RecordDir, plain.MySQLGrantsFile("erp")))
+	if err != nil || !strings.Contains(string(grants), "'erp_app'@'localhost'") || !strings.Contains(string(grants), "GRANT ALL") {
+		t.Errorf("the grants beside the record = %q, %v", grants, err)
+	}
+	if entries, _ := os.ReadDir(filepath.Join(staging, "metadata", plain.DumpDir)); len(entries) != 1 {
+		t.Errorf("the dump directory holds %d files, want the dump alone", len(entries))
+	}
+	// A database source nobody named is named after its engine and
+	// database, so it does not fight a folder of the same name.
+	chosen(t, provider, panel.Source{MySQL: []string{"erp"}})
+	if _, err := provider.Account(context.Background(), "mysql-erp"); err != nil {
+		t.Errorf("the unnamed database source is not mysql-erp: %v", err)
 	}
 	if err := provider.PutHomeDir(context.Background(), "erp", t.TempDir()); err == nil {
 		t.Error("files were restored for a source that has none")
@@ -563,6 +612,22 @@ func TestAContainerBecomesASourcePerMount(t *testing.T) {
 	}
 	if len(candidates.Containers) != 2 || candidates.Containers[0].Name != "redis" || candidates.Containers[1].Image != "image:1" {
 		t.Errorf("containers offered = %+v", candidates.Containers)
+	}
+	// The stack the compose file makes, with its directory as the
+	// configuration, and how much each container would back up.
+	if candidates.Containers[1].Stack != "web" || candidates.Containers[1].Mounts != 3 || candidates.Containers[0].Stack != "" {
+		t.Errorf("stack and mounts = %+v", candidates.Containers)
+	}
+	if len(candidates.Stacks) != 1 || candidates.Stacks[0].Name != "web" || candidates.Stacks[0].Dir != filepath.Join(host, "srv", "web") ||
+		strings.Join(candidates.Stacks[0].Containers, ",") != "web" {
+		t.Errorf("stacks = %+v", candidates.Stacks)
+	}
+	var engines []string
+	for _, e := range candidates.Engines {
+		engines = append(engines, fmt.Sprintf("%s:%v", e.Name, e.Present))
+	}
+	if strings.Join(engines, " ") != "docker:true podman:false" {
+		t.Errorf("engines = %v", engines)
 	}
 
 	made, err := provider.AddContainer(context.Background(), "docker", "web")

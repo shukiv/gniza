@@ -31,7 +31,15 @@ const (
 	// NoFolderNote is the one file in the files part of a source that
 	// has no folder.
 	NoFolderNote = "no-folder.txt"
+	// PostgresRolesFile holds, beside the record, every PostgreSQL role
+	// as pg_dumpall --roles-only writes them, for a source that dumps a
+	// PostgreSQL database.
+	PostgresRolesFile = "pg-roles.sql"
 )
+
+// MySQLGrantsFile names the file beside the record that holds the grants
+// of the accounts with rights on one MySQL database.
+func MySQLGrantsFile(database string) string { return "mysql-grants-" + database + ".sql" }
 
 func (Layout) Panel() string       { return PanelName }
 func (Layout) HomedirDir() string  { return FilesDir }

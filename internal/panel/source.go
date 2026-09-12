@@ -11,11 +11,11 @@ import (
 // A source is backed up as an account of its own, under its name, so the
 // scheduler, the snapshots' tags, retention and the restore machinery
 // see nothing new. What it carries is one directory, read where it lies,
-// and the databases the operator ticked beside it; a source may have the
-// databases and no directory, for a server whose data is all in MySQL.
-// A source that came from a container remembers which, so the pages can
-// show the container's volumes together and the backup can keep the
-// container's own description beside them.
+// or one database, dumped beside a note; a source may still carry a
+// directory and databases together, which is what the first shape of
+// the form made. A source that came from a container remembers which,
+// so the pages can show the container's volumes together and the backup
+// can keep the container's own description beside them.
 type Source struct {
 	Name string `json:"name"`
 	// Path is the directory backed up, absolute, or empty for a source
@@ -44,23 +44,54 @@ type ContainerRef struct {
 	Mount string `json:"mount,omitempty"`
 }
 
-// Candidates is what a server offers to be chosen: what is there, less
-// what has been chosen already.
+// Candidates is what a server offers to be chosen, by kind, with what
+// has been chosen already marked so the pages can show it greyed rather
+// than offer it twice.
 type Candidates struct {
 	// Roots are the directories whose subdirectories are offered.
 	Roots []string
-	// Folders are directories under the roots that are not a source yet.
-	Folders []string
+	// Folders are the directories under the roots.
+	Folders []FolderCandidate
 	// MySQL and PostgreSQL are the databases each client can see. A nil
 	// list with an error means the client is not there or cannot
 	// connect; a nil list without one means the server has none.
-	MySQL           []string
+	MySQL           []DatabaseCandidate
 	MySQLError      string
-	PostgreSQL      []string
+	PostgreSQL      []DatabaseCandidate
 	PostgreSQLError string
-	// Containers is every container docker or podman knows about, with
-	// the ones already chosen marked.
+	// Containers is every container docker or podman knows about.
 	Containers []ContainerCandidate
+	// Stacks are the compose projects the containers belong to, with
+	// the directory their compose files live in, which is the stack's
+	// configuration and is offered as a folder.
+	Stacks []StackCandidate
+	// Engines are the container engines looked for, present or not, and
+	// the directory each keeps its own configuration in.
+	Engines []EngineCandidate
+}
+
+// FolderCandidate is one directory that could be backed up.
+type FolderCandidate struct {
+	Path string
+	// ChosenAs names the source that already backs this directory up,
+	// or is empty.
+	ChosenAs string
+}
+
+// DatabaseCandidate is one database that could be dumped.
+type DatabaseCandidate struct {
+	Name string
+	// Size is what the server says it holds, in bytes; zero when it
+	// could not say.
+	Size uint64
+	// Users are the accounts with rights on it: MySQL's grantees at the
+	// schema level, PostgreSQL's owner. They are listed so the operator
+	// knows whose data it is, and their grants are kept beside the dump;
+	// they are not created again on restore.
+	Users []string
+	// ChosenAs names the source that already dumps this database, or is
+	// empty.
+	ChosenAs string
 }
 
 // ContainerCandidate is one container that could be backed up.
@@ -69,8 +100,45 @@ type ContainerCandidate struct {
 	Name   string
 	Image  string
 	Status string
+	// Stack is the compose project the container belongs to, from its
+	// labels, or empty.
+	Stack string
+	// Mounts counts the volumes and bind mounts it has on the host: what
+	// choosing it backs up.
+	Mounts int
 	// Chosen says a source already came from this container.
 	Chosen bool
+}
+
+// StackCandidate is one compose project: the containers under one
+// compose file, and the directory that file lives in.
+type StackCandidate struct {
+	Engine string
+	Name   string
+	// Dir is the compose working directory, holding the compose file
+	// and usually the .env beside it: the stack's configuration.
+	Dir        string
+	Containers []string
+	// ChosenAs names the source that already backs the directory up, or
+	// is empty.
+	ChosenAs string
+}
+
+// EngineCandidate is one container engine looked for on the server.
+type EngineCandidate struct {
+	// Name is docker or podman.
+	Name string
+	// Present says the engine's command answered.
+	Present bool
+	// ConfigDir is where the engine keeps its own configuration
+	// (/etc/docker, /etc/containers), when that directory exists.
+	ConfigDir string
+	// ChosenAs names the source that already backs ConfigDir up, or is
+	// empty.
+	ChosenAs string
+	// Error says why the engine listed nothing, when it is present but
+	// did not answer.
+	Error string
 }
 
 // Chooser is implemented by a provider whose accounts are chosen by the
@@ -84,7 +152,9 @@ type Chooser interface {
 	Candidates(ctx context.Context) (Candidates, error)
 	// AddSource records a choice. A source with neither a path nor a
 	// database, a path that is not a directory, or a name already
-	// taken is refused with an error the operator can read.
+	// taken is refused with an error the operator can read. A source
+	// left unnamed is named after its folder, or mysql-<database> or
+	// pg-<database>.
 	AddSource(ctx context.Context, source Source) error
 	// AddContainer makes a source of each of the container's mounts,
 	// and one for its description when it has none, and returns them.

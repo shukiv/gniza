@@ -145,7 +145,7 @@ func (m Model) screenKeys() string {
 		return chips("a", "add", "e", "edit", "R", "run now", "d", "remove")
 	case screenAccounts:
 		if m.choosing() {
-			return chips("a", "add a folder", "c", "add a container", "d", "remove", "b", "back up", "B", "back up everything")
+			return chips("a", "folders", "m", "MySQL", "p", "PostgreSQL", "c", "containers", "d", "remove", "b", "back up", "B", "back up everything")
 		}
 		return chips("b", "back up", "B", "back up every account")
 	case screenLogs:
@@ -467,7 +467,7 @@ func (m Model) accountsView() string {
 	width := m.innerWidth()
 	if len(v.Accounts) == 0 {
 		if v.Choose != nil {
-			hint := "Press a to back up a folder with its databases, or c to back up a container. Each becomes a source that is backed up on its own."
+			hint := "Press a for folders, m for MySQL databases, p for PostgreSQL databases, c for containers and their stacks. Each thing ticked becomes a source that is backed up on its own."
 			return empty(width, "Nothing is backed up yet.", "", "") + "\n\n" + sMuted.Render(clipWrap(hint, width))
 		}
 		return empty(width, "No accounts were found.", "", "") + "\n\n" +

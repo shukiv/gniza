@@ -32,8 +32,11 @@ func newPlainServer(t *testing.T) (*Server, http.Handler, string) {
 	if err := os.WriteFile(filepath.Join(shop, "index.php"), []byte("<?php"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Join(shop, "public"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	mysql := filepath.Join(root, "mysql")
-	script := "#!/bin/sh\ncase \"$*\" in *information_schema*) printf 'shop\\t4096\\nblog\\t4096\\n' ;; *) cat >/dev/null ;; esac\n"
+	script := "#!/bin/sh\ncase \"$*\" in *schema_privileges*) printf \"shop\\t'shop_app'@'localhost'\\n\" ;; *information_schema*) printf 'shop\\t4096\\nblog\\t4096\\n' ;; *) cat >/dev/null ;; esac\n"
 	if err := os.WriteFile(mysql, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -115,8 +118,13 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 	if page.Code != http.StatusOK {
 		t.Fatalf("GET /accounts = %d", page.Code)
 	}
+	// One tab per kind; the databases are ticked by default and say whose
+	// they are; a client that is not there says so on its tab.
 	for _, want := range []string{"What to back up", "Nothing is backed up yet", shop,
-		`name="mysql" value="shop"`, `name="mysql" value="blog"`, "PostgreSQL: no databases to offer"} {
+		`data-tab="folders"`, `data-tab="mysql"`, `data-tab="postgresql"`, `data-tab="containers"`,
+		`name="folder" value="` + shop + `"`, `name="mysql" value="shop" aria-label="shop" checked`,
+		`name="mysql" value="blog" aria-label="blog" checked`, "&#39;shop_app&#39;@&#39;localhost&#39;",
+		"No PostgreSQL database is offered", "data-tick-all", "data-tick-count"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the empty page lacks %q", want)
 		}
@@ -130,8 +138,11 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 			Accounts []json.RawMessage
 			Choose   *struct {
 				Candidates struct {
-					Folders []string
-					MySQL   []string
+					Folders []struct{ Path, ChosenAs string }
+					MySQL   []struct {
+						Name  string
+						Users []string
+					}
 				}
 			}
 		}
@@ -139,8 +150,9 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 	if err := json.Unmarshal(getPage(handler, "/accounts?add=1", true).Body.Bytes(), &answered); err != nil {
 		t.Fatal(err)
 	}
-	if answered.Data.Choose == nil || strings.Join(answered.Data.Choose.Candidates.MySQL, ",") != "blog,shop" ||
-		strings.Join(answered.Data.Choose.Candidates.Folders, ",") != shop {
+	if k := answered.Data.Choose; k == nil || len(k.Candidates.MySQL) != 2 || k.Candidates.MySQL[0].Name != "blog" ||
+		k.Candidates.MySQL[1].Name != "shop" || strings.Join(k.Candidates.MySQL[1].Users, ",") != "'shop_app'@'localhost'" ||
+		len(k.Candidates.Folders) != 1 || k.Candidates.Folders[0].Path != shop {
 		t.Errorf("the page as data does not carry the candidates: %+v", answered.Data.Choose)
 	}
 	// The offer costs a look at the databases and the containers, so the
@@ -149,7 +161,7 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 	var polled struct {
 		Data struct {
 			Choose *struct {
-				Candidates struct{ Folders, MySQL []string }
+				Candidates struct{ Folders, MySQL []json.RawMessage }
 			}
 		}
 	}
@@ -159,19 +171,33 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 	if polled.Data.Choose == nil || len(polled.Data.Choose.Candidates.Folders)+len(polled.Data.Choose.Candidates.MySQL) != 0 {
 		t.Errorf("the list as data looks at the candidates: %+v", polled.Data.Choose)
 	}
-	if !strings.Contains(body, `closest("[data-fill]")`) {
-		t.Error("the page offers folders with data-fill links but nothing fills the field")
+	// The tabs and the boxes are driven by the page's own script, which
+	// listens on the document since the form may be fetched later.
+	for _, want := range []string{`closest("[data-tab]")`, "data-tick-all", "gniza:loaded"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the script does not handle %s", want)
+		}
 	}
 
-	added := postForm(server, handler, "/accounts/add", url.Values{"path": {shop}, "mysql": {"shop"}})
-	if added.Code != http.StatusSeeOther || !strings.Contains(added.Header().Get("Location"), "kind=ok") {
+	added := postForm(server, handler, "/accounts/add", url.Values{"tab": {"folders"}, "folder": {shop}})
+	if added.Code != http.StatusSeeOther || !strings.Contains(added.Header().Get("Location"), "kind=ok") || !strings.Contains(added.Header().Get("Location"), "1+source%3A+shop") {
 		t.Fatalf("adding = %d %s %s", added.Code, added.Header().Get("Location"), added.Body.String())
 	}
+	databases := postForm(server, handler, "/accounts/add", url.Values{"tab": {"mysql"}, "mysql": {"shop", "blog"}})
+	if location := databases.Header().Get("Location"); databases.Code != http.StatusSeeOther || !strings.Contains(location, "2+sources%3A+mysql-shop%2C+mysql-blog") {
+		t.Fatalf("adding the databases = %d %s", databases.Code, location)
+	}
 	body = getPage(handler, "/accounts", false).Body.String()
-	for _, want := range []string{">shop</a>", shop, "MySQL: shop", `href="?p=accounts&amp;add=1" data-dialog="add-source" data-dialog-fetch`, "?p=accounts/remove"} {
+	for _, want := range []string{">shop</a>", shop, ">mysql-shop</a>", "MySQL: shop", `href="?p=accounts&amp;add=1" data-dialog="add-source" data-dialog-fetch`, "?p=accounts/remove"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page with a source lacks %q", want)
 		}
+	}
+	// A database chosen already is shown greyed on its tab, not offered
+	// again; the tab asked for is the one that opens.
+	form := getPage(handler, "/accounts?add=1&tab=mysql", false).Body.String()
+	if !strings.Contains(form, `name="mysql" value="shop" aria-label="shop" disabled`) || !strings.Contains(form, `data-tabs="mysql"`) || !strings.Contains(form, ">mysql-shop<") {
+		t.Errorf("the MySQL tab after choosing: %s", firstLine(form, `value="shop"`))
 	}
 	// With a source chosen the list does not look at the candidates
 	// either: Add fetches the form, which does.
@@ -185,12 +211,17 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 		t.Error("the page still says nothing is backed up")
 	}
 
-	again := postForm(server, handler, "/accounts/add", url.Values{"path": {shop}, "name": {"shop2"}})
-	if again.Code != http.StatusOK || !strings.Contains(again.Body.String(), "already backed up as shop") {
+	again := postForm(server, handler, "/accounts/add", url.Values{"tab": {"folders"}, "path": {shop}, "name": {"shop2"}})
+	if again.Code != http.StatusOK || !strings.Contains(again.Body.String(), "already backed up as shop") || !strings.Contains(again.Body.String(), `data-tabs="folders"`) {
 		t.Errorf("the same folder twice = %d, %q", again.Code, firstLine(again.Body.String(), "already"))
 	}
-	nothing := postForm(server, handler, "/accounts/add", url.Values{})
-	if nothing.Code != http.StatusOK || !strings.Contains(nothing.Body.String(), "nothing was chosen") {
+	// Part of a tab refused is said with the part that was added.
+	mixed := postForm(server, handler, "/accounts/add", url.Values{"tab": {"folders"}, "folder": {filepath.Join(shop, "public"), filepath.Join(shop, "index.php")}})
+	if location := mixed.Header().Get("Location"); mixed.Code != http.StatusSeeOther || !strings.Contains(location, "kind=warn") || !strings.Contains(location, "Not+added") {
+		t.Errorf("a folder refused beside one added = %d %s", mixed.Code, location)
+	}
+	nothing := postForm(server, handler, "/accounts/add", url.Values{"tab": {"mysql"}})
+	if nothing.Code != http.StatusOK || !strings.Contains(nothing.Body.String(), "nothing was chosen") || !strings.Contains(nothing.Body.String(), `data-tabs="mysql"`) {
 		t.Errorf("an empty form = %d", nothing.Code)
 	}
 
@@ -198,8 +229,19 @@ func TestOnAServerWithoutAPanelTheAccountsPageIsWhatToBackUp(t *testing.T) {
 	if removed.Code != http.StatusSeeOther || !strings.Contains(removed.Header().Get("Location"), "kind=ok") {
 		t.Fatalf("removing = %d %s", removed.Code, removed.Header().Get("Location"))
 	}
+	// The folder is offered again, the databases chosen stay chosen.
+	after := getPage(handler, "/accounts?add=1", false).Body.String()
+	if strings.Contains(after, ">shop</a>") || !strings.Contains(after, `name="folder" value="`+shop+`" aria-label="`+shop+`" >`) {
+		t.Errorf("after removing, the folder is not offered again: %s", firstLine(after, `name="folder"`))
+	}
+	for _, name := range []string{"mysql-shop", "mysql-blog", "public"} {
+		removed := postForm(server, handler, "/accounts/remove", url.Values{"account": {name}})
+		if removed.Code != http.StatusSeeOther {
+			t.Fatalf("removing %s = %d", name, removed.Code)
+		}
+	}
 	if !strings.Contains(getPage(handler, "/accounts", false).Body.String(), "Nothing is backed up yet") {
-		t.Error("after removing, the page does not go back to the form")
+		t.Error("after removing everything, the page does not go back to the form")
 	}
 }
 

@@ -476,3 +476,22 @@ func TestRemovingASourceAsksFirst(t *testing.T) {
 		t.Errorf("posted %+v", api.posted)
 	}
 }
+
+// TestTheSchedulesScreenSaysTheRecoveryKeyComesFirst: a destination whose
+// recovery key has not been noted as stored elsewhere makes the screen
+// say so, since the save is refused for it.
+func TestTheSchedulesScreenSaysTheRecoveryKeyComesFirst(t *testing.T) {
+	api := fixture()
+	api.pages["/schedule"] = map[string]any{
+		"Policies": []any{},
+		"Destinations": []any{map[string]any{
+			"id": "d1", "name": "Spare disk", "type": "local",
+			"Repository": map[string]any{"id": "r1", "initialised_at": "2026-09-12T00:00:00Z"},
+		}},
+	}
+	m := fresh(t, api)
+	m = press(t, m, "3")
+	if view := m.View(); !strings.Contains(view, "recovery key for Spare disk is still only on this server") {
+		t.Errorf("the screen does not say the recovery key comes first:\n%s", view)
+	}
+}

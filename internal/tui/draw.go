@@ -406,8 +406,14 @@ func (m Model) destinationsView() string {
 func (m Model) schedulesView() string {
 	v := decode[schedulesPage](m, screenSchedules)
 	width := m.innerWidth()
+	// The save is refused for a destination whose recovery key is still
+	// only here; said before the form rather than after it.
+	recoveryFirst := ""
+	if names := withoutRecoveryKey(v.Destinations); len(names) > 0 {
+		recoveryFirst = sWarn.Render(clipWrap("The recovery key for "+strings.Join(names, ", ")+" is still only on this server, so a schedule that writes there is refused until it has been taken off: on Destinations press K to read it and n once it is stored elsewhere.", width)) + "\n\n"
+	}
 	if len(v.Policies) == 0 {
-		return empty(width, "No schedule yet. A schedule is what makes backups happen on their own.", "a", "add one")
+		return recoveryFirst + empty(width, "No schedule yet. A schedule is what makes backups happen on their own.", "a", "add one")
 	}
 	names := map[string]string{}
 	for _, d := range v.Destinations {
@@ -441,7 +447,7 @@ func (m Model) schedulesView() string {
 		keeps := fmt.Sprintf("%d/%d/%d", p.Retention.KeepDaily, p.Retention.KeepWeekly, p.Retention.KeepMonthly)
 		rows = append(rows, []string{p.Name, state, p.ScheduleCron, next, covers, keeps, strings.Join(to, ", ")})
 	}
-	return grid(width, m.cursor[screenSchedules],
+	return recoveryFirst + grid(width, m.cursor[screenSchedules],
 		[]string{"Name", "On", "When (cron)", "Next", "Covers", "Keep d/w/m", "Writes to"}, rows)
 }
 

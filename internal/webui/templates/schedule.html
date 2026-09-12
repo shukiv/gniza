@@ -50,6 +50,12 @@
   {{if not $data.Destinations}}
   <p class="cpr:hint cpr:mt-0">Add a destination first — a schedule has to have somewhere to write.</p>
   {{else}}
+  {{range $data.Destinations}}{{if and .Repository.ID (not .Repository.RecoveryNotedAt)}}
+  <div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:mb-4" role="status" data-recovery-first>
+    <div>The recovery key for <strong>{{.Name}}</strong> is still only on this server, so a schedule that writes there is refused until it has been taken off.
+      On <a class="cpr:link" href="?p=destinations">Destinations</a> press “Recovery key”, then download it or say you have stored it, and come back.</div>
+  </div>
+  {{end}}{{end}}
   <form method="post" action="?p=schedule/save" data-scope-toggle>
     <input type="hidden" name="csrf" value="{{.CSRF}}">
     {{with $data.Editing}}<input type="hidden" name="id" value="{{.ID}}">{{end}}

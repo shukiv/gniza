@@ -57,8 +57,16 @@ func TestAddingADestinationEndsOnItsRecoveryKey(t *testing.T) {
 		t.Error("the card's buttons do not name the repository they are for")
 	}
 
-	// Until the key has been taken away, a schedule that would write
-	// there is refused, and the refusal says what to do.
+	// Until the key has been taken away, the schedule page says so before
+	// the form is filled in -- the refusal alone landed as a message on
+	// another page, and read as the schedule simply not working.
+	_, schedulePage := get(t, client, "/schedule")
+	if !strings.Contains(schedulePage, "data-recovery-first") || !strings.Contains(schedulePage, "<strong>Spare disk</strong> is still only on this server") {
+		t.Error("the schedule page does not say the recovery key has to be taken off first")
+	}
+
+	// A schedule that would write there is refused, and the refusal says
+	// what to do.
 	policyForm := url.Values{
 		"csrf": {csrfToken(t, added)}, "name": {"Nightly"}, "cron": {"0 2 * * *"},
 		"mode": {"split"}, "repository": {repo.ID}, "scope": {"all"}, "enabled": {"1"},
@@ -99,8 +107,11 @@ func TestAddingADestinationEndsOnItsRecoveryKey(t *testing.T) {
 			"says it has never left this server")
 	}
 
-	// And now the schedule is allowed.
+	// And now the schedule is allowed, and the page no longer warns.
 	_, page = get(t, client, "/schedule")
+	if strings.Contains(page, "data-recovery-first") {
+		t.Error("the schedule page still says the recovery key is only here")
+	}
 	policyForm.Set("csrf", csrfToken(t, page))
 	resp, err = client.PostForm("http://ui/?p=schedule/save", policyForm)
 	if err != nil {

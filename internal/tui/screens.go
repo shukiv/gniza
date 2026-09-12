@@ -440,6 +440,19 @@ func (m Model) currentPolicy() (policyRow, bool) {
 	return v.Policies[i], true
 }
 
+// withoutRecoveryKey names the destinations whose recovery key has not
+// been noted as stored off this server: the ones a schedule cannot be
+// saved for yet.
+func withoutRecoveryKey(destinations []destinationRow) []string {
+	var names []string
+	for _, d := range destinations {
+		if d.Repository.ID != "" && d.Repository.RecoveryNotedAt == nil {
+			names = append(names, d.Name)
+		}
+	}
+	return names
+}
+
 func (m Model) schedulesKey(key string) (tea.Model, tea.Cmd) {
 	v := decode[schedulesPage](m, screenSchedules)
 	switch key {

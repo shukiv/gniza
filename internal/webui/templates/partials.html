@@ -330,7 +330,12 @@
 
   <section role="tabpanel" data-tab-panel="mysql" aria-label="MySQL">
     {{if or $k.MySQL $c.ExtraMySQL}}
-    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Each database becomes a source of its own, dumped with mysqldump on every run. Who has rights on it is listed beside it; tick an account below to keep it with the databases it reaches, password hash and grants, so a restore brings back the login that opens them.</p>
+    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Each database becomes a source of its own, dumped with mysqldump on every run. Who has rights on it is listed beside it; tick a database user to keep it with the databases it reaches, password hash and grants, so a restore brings back the login that opens them.</p>
+    {{end}}
+    <div class="cpr:grid cpr:gap-4 cpr:xl:grid-cols-2 cpr:items-start">
+    <div>
+    <h4 class="cpr:section-title cpr:mt-0 cpr:mb-2">Databases</h4>
+    {{if or $k.MySQL $c.ExtraMySQL}}
     <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-tickable>
       <thead><tr>
         <th class="cpr:w-8"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-tick-all aria-label="Tick every database"></th>
@@ -361,27 +366,30 @@
     {{else}}
     <p class="cpr:hint cpr:mt-0">The MySQL client answered with no databases beyond its own.</p>
     {{end}}
+    </div>
     {{if $k.MySQLUsers}}
-    <h4 class="cpr:section-title cpr:mt-5 cpr:mb-2">Accounts</h4>
-    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Every account the server has, and what it can reach. An account ticked is kept with each source that dumps a database it has rights on; ticking it ticks those databases. The server's own accounts are shown and not offered.</p>
+    <div>
+    <h4 class="cpr:section-title cpr:mt-0 cpr:mb-2">Users</h4>
+    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Every database user the server has, and what it can reach. A user ticked is kept with each source that dumps a database it has rights on; ticking it ticks those databases. The server's own users are shown and not offered.</p>
     <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-tickable>
       <thead><tr>
-        <th class="cpr:w-8"></th>
-        <th>Account</th><th>Authenticates with</th><th>Rights</th><th>Kept with</th>
+        <th class="cpr:w-8"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-tick-all aria-label="Tick every user"></th>
+        <th>User</th><th>Rights</th><th>Kept with</th>
       </tr></thead>
       <tbody>
       {{range $k.MySQLUsers}}
         {{$a := .}}<tr{{if .System}} class="cpr:opacity-60"{{end}}>
-          <td>{{if .System}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" disabled aria-label="{{.Who}} is the server's own account">{{else}}{{$b := $c.Box "mysql_user" .Who .AttachedTo false .Who}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="{{$b.Name}}" value="{{$b.Value}}" aria-label="{{$b.Label}}"{{if $b.Checked}} checked{{end}}{{if $b.Existing}} data-existing data-same="{{$b.Value}}"{{end}} data-needs="{{range $i, $r := .Rights}}{{if $i}},{{end}}{{$r.Database}}{{end}}">{{end}}</td>
-          <td class="cpr:mono">{{.Who}}</td>
-          <td class="cpr:mono cpr:text-xs">{{.Plugin}}</td>
+          <td>{{if .System}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" disabled aria-label="{{.Who}} is the server's own user">{{else}}{{$b := $c.Box "mysql_user" .Who .AttachedTo false .Who}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="{{$b.Name}}" value="{{$b.Value}}" aria-label="{{$b.Label}}"{{if $b.Checked}} checked{{end}}{{if $b.Existing}} data-existing data-same="{{$b.Value}}"{{end}} data-needs="{{range $i, $r := .Rights}}{{if $i}},{{end}}{{$r.Database}}{{end}}">{{end}}</td>
+          <td><span class="cpr:mono">{{.Who}}</span><br><span class="cpr:mono cpr:text-xs cpr:text-base-content/50" title="Authenticates with {{.Plugin}}">{{.Plugin}}</span></td>
           <td class="cpr:text-xs">{{if .Global}}<span class="cpr:font-semibold">every database</span> <span class="cpr:text-base-content/60" title="{{join .Global ", "}}">{{if gt (len .Global) 8}}{{len .Global}} privileges{{else}}{{join .Global ", "}}{{end}}</span>{{end}}{{range $i, $r := .Rights}}{{if or $i $a.Global}}<br>{{end}}<span class="cpr:mono">{{$r.Database}}</span> <span class="cpr:text-base-content/60">{{join $r.Privileges ", "}}</span>{{end}}{{if and (not .Global) (not .Rights)}}<span class="cpr:text-base-content/50">connect only</span>{{end}}</td>
           <td>{{if .System}}<span class="cpr:text-base-content/50">the server's own</span>{{else if .AttachedTo}}{{.AttachedTo}}{{else}}<span class="cpr:text-base-content/50">not yet</span>{{end}}</td>
         </tr>
       {{end}}
       </tbody>
     </table></div>
+    </div>
     {{end}}
+    </div>
   </section>
 
   <section role="tabpanel" data-tab-panel="postgresql" aria-label="PostgreSQL">

@@ -60,11 +60,11 @@ func usableAccountPart(part string) bool {
 func splitWho(who string) (user, host string, err error) {
 	at := strings.LastIndex(who, "@")
 	if at < 0 {
-		return "", "", fmt.Errorf("%q is not an account: one is written user@host", who)
+		return "", "", fmt.Errorf("%q is not a database user: one is written user@host", who)
 	}
 	user, host = who[:at], who[at+1:]
 	if !usableAccountPart(user) || !usableAccountPart(host) {
-		return "", "", fmt.Errorf("%q is not an account name this can use", who)
+		return "", "", fmt.Errorf("%q is not a user name this can use", who)
 	}
 	return user, host, nil
 }
@@ -247,7 +247,7 @@ func (p *Provider) AttachMySQLUser(ctx context.Context, who string) ([]string, e
 	}
 	who = user + "@" + host
 	if systemMySQLUsers[user] {
-		return nil, fmt.Errorf("%s is the server's own account, not one a backup carries", who)
+		return nil, fmt.Errorf("%s is the server's own user, not one a backup carries", who)
 	}
 	accounts, err := p.mysqlAccounts(ctx)
 	if err != nil {
@@ -260,7 +260,7 @@ func (p *Provider) AttachMySQLUser(ctx context.Context, who string) ([]string, e
 		}
 	}
 	if !known {
-		return nil, fmt.Errorf("the server has no account %s", who)
+		return nil, fmt.Errorf("the server has no database user %s", who)
 	}
 	rights, err := p.mysqlRights(ctx)
 	if err != nil {
@@ -295,7 +295,7 @@ func (p *Provider) AttachMySQLUser(ctx context.Context, who string) ([]string, e
 		if err := p.Catalog.SaveSource(source); err != nil {
 			return nil, fmt.Errorf("plain: keep the choice: %w", err)
 		}
-		p.log().Info("an account was kept with a source", "source", source.Name, "user", who)
+		p.log().Info("a database user was kept with a source", "source", source.Name, "user", who)
 	}
 	if len(names) == 0 {
 		var databases []string
@@ -366,7 +366,7 @@ func (p *Provider) readAccount(ctx context.Context, who string, databases []stri
 		return keptAccount{}, err
 	}
 	if len(rows) == 0 {
-		return keptAccount{}, fmt.Errorf("the server has no account %s", who)
+		return keptAccount{}, fmt.Errorf("the server has no database user %s", who)
 	}
 	kept.Plugin = rows[0][0]
 	if len(rows[0]) > 1 {
@@ -443,7 +443,7 @@ func (p *Provider) keepAccounts(ctx context.Context, source panel.Source, dumps 
 	}
 	hashes := map[string]map[string]auth{}
 	var runnable strings.Builder
-	fmt.Fprintf(&runnable, "-- The accounts kept with %s, with the password hashes they had.\n", source.Name)
+	fmt.Fprintf(&runnable, "-- The database users kept with %s, with the password hashes they had.\n", source.Name)
 	fmt.Fprintf(&runnable, "-- A restore runs these; so can a person, against a %s.\n", map[bool]string{true: "MariaDB", false: "MySQL"}[mariadb])
 	var kept, warnings []string
 	for _, who := range source.MySQLUsers {
@@ -499,7 +499,7 @@ func (p *Provider) PutDatabaseUsers(ctx context.Context, account string, users [
 	var statements []string
 	for _, user := range users {
 		if !usableAccountPart(user.Name) || !usableAccountPart(user.Host) {
-			return fmt.Errorf("plain: %q@%q is not an account name this can use", user.Name, user.Host)
+			return fmt.Errorf("plain: %q@%q is not a user name this can use", user.Name, user.Host)
 		}
 		statement, err := createUser(keptAccount{User: user.Name, Host: user.Host, Plugin: user.Plugin, HexHash: user.Hash}, mariadb)
 		if err != nil {
@@ -532,8 +532,8 @@ func (p *Provider) PutDatabaseUsers(ctx context.Context, account string, users [
 	var complaint bytes.Buffer
 	cmd.Stderr = &complaint
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("plain: recreate the accounts of %s: %w%s", source.Name, err, saidOnStderr(complaint.String()))
+		return fmt.Errorf("plain: recreate the database users of %s: %w%s", source.Name, err, saidOnStderr(complaint.String()))
 	}
-	p.log().Warn("database accounts recreated from a backup", "source", source.Name, "accounts", len(users))
+	p.log().Warn("database users recreated from a backup", "source", source.Name, "users", len(users))
 	return nil
 }

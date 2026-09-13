@@ -193,16 +193,17 @@ for the folder one knows the name of and the name one wants for it.
 **Amended: the accounts are chosen too, and kept with their
 databases.** "I should be able to select from all the available users
 and databases, and their relationships and permissions." The MySQL tab
-lists every account the server has (`mysql.user`), what authenticates
-it, its privileges on every database (`information_schema.user_privileges`)
+lists every database user the server has (`mysql.user`), beside the
+databases and with a box in its header, what authenticates it, its privileges on every database (`information_schema.user_privileges`)
 and on single ones (`schema_privileges`), and each database says who
-has what on it. An account ticked is not a source of its own: the
+has what on it. They are *users* on the page, since an account is the
+unit a panel backs up. A user ticked is not a source of its own: the
 point of keeping it is that restoring the database brings back the
 login that opens it, the way a panel account restores home, databases
-and users together. So `Chooser.AttachMySQLUser` keeps the account with
+and users together. So `Chooser.AttachMySQLUser` keeps the user with
 every source that dumps a database it has schema-level rights on, and
 refuses one with rights on no such database, naming the databases to
-tick with it; the server's own accounts are shown and refused. The
+tick with it; the server's own users are shown and refused. The
 backup writes, beside the dumps, the two files a cPanel backup carries
 for the same thing -- the hashes as data (`_users.sql-auth.json`) and
 the statements a person can run (`_users-runnable.sql`: `CREATE USER
@@ -210,7 +211,7 @@ IF NOT EXISTS` in the server's own dialect, MariaDB's `VIA ... USING`
 or MySQL's `WITH ... AS 0x...`, then the grants on the source's
 databases) -- so the agent's restore reads them as it reads a panel's,
 checks the databases are there, and `PutDatabaseUsers` makes the
-accounts again with the hashes they had. Grants on other databases,
+users again with the hashes they had. Grants on other databases,
 and the grant option, are not put back; the file says which, and so
 does the backup's report. The hash is never shown on a page. The
 PostgreSQL roles are listed as before and not chosen yet.

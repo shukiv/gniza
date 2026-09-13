@@ -558,11 +558,12 @@ func TestASourceWhoseContainerIsGoneKeepsAFolderRow(t *testing.T) {
 	}
 }
 
-// The MySQL tab lists every account the server has with what it can
-// reach, and an account ticked is kept with the source that dumps its
-// database; one with rights on no database backed up is refused by
-// name, and the server's own are not offered.
-func TestAnAccountTickedIsKeptWithItsDatabases(t *testing.T) {
+// The MySQL tab lists every database user the server has with what it
+// can reach, beside the databases, each table with a box in its header;
+// a user ticked is kept with the source that dumps its database; one
+// with rights on no database backed up is refused by name, and the
+// server's own are not offered.
+func TestADatabaseUserTickedIsKeptWithItsDatabases(t *testing.T) {
 	server, handler, _ := newPlainServer(t)
 	noted := time.Now()
 	destination, err := server.engine.Store().PutDestination(nodestore.Destination{Name: "usb", Type: "local", Config: map[string]string{"root": t.TempDir()}})
@@ -575,7 +576,10 @@ func TestAnAccountTickedIsKeptWithItsDatabases(t *testing.T) {
 	page := getPage(handler, "/schedule", false).Body.String()
 	for _, want := range []string{
 		`name="mysql_user" value="shop_app@localhost" aria-label="shop_app@localhost" data-needs="shop"`,
-		`aria-label="root@localhost is the server's own account"`,
+		`aria-label="root@localhost is the server's own user"`,
+		`<h4 class="cpr:section-title cpr:mt-0 cpr:mb-2">Databases</h4>`,
+		`<h4 class="cpr:section-title cpr:mt-0 cpr:mb-2">Users</h4>`,
+		`data-tick-all aria-label="Tick every user"`,
 		`<span class="cpr:mono">shop_app@localhost</span> <span class="cpr:text-base-content/60">INSERT, SELECT</span>`,
 		"every database</span> <span class=\"cpr:text-base-content/60\" title=\"ALL PRIVILEGES\">ALL PRIVILEGES",
 	} {
@@ -583,24 +587,24 @@ func TestAnAccountTickedIsKeptWithItsDatabases(t *testing.T) {
 			t.Errorf("the MySQL tab lacks %q: %s", want, firstLine(page, "mysql_user"))
 		}
 	}
-	// Ticked alone, the account has no source to be kept with.
+	// Ticked alone, the user has no source to be kept with.
 	alone := postForm(server, handler, "/accounts/add", url.Values{"mysql_user": {"shop_app@localhost"}})
 	if reason := refusal(t, alone); !strings.Contains(reason, "has rights on no database that is backed up; tick shop with it") {
-		t.Errorf("an account without its database is refused with %q", reason)
+		t.Errorf("a user without its database is refused with %q", reason)
 	}
 	// Ticked with its database, it is kept with the fresh source.
 	both := postForm(server, handler, "/accounts/add", url.Values{"mysql": {"shop"}, "mysql_user": {"shop_app@localhost"}})
 	if location := both.Header().Get("Location"); both.Code != http.StatusSeeOther || !strings.Contains(location, "kind=ok") || !strings.Contains(location, "mysql-shop+%28shop_app%40localhost+kept+with+it%29") {
-		t.Errorf("an account with its database = %d %s", both.Code, location)
+		t.Errorf("a user with its database = %d %s", both.Code, location)
 	}
 	sources, _ := server.engine.Chooser()
 	list, err := sources.Sources(context.Background())
 	if err != nil || len(list) != 1 || strings.Join(list[0].MySQLUsers, ",") != "shop_app@localhost" {
 		t.Fatalf("sources = %+v, %v", list, err)
 	}
-	// In the schedule form the kept account is the source's row.
+	// In the schedule form the kept user is the source's row.
 	form := getPage(handler, "/schedule", false).Body.String()
 	if !strings.Contains(form, `name="source" value="mysql-shop" aria-label="shop_app@localhost"`) {
-		t.Errorf("the schedule form does not tick the account with its source: %s", firstLine(form, "shop_app@localhost"))
+		t.Errorf("the schedule form does not tick the user with its source: %s", firstLine(form, "shop_app@localhost"))
 	}
 }

@@ -289,29 +289,42 @@
     next.focus();
     next.click();
   });
+  // A database user ticked brings the databases it has rights on: it
+  // is kept with the sources that dump them, so they have to be there.
+  // The rows are in the databases table beside the users table, on the
+  // same tab; true when one was ticked.
+  function bring(box) {
+    if (!box.checked || !box.dataset.needs) { return false; }
+    var panel = box.closest("[data-tab-panel]") || box.closest("[data-tickable]");
+    var brought = false;
+    box.dataset.needs.split(",").forEach(function (database) {
+      panel.querySelectorAll("tr[data-db] input[type=checkbox]").forEach(function (other) {
+        if (other.closest("tr").dataset.db === database && !other.disabled && !other.checked) {
+          other.checked = true;
+          brought = true;
+        }
+      });
+    });
+    return brought;
+  }
   document.addEventListener("change", function (event) {
     var box = event.target;
     if (!box.matches || !box.matches("input[type=checkbox]")) { return; }
     var table = box.closest("[data-tickable]");
     if (!table) { return; }
+    var brought = false;
     if (box.hasAttribute("data-tick-all")) {
-      rowBoxes(table).forEach(function (row) { row.checked = box.checked; });
+      rowBoxes(table).forEach(function (row) { row.checked = box.checked; brought = bring(row) || brought; });
     } else if (box.hasAttribute("data-tick-group")) {
       rowBoxes(table).forEach(function (row) {
         var tr = row.closest("tr");
         if (tr && tr.dataset.group === box.dataset.tickGroup) { row.checked = box.checked; }
       });
+    } else {
+      brought = bring(box);
     }
-    // An account ticked brings the databases it has rights on: it is
-    // kept with the sources that dump them, so they have to be there.
-    if (box.checked && box.dataset.needs) {
-      var panel = box.closest("[data-tab-panel]") || table;
-      box.dataset.needs.split(",").forEach(function (database) {
-        panel.querySelectorAll("tr[data-db] input[type=checkbox]").forEach(function (other) {
-          if (other.closest("tr").dataset.db === database && !other.disabled) { other.checked = true; }
-        });
-      });
-      panel.querySelectorAll("[data-tickable]").forEach(settle);
+    if (brought) {
+      (box.closest("[data-tab-panel]") || table).querySelectorAll("[data-tickable]").forEach(settle);
     }
     // One source can stand behind several rows, on several tabs: a
     // folder chosen with its databases is one name. They tick together.

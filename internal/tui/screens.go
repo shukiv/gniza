@@ -683,7 +683,7 @@ func folderForm(offered candidates) *form {
 // yet on by default, each with whose it is.
 func databaseForm(offered candidates, engine string) (*form, bool) {
 	databases, title, help := offered.MySQL, "Back up MySQL databases",
-		"Each database becomes a source of its own, dumped with mysqldump on every run. The accounts with rights on it are shown. An account toggled on below is kept with the sources that dump the databases it reaches, hash and grants, so a restore brings the login back."
+		"Each database becomes a source of its own, dumped with mysqldump on every run. The database users with rights on it are shown. A user toggled on below is kept with the sources that dump the databases it reaches, hash and grants, so a restore brings the login back."
 	if engine == "postgresql" {
 		databases, title, help = offered.PostgreSQL, "Back up PostgreSQL databases",
 			"Each database becomes a source of its own, dumped with pg_dump on every run. The owner is shown; the roles are kept beside the dump as pg_dumpall writes them, for reference, and not created again on restore."
@@ -707,7 +707,7 @@ func databaseForm(offered candidates, engine string) (*form, bool) {
 			if account.System || account.AttachedTo != "" {
 				continue
 			}
-			label := "account " + account.User + "@" + account.Host
+			label := "user " + account.User + "@" + account.Host
 			var reaches []string
 			for _, right := range account.Rights {
 				reaches = append(reaches, right.Database+": "+strings.Join(right.Privileges, ", "))

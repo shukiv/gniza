@@ -924,10 +924,10 @@ func TestTheAccountsAreListedWithWhatTheyReach(t *testing.T) {
 	}
 	for who, complaint := range map[string]string{
 		"blog_app@localhost": "has rights on no database that is backed up; tick blog with it",
-		"root@localhost":     "the server's own account",
-		"nobody@localhost":   "has no account nobody@localhost",
+		"root@localhost":     "the server's own user",
+		"nobody@localhost":   "has no database user nobody@localhost",
 		"shop_app":           "written user@host",
-		"x'y@localhost":      "not an account name",
+		"x'y@localhost":      "not a user name",
 	} {
 		if _, err := provider.AttachMySQLUser(context.Background(), who); err == nil || !strings.Contains(err.Error(), complaint) {
 			t.Errorf("attaching %s = %v, want %q", who, err, complaint)

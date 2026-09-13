@@ -354,8 +354,10 @@ func TestAnUpgradeIsRefusedWhereTheReleaseCarriesNoPackageForThisPanel(t *testin
 // used to name the cPanel tree outright, so on a DirectAdmin server it
 // ran an installer that was not there. It now runs whichever package the
 // download left beside it -- there is one -- and records what it said.
+// The plain package is the third; it was left out once, and a server
+// without a panel could not upgrade itself.
 func TestTheWrapperRunsTheInstallerThatWasUnpacked(t *testing.T) {
-	for _, tree := range []string{"cprest-plugin", "gniza-directadmin"} {
+	for _, tree := range []string{"cprest-plugin", "gniza-directadmin", "gniza-plain"} {
 		t.Run(tree, func(t *testing.T) {
 			dir := t.TempDir()
 			if err := os.MkdirAll(filepath.Join(dir, tree), 0o700); err != nil {

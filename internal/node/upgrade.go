@@ -27,14 +27,17 @@ const upgradeGivesUp = 30 * time.Minute
 // installerWrapper is what the transient unit runs. It takes no arguments
 // and interpolates nothing: it works from its own directory, so the only
 // thing that decides what it installs is where it was written, and the
-// two directory names it looks for are the two a release publishes.
+// three directory names it looks for are the three a release publishes.
+// The plain package was missing from the list once, so a server without
+// a panel unpacked its upgrade and then said "the release left no
+// installer here".
 const installerWrapper = `#!/bin/sh
 # Written by gniza. Runs the installer of a release that has already been
 # checked against the release key, and records what it said.
 cd "$(dirname "$0")" || exit 1
 exec >install.log 2>&1
 # One package is unpacked here, the one published for this server's panel.
-for tree in cprest-plugin gniza-directadmin; do
+for tree in cprest-plugin gniza-directadmin gniza-plain; do
 	if [ -f "$tree/install.sh" ]; then
 		sh "$tree/install.sh"
 		echo $? > status

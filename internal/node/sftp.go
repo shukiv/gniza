@@ -475,6 +475,35 @@ func (e *Engine) addSFTPByPassword(req SFTPRequest, address string, hostKey sshk
 	return result, nil
 }
 
+// EnsureSFTPDirWithPassword creates a destination's directory on the far
+// side with the account's password, for a destination edited to log in
+// with one: adding a destination makes the directory, and an edit that
+// changes the login should leave it in the same state. The host key is
+// the one pinned when the destination was added.
+func (e *Engine) EnsureSFTPDirWithPassword(dest nodestore.Destination, password string) error {
+	hosts, err := os.ReadFile(dest.Config["known_hosts_file"])
+	if err != nil {
+		return fmt.Errorf("node: the host key pinned for %s: %w", dest.Name, err)
+	}
+	var hostKey sshkeys.HostKey
+	for _, line := range strings.Split(string(hosts), "\n") {
+		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
+			hostKey.Line = line
+			break
+		}
+	}
+	if hostKey.Line == "" {
+		return fmt.Errorf("node: no host key is pinned for %s", dest.Name)
+	}
+	port := dest.Config["port"]
+	if port == "" {
+		port = "22"
+	}
+	address := net.JoinHostPort(dest.Config["host"], port)
+	return sshkeys.EnsureRemoteDirWithPassword(address, dest.Config["user"], password,
+		hostKey, dest.Config["root"], sshTimeout)
+}
+
 // askPassProgram is what ssh runs for a password when a destination logs
 // in with one. ssh hands it the prompt as an argument and reads the
 // answer from its output; the password is in the environment restic was
@@ -511,6 +540,12 @@ func (e *Engine) EnsureAskPass() (string, error) {
 // PublicKeyFor returns the public key Gniza generated for a destination, so
 // the interface can show it again later.
 func (e *Engine) PublicKeyFor(dest nodestore.Destination) string {
+	// A destination edited from a key to a password keeps the key file
+	// but logs in without it; showing the key would send an operator to
+	// install something nothing uses.
+	if dest.Config["auth"] == sftpAuthPassword {
+		return ""
+	}
 	identity := dest.Config["identity_file"]
 	if identity == "" {
 		return ""

@@ -57,9 +57,10 @@ without the password in it — no secret is carried between pages — so if you
 typed one, type it again there; the page says so, and will not save without
 it.
 
-**Edit** on a destination's card can switch it to a password. One added with a
-password has no key: to log in with a key instead, remove it and add it
-again.
+**Edit** on a destination's card can switch it to a password: the directory is
+made with it, and the card stops showing the key, which nothing uses from
+then on. One added with a password has no key: to log in with a key instead,
+remove it and add it again.
 
 A key made and never used is removed after a week. One a destination is using
 is left alone however old it is.

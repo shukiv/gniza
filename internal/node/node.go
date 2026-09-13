@@ -956,7 +956,11 @@ func (e *Engine) Recovery(repositoryID string) (RecoveryCard, error) {
 	if options, err := opened.Dest.Options(); err == nil {
 		card.ResticOptions = options["sftp.args"]
 	}
-	card.SSHIdentityPath = dest.Config["identity_file"]
+	// A destination that logs in with a password has no key to hand
+	// over, even when one is left from before it was edited to that.
+	if dest.Config["auth"] != sftpAuthPassword {
+		card.SSHIdentityPath = dest.Config["identity_file"]
+	}
 	card.SSHKnownHostsPath = dest.Config["known_hosts_file"]
 	card.SSHUser, card.SSHHost = dest.Config["user"], dest.Config["host"]
 	if card.SSHIdentityPath != "" {

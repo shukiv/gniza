@@ -1276,6 +1276,15 @@ func (s *Server) handleEditDestination(w http.ResponseWriter, r *http.Request) {
 		s.redirect(w, r, "/destinations?edit="+id, "error", err.Error())
 		return
 	}
+	// A password given now is the login from here on; make the directory
+	// with it as adding the destination would have. What goes wrong here
+	// is said by the test that follows, in the destination's own words.
+	if password, given := secrets["password"]; given && config["auth"] == "password" &&
+		destination.Type(dest.Type) == destination.TypeSFTP {
+		if err := s.engine.EnsureSFTPDirWithPassword(dest, password); err != nil {
+			s.log.Warn("create the directory on the far side", "destination", name, "error", err)
+		}
+	}
 	if err := s.engine.TestDestination(r.Context(), id); err != nil {
 		s.redirect(w, r, "/destinations", "warn",
 			fmt.Sprintf("Saved, but %s could not be reached: %v", name, err))

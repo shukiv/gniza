@@ -444,10 +444,66 @@ func TestSFTPFormAsksForNeitherAKeyNorKnownHosts(t *testing.T) {
 		t.Error("the form still asks for a known_hosts file")
 	}
 	if !strings.Contains(page, `name="password"`) {
-		t.Error("the form has no password field for installing the key")
+		t.Error("the form has no password field")
 	}
 	if !strings.Contains(page, "makes its own key") {
 		t.Error("the form does not say that a key will be generated")
+	}
+	// The operator says which login the backups make.
+	for _, want := range []string{`name="auth" value="password" checked`, `name="auth" value="key"`, "Log in with"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the form lacks %q", want)
+		}
+	}
+}
+
+// TestAPasswordTypedBeforeTheHostKeyIsAskedForAgain: the form comes back
+// once for the host key to be agreed to, without the password in it. A
+// password typed the first time and missing the second is asked for
+// again rather than the destination being saved as one that logs in
+// without it -- which is how a key was left uninstalled and a password
+// login would be saved without a password.
+func TestAPasswordTypedBeforeTheHostKeyIsAskedForAgain(t *testing.T) {
+	client, _, _ := newUI(t)
+	_, page := get(t, client, "/destinations")
+	resp, err := client.PostForm("http://ui/destinations/add", map[string][]string{
+		"csrf": {csrfToken(t, page)}, "name": {"Backup server"}, "type": {"sftp"},
+		"host": {"127.0.0.1"}, "port": {"1"}, "user": {"shuki"}, "root": {"/home/shuki/backups"},
+		"auth": {"password"}, "password": {""}, "had_password": {"1"},
+		"confirm_fingerprint": {"SHA256:abc"}, "host_key_type": {"ssh-ed25519"},
+	})
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	page = string(body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST = %d, want the form back", resp.StatusCode)
+	}
+	for _, want := range []string{
+		"Type the password again", "SHA256:abc", `name="had_password" value="1"`,
+		`name="host_key_type" value="ssh-ed25519"`, `value="shuki"`, `name="auth" value="password" checked`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the form came back without %q", want)
+		}
+	}
+
+	// A password login asked for with no password at all is refused
+	// before anything is sent to the server.
+	resp, err = client.PostForm("http://ui/destinations/add", map[string][]string{
+		"csrf": {csrfToken(t, page)}, "name": {"Backup server"}, "type": {"sftp"},
+		"host": {"127.0.0.1"}, "port": {"1"}, "user": {"shuki"}, "root": {"/home/shuki/backups"},
+		"auth": {"password"},
+	})
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ = io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "the password is required to log in with one") {
+		t.Errorf("a password login without a password was not refused as one: %d bytes back", len(body))
 	}
 }
 

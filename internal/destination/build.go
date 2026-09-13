@@ -30,14 +30,24 @@ func Build(spec Spec) (Destination, error) {
 	case TypeLocal:
 		dest = &Local{Root: reader.config("root", true)}
 	case TypeSFTP:
-		dest = &SFTP{
+		// The login is a key unless the configuration says password, in
+		// which case the password is a secret and the askpass program a
+		// path, and a key is not needed.
+		byPassword := reader.config("auth", false) == "password"
+		sftp := &SFTP{
 			Host:           reader.config("host", true),
 			Port:           reader.intConfig("port"),
 			User:           reader.config("user", true),
 			Root:           reader.config("root", true),
-			IdentityFile:   reader.config("identity_file", true),
+			IdentityFile:   reader.config("identity_file", !byPassword),
 			KnownHostsFile: reader.config("known_hosts_file", true),
 		}
+		askPass := reader.config("askpass_file", byPassword)
+		if byPassword {
+			sftp.Password = reader.secret("password", true)
+			sftp.AskPass = askPass
+		}
+		dest = sftp
 	case TypeREST:
 		// Accepted here so the unknown-key check does not reject it; it is
 		// applied by ForMaintenance, not used directly.

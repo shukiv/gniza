@@ -10,10 +10,17 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // SFTP is a repository reached over SSH. No Gniza software runs on the
 // far end; restic drives the system ssh client.
+//
+// The login is made with a key or with a password. With a key, ssh is
+// pointed at the identity file and told to use nothing else. With a
+// password, ssh is told to ask for one and to ask AskPass rather than a
+// terminal, and AskPass answers with the password from the environment
+// restic was given, so the password is never on a command line.
 type SFTP struct {
 	Host string
 	// Port is the SSH port. Zero means the default (22) and produces the
@@ -22,10 +29,16 @@ type SFTP struct {
 	User string
 	// Root is the absolute remote directory holding the repositories.
 	Root string
-	// IdentityFile is the path to the private key on the agent. The key is
-	// written by the agent from the credential vault at mode 0600 and
-	// removed when the job ends.
+	// IdentityFile is the path to the private key on the agent, at mode
+	// 0600, the login when Password is empty.
 	IdentityFile string
+	// Password, when set, is the login instead of the key: the account's
+	// password on the far side, a secret from the vault resolved per job.
+	Password string
+	// AskPass is the program ssh runs for the password (SSH_ASKPASS),
+	// written by the agent under its configuration directory. It prints
+	// the password from the environment.
+	AskPass string
 	// KnownHostsFile pins the server's host key. Empty means the ssh
 	// client's default, which Preflight rejects: an unpinned host key
 	// turns a DNS or routing compromise into a credential disclosure.
@@ -38,6 +51,15 @@ type SFTP struct {
 var _ Destination = (*SFTP)(nil)
 
 func (s *SFTP) Type() Type { return TypeSFTP }
+
+// byPassword says the login is made with the account's password rather
+// than a key.
+func (s *SFTP) byPassword() bool { return s.Password != "" }
+
+// passwordVariable is the environment variable AskPass prints. The
+// password travels in restic's environment, as the repository password
+// does, and never in an argument.
+const passwordVariable = "GNIZA_SSH_PASSWORD"
 
 func (s *SFTP) URI(repoPath string) (string, error) {
 	if err := s.validate(); err != nil {
@@ -65,9 +87,29 @@ func (s *SFTP) hostForURI() string {
 	return s.Host
 }
 
-// Env returns no variables. SSH authentication is configured through the
-// identity and known-hosts files, which reach ssh via Options.
-func (s *SFTP) Env() (map[string]string, error) { return map[string]string{}, nil }
+// Env returns what ssh needs to log in with a password, and nothing
+// when the login is a key: a key is configured through the identity and
+// known-hosts files, which reach ssh via Options.
+//
+// ssh asks for a password on its terminal. It runs SSH_ASKPASS instead
+// when it has no terminal to ask on, which is how the agent runs as a
+// service, and SSH_ASKPASS_REQUIRE=force makes an OpenSSH of 8.4 or
+// later run it whether or not there is one. DISPLAY has to be set for an
+// older ssh to consider the program at all.
+func (s *SFTP) Env() (map[string]string, error) {
+	if !s.byPassword() {
+		return map[string]string{}, nil
+	}
+	if err := s.validate(); err != nil {
+		return nil, err
+	}
+	return map[string]string{
+		"SSH_ASKPASS":         s.AskPass,
+		"SSH_ASKPASS_REQUIRE": "force",
+		"DISPLAY":             "gniza",
+		passwordVariable:      s.Password,
+	}, nil
+}
 
 // Options returns restic's sftp.args, which restic injects into the ssh
 // command it builds:
@@ -87,14 +129,29 @@ func (s *SFTP) Options() (map[string]string, error) {
 	if s.KnownHostsFile == "" {
 		return nil, fmt.Errorf("sftp: known-hosts file is required; refusing to trust an unpinned host key")
 	}
-	args := []string{
-		"-i", s.IdentityFile,
+	pinned := []string{
 		"-o", "UserKnownHostsFile=" + s.KnownHostsFile,
 		"-o", "StrictHostKeyChecking=yes",
-		// Never prompt: an unattended agent that is asked for a password
-		// or a host-key confirmation would block until the job times out.
-		"-o", "BatchMode=yes",
-		"-o", "IdentitiesOnly=yes",
+	}
+	var args []string
+	if s.byPassword() {
+		// The password, and only it: root's own keys are not offered,
+		// and a wrong password is refused once rather than asked for
+		// again. BatchMode would forbid a password altogether.
+		args = append(pinned,
+			"-o", "PubkeyAuthentication=no",
+			"-o", "PreferredAuthentications=password,keyboard-interactive",
+			"-o", "NumberOfPasswordPrompts=1",
+		)
+	} else {
+		args = append([]string{"-i", s.IdentityFile}, pinned...)
+		args = append(args,
+			// Never prompt: an unattended agent that is asked for a
+			// password or a host-key confirmation would block until the
+			// job times out.
+			"-o", "BatchMode=yes",
+			"-o", "IdentitiesOnly=yes",
+		)
 	}
 	return map[string]string{"sftp.args": strings.Join(args, " ")}, nil
 }
@@ -106,10 +163,13 @@ func (s *SFTP) Preflight(ctx context.Context) error {
 	if s.KnownHostsFile == "" {
 		return fmt.Errorf("sftp: known-hosts file is required; refusing to trust an unpinned host key")
 	}
-	for name, path := range map[string]string{
-		"identity file":    s.IdentityFile,
-		"known-hosts file": s.KnownHostsFile,
-	} {
+	files := map[string]string{"known-hosts file": s.KnownHostsFile}
+	if s.byPassword() {
+		files["askpass program"] = s.AskPass
+	} else {
+		files["identity file"] = s.IdentityFile
+	}
+	for name, path := range files {
 		info, err := os.Stat(path)
 		if err != nil {
 			return fmt.Errorf("sftp: %s: %w", name, err)
@@ -118,9 +178,15 @@ func (s *SFTP) Preflight(ctx context.Context) error {
 			return fmt.Errorf("sftp: %s %q is a directory", name, path)
 		}
 	}
-	if perm := mustStatMode(s.IdentityFile); perm&0o077 != 0 {
-		return fmt.Errorf("sftp: identity file %q is group- or world-accessible (mode %04o)",
-			s.IdentityFile, perm)
+	if !s.byPassword() {
+		if perm := mustStatMode(s.IdentityFile); perm&0o077 != 0 {
+			return fmt.Errorf("sftp: identity file %q is group- or world-accessible (mode %04o)",
+				s.IdentityFile, perm)
+		}
+	} else if perm := mustStatMode(s.AskPass); perm&0o077 != 0 {
+		// Anyone who can replace the program is handed the password.
+		return fmt.Errorf("sftp: askpass program %q is group- or world-accessible (mode %04o)",
+			s.AskPass, perm)
 	}
 
 	port := s.Port
@@ -155,6 +221,20 @@ func (s *SFTP) login(ctx context.Context, port int) error {
 		strings.Fields(options["sftp.args"])...)
 	args = append(args, "-o", "ConnectTimeout=20", s.Host, "-s", "sftp")
 	cmd := exec.CommandContext(ctx, ssh, args...)
+	if s.byPassword() {
+		env, err := s.Env()
+		if err != nil {
+			return err
+		}
+		cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
+		for key, value := range env {
+			cmd.Env = append(cmd.Env, key+"="+value)
+		}
+		// Without a controlling terminal ssh asks the askpass program,
+		// whatever its version; the agent run from a terminal would
+		// otherwise hang at a prompt nobody sees.
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	}
 	// sftp-server reads its first packet from stdin; at end of file it
 	// exits cleanly, which is all that is asked of it.
 	cmd.Stdin = strings.NewReader("")
@@ -176,6 +256,9 @@ func (s *SFTP) explain(said string, err error) error {
 		}
 	}
 	switch {
+	case s.byPassword() && strings.Contains(said, "Permission denied"):
+		return fmt.Errorf("sftp: %s does not accept the password for %s: edit this destination and give the password again, then test",
+			s.Host, s.User)
 	case strings.Contains(said, "Permission denied (publickey"):
 		return fmt.Errorf("sftp: %s does not accept Gniza's key for %s: put the public key shown on this destination's card into %s's ~/.ssh/authorized_keys on that server, then test again",
 			s.Host, s.User, s.User)
@@ -200,8 +283,10 @@ func (s *SFTP) validate() error {
 		return fmt.Errorf("sftp: root %q must be an absolute path", s.Root)
 	case s.Port < 0 || s.Port > 65535:
 		return fmt.Errorf("sftp: port %d is out of range", s.Port)
-	case s.IdentityFile == "":
-		return fmt.Errorf("sftp: identity file is required")
+	case s.IdentityFile == "" && s.Password == "":
+		return fmt.Errorf("sftp: a key or a password is required")
+	case s.Password != "" && s.AskPass == "":
+		return fmt.Errorf("sftp: the askpass program is required to log in with a password")
 	}
 	// A host is a name, not an option. ssh reads anything beginning with
 	// a dash as one, and the space probe passes the host on ssh's command
@@ -227,6 +312,7 @@ func (s *SFTP) validate() error {
 	for name, path := range map[string]string{
 		"identity file":    s.IdentityFile,
 		"known-hosts file": s.KnownHostsFile,
+		"askpass program":  s.AskPass,
 	} {
 		if strings.ContainsAny(path, " \t\"'\\") {
 			return fmt.Errorf("sftp: %s %q must not contain whitespace, quotes or backslashes", name, path)

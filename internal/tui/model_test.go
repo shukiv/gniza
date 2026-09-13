@@ -269,9 +269,9 @@ func TestAnSFTPHostKeyIsAgreedToBeforeAnythingIsSent(t *testing.T) {
 	m = typed(t, m, "arkady")
 	m = press(t, m, "tab")
 	m = typed(t, m, "/home/arkady/gniza")
-	m = press(t, m, "tab")
+	m = press(t, m, "tab", "tab") // past "Log in with", left on the password
 	m = typed(t, m, "pw")
-	m = press(t, m, "tab", "tab", "enter")
+	m = press(t, m, "tab", "enter")
 
 	if m.mode != modeConfirm || !strings.Contains(m.View(), "SHA256:abc") {
 		t.Fatalf("no fingerprint to agree to; mode %d:\n%s", m.mode, m.View())

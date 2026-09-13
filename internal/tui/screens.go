@@ -443,8 +443,10 @@ func destinationForm(hostname string) *form {
 		withWhen(textField("port", "Port", "22", ""), whenType("sftp")),
 		withWhen(textField("user", "User", "", "The account on that server the backups are written as."), whenType("sftp")),
 		withWhen(textField("root", "Remote directory", "", "Where under that account the repository goes."), whenType("sftp")),
-		withWhen(secretField("password", "Password", "That user's password, used once to install Gniza's key and then discarded. Leave empty if the key is already installed."), whenType("sftp")),
-		withWhen(textField("identity_file", "Existing key", "", "A private key file to use instead of making one. Usually empty."), whenType("sftp")),
+		withWhen(withHelp(choiceField("auth", "Log in with", []choice{{"password", "The user's password"}, {"key", "A key Gniza makes"}}, "password"),
+			"A password is kept encrypted on this server and used at every backup. A key's public half goes into the user's authorized_keys on that server: by you, or by Gniza given the password once."), whenType("sftp")),
+		withWhen(secretField("password", "Password", "That user's password. With a key it is used once to install the key and then discarded; leave it empty if the key is already installed."), whenType("sftp")),
+		withWhen(textField("identity_file", "Existing key", "", "A private key file to use instead of making one. Usually empty."), whenSFTPKey),
 		withWhen(textField("bucket", "Bucket", "", ""), whenType("s3")),
 		withWhen(textField("endpoint", "Endpoint", "", "Empty for AWS; the service's URL for anything else."), whenType("s3")),
 		withWhen(textField("region", "Region", "", ""), whenType("s3")),
@@ -460,6 +462,11 @@ func destinationForm(hostname string) *form {
 func withWhen(f field, when func(*form) bool) field {
 	f.when = when
 	return f
+}
+
+// whenSFTPKey shows a field of an SFTP destination that logs in with a key.
+func whenSFTPKey(f *form) bool {
+	return f.value("type") == "sftp" && f.value("auth") == "key"
 }
 
 func withHelp(f field, help string) field {

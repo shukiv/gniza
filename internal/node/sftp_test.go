@@ -29,6 +29,25 @@ func TestValidateSFTP(t *testing.T) {
 			t.Errorf("a request with a bad %s was accepted", name)
 		}
 	}
+
+	// A login with a password needs the password, and is not the path
+	// that makes an account or uses a key of one's own.
+	byPassword := valid
+	byPassword.Auth, byPassword.Password = "password", "pw"
+	if err := validateSFTP(&byPassword); err != nil {
+		t.Errorf("a password login: %v", err)
+	}
+	for name, break_ := range map[string]func(*SFTPRequest){
+		"no password":   func(r *SFTPRequest) { r.Password = "" },
+		"admin too":     func(r *SFTPRequest) { r.AdminUser, r.AdminPassword = "root", "x" },
+		"a key as well": func(r *SFTPRequest) { r.ExistingKeyPath = "/root/.ssh/id_ed25519" },
+	} {
+		request := byPassword
+		break_(&request)
+		if err := validateSFTP(&request); err == nil {
+			t.Errorf("a password login with %s was accepted", name)
+		}
+	}
 }
 
 func TestValidateSFTPTrimsWhitespace(t *testing.T) {

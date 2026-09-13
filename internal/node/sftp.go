@@ -27,8 +27,14 @@ type SFTPRequest struct {
 	User           string
 	RemoteDir      string
 	RepositoryPath string
-	// Password, when given, is used once to install the generated public
-	// key on the far side and is then discarded. It is never stored.
+	// Auth is how the backups log in: "password" keeps the account's
+	// password, sealed in the vault, and every backup logs in with it;
+	// anything else is a key Gniza makes, the default.
+	Auth string
+	// Password is the account's password on the far side. With Auth
+	// "password" it is the login and is kept. Otherwise, when given, it
+	// is used once to install the generated public key on the far side
+	// and is then discarded, never stored.
 	Password string
 	// ExistingKeyPath uses a key the operator already has instead of
 	// generating one.
@@ -275,6 +281,14 @@ func (e *Engine) AddSFTPDestination(req SFTPRequest) (SFTPResult, error) {
 		HostKeyType:     hostKey.Type,
 	}
 
+	if req.Auth == sftpAuthPassword {
+		result, err := e.addSFTPByPassword(req, address, hostKey, knownHostsPath, destinationID, result)
+		if err == nil {
+			litter = nil
+		}
+		return result, err
+	}
+
 	// 2. Our key for this destination.
 	identityPath := req.ExistingKeyPath
 	var privatePEM []byte
@@ -396,6 +410,104 @@ func (e *Engine) AddSFTPDestination(req SFTPRequest) (SFTPResult, error) {
 	return result, nil
 }
 
+// sftpAuthPassword is the value of SFTPRequest.Auth and of a destination's
+// "auth" configuration key when the backups log in with the account's
+// password.
+const sftpAuthPassword = "password"
+
+// addSFTPByPassword finishes a destination whose login is the account's
+// password: proves the password opens a login, makes the directory,
+// seals the password in the vault and stores the destination with the
+// program that hands ssh the password on every run.
+func (e *Engine) addSFTPByPassword(req SFTPRequest, address string, hostKey sshkeys.HostKey,
+	knownHostsPath, destinationID string, result SFTPResult) (SFTPResult, error) {
+	if err := sshkeys.VerifyPasswordLogin(address, req.User, req.Password, hostKey, sshTimeout); err != nil {
+		return SFTPResult{}, fmt.Errorf(
+			"node: %s does not accept the password for %s: %w", req.Host, req.User, err)
+	}
+	result.Verified = true
+	if err := sshkeys.EnsureRemoteDirWithPassword(address, req.User, req.Password,
+		hostKey, req.RemoteDir, sshTimeout); err != nil {
+		result.Warning = fmt.Sprintf(
+			"Logged in, but could not create %s: %v. Create it yourself and test again.",
+			req.RemoteDir, err)
+	}
+	askPass, err := e.EnsureAskPass()
+	if err != nil {
+		return SFTPResult{}, err
+	}
+	secrets := map[string]string{"password": req.Password}
+	dest := nodestore.Destination{
+		ID:   destinationID,
+		Name: req.Name,
+		Type: string(destination.TypeSFTP),
+		Config: map[string]string{
+			"host":             req.Host,
+			"user":             req.User,
+			"root":             req.RemoteDir,
+			"known_hosts_file": knownHostsPath,
+			"auth":             sftpAuthPassword,
+			"askpass_file":     askPass,
+		},
+	}
+	if req.Port != 22 {
+		dest.Config["port"] = strconv.Itoa(req.Port)
+	}
+	if _, err := destination.Build(destination.Spec{
+		Type: destination.TypeSFTP, Config: dest.Config, Secrets: secrets}); err != nil {
+		return SFTPResult{}, err
+	}
+	secretID, err := SealCredentials(e.store, e.vault, secrets)
+	if err != nil {
+		return SFTPResult{}, err
+	}
+	dest.CredentialsSecretID = secretID
+	stored, err := e.store.PutDestination(dest)
+	if err != nil {
+		return SFTPResult{}, err
+	}
+	result.Destination = stored
+	repository, err := e.newRepository(stored.ID, req.RepositoryPath)
+	if err != nil {
+		return SFTPResult{}, err
+	}
+	result.Repository = repository
+	return result, nil
+}
+
+// askPassProgram is what ssh runs for a password when a destination logs
+// in with one. ssh hands it the prompt as an argument and reads the
+// answer from its output; the password is in the environment restic was
+// given, never on a command line.
+const askPassProgram = `#!/bin/sh
+# Written by Gniza. ssh runs this instead of asking a terminal for the
+# password of a backup destination; the password is in the environment
+# the backup was started with.
+printf '%s\n' "$GNIZA_SSH_PASSWORD"
+`
+
+// EnsureAskPass writes the askpass program under the configuration
+// directory, readable and runnable by root alone, and returns its path.
+// One program serves every destination that logs in with a password.
+func (e *Engine) EnsureAskPass() (string, error) {
+	path := filepath.Join(e.settings.ConfigDir, "askpass")
+	if err := os.MkdirAll(e.settings.ConfigDir, 0o700); err != nil {
+		return "", fmt.Errorf("node: askpass program: %w", err)
+	}
+	if current, err := os.ReadFile(path); err == nil && string(current) == askPassProgram {
+		if info, err := os.Stat(path); err == nil && info.Mode().Perm() == 0o700 {
+			return path, nil
+		}
+	}
+	if err := os.WriteFile(path, []byte(askPassProgram), 0o700); err != nil {
+		return "", fmt.Errorf("node: askpass program: %w", err)
+	}
+	if err := os.Chmod(path, 0o700); err != nil {
+		return "", fmt.Errorf("node: askpass program: %w", err)
+	}
+	return path, nil
+}
+
 // PublicKeyFor returns the public key Gniza generated for a destination, so
 // the interface can show it again later.
 func (e *Engine) PublicKeyFor(dest nodestore.Destination) string {
@@ -440,6 +552,14 @@ func validateSFTP(req *SFTPRequest) error {
 			"node: give either the backup account's own password or an administrator's, " +
 				"not both: the first installs a key on an account that exists, the second " +
 				"creates the account")
+	case req.Auth == sftpAuthPassword && req.Password == "":
+		return fmt.Errorf("node: the password is required to log in with one")
+	case req.Auth == sftpAuthPassword && req.AdminPassword != "":
+		return fmt.Errorf(
+			"node: an administrator's password creates an account that logs in with a key; " +
+				"to log in with a password, give that account's own")
+	case req.Auth == sftpAuthPassword && req.ExistingKeyPath != "":
+		return fmt.Errorf("node: a destination that logs in with a password has no key")
 	}
 	if req.Port == 0 {
 		req.Port = 22

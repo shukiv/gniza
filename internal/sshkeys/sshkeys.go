@@ -279,6 +279,42 @@ func VerifyKeyLogin(address, user string, privatePEM []byte, host HostKey, timeo
 	return client.Close()
 }
 
+// passwordAuth answers with the password whether the server asks for
+// one outright or through keyboard-interactive, which is what a server
+// that authenticates through PAM offers.
+func passwordAuth(password string) []ssh.AuthMethod {
+	return []ssh.AuthMethod{
+		ssh.Password(password),
+		ssh.KeyboardInteractive(func(_, _ string, questions []string, _ []bool) ([]string, error) {
+			answers := make([]string, len(questions))
+			for i := range answers {
+				answers[i] = password
+			}
+			return answers, nil
+		}),
+	}
+}
+
+// VerifyPasswordLogin checks that the account's password opens a login,
+// for a destination whose backups will log in with it: one is never saved
+// as ready when the first backup would fail.
+func VerifyPasswordLogin(address, user, password string, host HostKey, timeout time.Duration) error {
+	expected, _, _, _, err := ssh.ParseAuthorizedKey([]byte(stripHostPattern(host.Line)))
+	if err != nil {
+		return fmt.Errorf("sshkeys: parse host key: %w", err)
+	}
+	client, err := ssh.Dial("tcp", address, &ssh.ClientConfig{
+		User:            user,
+		Auth:            passwordAuth(password),
+		Timeout:         timeout,
+		HostKeyCallback: ssh.FixedHostKey(expected),
+	})
+	if err != nil {
+		return fmt.Errorf("sshkeys: log in to %s as %s with the password: %w", address, user, err)
+	}
+	return client.Close()
+}
+
 // EnsureRemoteDir creates the backup directory on the far side, so an
 // operator does not have to.
 func EnsureRemoteDir(address, user string, privatePEM []byte, host HostKey, dir string, timeout time.Duration) error {
@@ -286,6 +322,16 @@ func EnsureRemoteDir(address, user string, privatePEM []byte, host HostKey, dir 
 	if err != nil {
 		return fmt.Errorf("sshkeys: parse our own private key: %w", err)
 	}
+	return ensureRemoteDir(address, user, []ssh.AuthMethod{ssh.PublicKeys(signer)}, host, dir, timeout)
+}
+
+// EnsureRemoteDirWithPassword is EnsureRemoteDir for a destination that
+// logs in with the account's password.
+func EnsureRemoteDirWithPassword(address, user, password string, host HostKey, dir string, timeout time.Duration) error {
+	return ensureRemoteDir(address, user, passwordAuth(password), host, dir, timeout)
+}
+
+func ensureRemoteDir(address, user string, auth []ssh.AuthMethod, host HostKey, dir string, timeout time.Duration) error {
 	expected, _, _, _, err := ssh.ParseAuthorizedKey([]byte(stripHostPattern(host.Line)))
 	if err != nil {
 		return fmt.Errorf("sshkeys: parse host key: %w", err)
@@ -293,7 +339,7 @@ func EnsureRemoteDir(address, user string, privatePEM []byte, host HostKey, dir 
 
 	client, err := ssh.Dial("tcp", address, &ssh.ClientConfig{
 		User:            user,
-		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		Auth:            auth,
 		Timeout:         timeout,
 		HostKeyCallback: ssh.FixedHostKey(expected),
 	})

@@ -39,6 +39,10 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
     that has never seen this one needs both: they are in the file below, with the commands that
     use them. Failing that, any account with SSH access to
     <span class="cpr:mono">{{.SSHUser}}@{{.SSHHost}}</span> works with a password.</p>
+    {{else if .SSHUser}}
+    <p class="cpr:hint">This server logs in to <span class="cpr:mono">{{.SSHUser}}@{{.SSHHost}}</span>
+    with that user's password, which is not on this card: restic asks for it. The options above pin
+    the host key, which is in the file below.</p>
     {{end}}
     <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:mt-4">
       <form method="post" action="?p=destinations/recovery/card" class="cpr:inline-block cpr:align-middle">
@@ -248,6 +252,7 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
     </div>
     {{end}}
 
+    {{if .PublicKey}}
     <div class="cpr:pad">
       <details>
         <summary class="cpr:fold cpr:text-primary cpr:py-1">Public key for {{.Name}}</summary>
@@ -261,6 +266,7 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
         </div>
       </details>
     </div>
+    {{end}}
   </div>
   {{end}}
 {{end}}
@@ -345,6 +351,8 @@ so it is done for you.</p>
     <input type="hidden" name="csrf" value="{{.CSRF}}">
     {{with $editing}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
     {{if $data.HostFingerprint}}<input type="hidden" name="confirm_fingerprint" value="{{$data.HostFingerprint}}">{{end}}
+    {{with $data.Submitted.host_key_type}}<input type="hidden" name="host_key_type" value="{{.}}">{{end}}
+    {{if $data.Submitted.had_password}}<input type="hidden" name="had_password" value="1">{{end}}
     <div class="cpr:grid cpr:gap-4 cpr:md:grid-cols-2">
       <div>
         <label class="cpr:field-label" for="name">Name</label>
@@ -423,15 +431,28 @@ so it is done for you.</p>
         </div>
       </div>
 
-      <label class="cpr:field-label cpr:mt-4" for="password">Remote password <span class="cpr:text-base-content/70">(optional)</span></label>
-      <input type="password" class="cpr:input cpr:input-sm cpr:w-full" id="password" name="password" autocomplete="new-password">
+      <fieldset class="cpr:mt-4" data-auth-choice>
+        <legend class="cpr:field-label">Log in with</legend>
+        <label class="cpr:check"><input type="radio" class="cpr:radio cpr:radio-sm cpr:mt-0.5" name="auth" value="password" {{if eq $data.Auth "password"}}checked{{end}}>
+          <span>The user's password <small class="cpr:help">Kept encrypted on this server and used at every backup.</small></span></label>
+        <label class="cpr:check"><input type="radio" class="cpr:radio cpr:radio-sm cpr:mt-0.5" name="auth" value="key" {{if eq $data.Auth "key"}}checked{{end}}>
+          <span>A key Gniza makes <small class="cpr:help">Its public half goes into the user's authorized_keys on that server: by you, or by Gniza given the password once.</small></span></label>
+      </fieldset>
 
+      <label class="cpr:field-label cpr:mt-4" for="password">Password{{if ne $data.Auth "password"}} <span class="cpr:text-base-content/70" data-for-auth="key">(optional)</span>{{end}}</label>
+      <input type="password" class="cpr:input cpr:input-sm cpr:w-full" id="password" name="password" autocomplete="new-password"{{if and (eq $data.Auth "password") (not $editing)}} required{{end}}>
+      {{if $data.Submitted.had_password}}
+      <small class="cpr:help cpr:text-warning">Type it again: it was not kept while you checked the host key.</small>
+      {{else}}
+      <small class="cpr:help" data-for-auth="password"{{if ne $data.Auth "password"}} hidden{{end}}>{{if $editing}}Leave it empty to keep the password already stored.{{else}}Gniza checks that it opens a login and creates the folder before anything is saved.{{end}}</small>
+      <small class="cpr:help" data-for-auth="key"{{if ne $data.Auth "key"}} hidden{{end}}>Given once, it installs the key, checks it works and creates the folder, then is forgotten. Leave it empty and you get the public key to add yourself.</small>
+      {{end}}
+
+      <div data-for-auth="key"{{if ne $data.Auth "key"}} hidden{{end}}>
       <div class="cpr:alert cpr:alert-soft cpr:alert-info cpr:mt-4">
-        <div><b>Gniza makes its own key.</b> Give the remote password once and
-        it installs the key, checks it works and creates the folder. The password is used for
-        that and never stored. Leave it empty and you get the public key to add yourself.
-        Gniza also learns the server's host key on first connection, so there is no
-        ssh-keygen and no known_hosts file to write.</div>
+        <div><b>Gniza makes its own key,</b> one per destination, and learns the
+        server's host key on first connection, so there is no ssh-keygen and no
+        known_hosts file to write.</div>
       </div>
 
       {{with $data.Prepared}}
@@ -463,6 +484,7 @@ so it is done for you.</p>
                placeholder="/root/.ssh/id_ed25519">
         <small class="cpr:help">Leave empty to have Gniza generate one.</small>
       </details>
+      </div>
     </div>
 
     <div {{if $editing}}{{if ne $editing.Type "s3"}}hidden{{end}}{{else}}data-for-type="s3" {{if $data.HiddenFor "s3"}}hidden{{end}}{{end}}>

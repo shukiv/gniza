@@ -167,6 +167,22 @@
     }
   }
 
+  // Within the SFTP fields, show what the chosen login needs: the key
+  // block, or a password that is required. A block inside a type that
+  // is not chosen stays hidden whatever the login.
+  var syncAuth = function () {
+    var chosen = document.querySelector("input[name=auth]:checked");
+    var password = document.getElementById("password");
+    Array.prototype.forEach.call(document.querySelectorAll("[data-for-auth]"), function (block) {
+      var type = block.closest("[data-for-type]");
+      var applies = !!chosen && block.getAttribute("data-for-auth") === chosen.value && !(type && type.hidden);
+      block.hidden = !applies;
+      Array.prototype.forEach.call(block.querySelectorAll("input"), function (field) { field.disabled = !applies; });
+    });
+    if (chosen && password && !password.form.querySelector("input[name=id]")) {
+      password.required = chosen.value === "password";
+    }
+  };
   // Show the fields that belong to the chosen destination type.
   var typeSelect = document.querySelector("[data-type-toggle]");
   if (typeSelect) {
@@ -179,10 +195,15 @@
           field.disabled = !applies;
         });
       });
+      syncAuth();
     };
     typeSelect.addEventListener("change", syncType);
     syncType();
   }
+  Array.prototype.forEach.call(document.querySelectorAll("input[name=auth]"), function (radio) {
+    radio.addEventListener("change", syncAuth);
+  });
+  if (!typeSelect) { syncAuth(); }
 
   // Reveal the account picker only when a schedule is not "all accounts".
   // On a server without a panel there is no picker and no choice of

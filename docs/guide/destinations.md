@@ -26,25 +26,40 @@ Then it shows the **recovery key** once. Keep it with your other break-glass
 material. A destination whose key is lost is a destination whose backups are
 noise.
 
-## The SSH key for another Linux server
+## Logging in to another Linux server
 
-Gniza makes its own key, one per destination, so revoking one does not
-lock it out of the others. There are two ways round:
+The form asks how the backups log in, under *Log in with*:
 
-- **You have the remote password.** Type it into *Remote password* once.
-  Gniza installs the public key on that server, checks that logging in
-  with it works, creates the folder, and forgets the password. It is never
-  stored.
-- **You do not, or somebody else administers that server.** Press **Make the
-  key now** in the form. The public key appears with a **Copy** button next to
-  it — before the destination exists, so there is something to hand over.
-  Have that line added to the SSH user's `~/.ssh/authorized_keys` on the
-  backup server, then save the destination. The form keeps the key it made;
-  saving does not generate a second one.
+- **The user's password.** Type it once. Gniza checks that it opens a
+  login and creates the folder before anything is saved, then keeps the
+  password encrypted on this server and logs in with it at every backup.
+  A wrong password is refused on the spot, and later by **Test** on the
+  card, in words.
+- **A key Gniza makes.** One per destination, so revoking one does not
+  lock it out of the others. Its public half has to be in the SSH user's
+  `~/.ssh/authorized_keys` on the backup server, and there are two ways
+  round:
+  - **You have the remote password.** Type it into *Password* once. Gniza
+    installs the public key on that server, checks that logging in with it
+    works, creates the folder, and forgets the password. It is never
+    stored.
+  - **You do not, or somebody else administers that server.** Press **Make
+    the key now** in the form. The public key appears with a **Copy**
+    button next to it — before the destination exists, so there is
+    something to hand over. Have that line added there, then save the
+    destination. The form keeps the key it made; saving does not generate
+    a second one.
 
 Either way there is no `ssh-keygen`, no `ssh-copy-id`, and no `known_hosts` to
 write: the host key is learnt on the first connection and shown to you to agree
-to, which is the one decision only a person can make.
+to, which is the one decision only a person can make. That page comes back
+without the password in it — no secret is carried between pages — so if you
+typed one, type it again there; the page says so, and will not save without
+it.
+
+**Edit** on a destination's card can switch it to a password. One added with a
+password has no key: to log in with a key instead, remove it and add it
+again.
 
 A key made and never used is removed after a week. One a destination is using
 is left alone however old it is.

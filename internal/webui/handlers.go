@@ -777,6 +777,20 @@ func (v destinationsView) Field(name string) string {
 	}
 }
 
+// Auth is how the SFTP login is made, for the form's radio: what was
+// submitted, else what the destination being edited does -- one stored
+// before there was a choice logs in with a key -- else a password, the
+// first thing an operator has to hand.
+func (v destinationsView) Auth() string {
+	if chosen := v.Field("auth"); chosen != "" {
+		return chosen
+	}
+	if v.Editing != nil {
+		return "key"
+	}
+	return "password"
+}
+
 // FieldOr is Field with a default for the fields that have one.
 func (v destinationsView) FieldOr(name, fallback string) string {
 	if value := v.Field(name); value != "" {
@@ -999,10 +1013,26 @@ func (s *Server) saveDestination(w http.ResponseWriter, r *http.Request,
 
 // addSFTPDestination sets up another Linux server as a destination.
 //
-// Gniza generates its own key, reads the server's host key, and — if the
-// operator supplied the remote password — installs the key and proves it
-// works. The password is used for that and discarded.
+// The operator says how the backups log in. With a password, Gniza reads
+// the server's host key, proves the password opens a login, and keeps
+// the password sealed for every backup. With a key, Gniza generates its
+// own, and -- if the operator supplied the remote password -- installs
+// the key and proves it works; the password is used for that and
+// discarded.
 func (s *Server) addSFTPDestination(w http.ResponseWriter, r *http.Request, name, repositoryPath string) {
+	// The form comes back once for the host key to be agreed to, and the
+	// password is not carried through that page. A password that was
+	// typed the first time and is missing the second has to be typed
+	// again, rather than the destination being quietly saved as one that
+	// logs in without it.
+	if r.PostFormValue("confirm_fingerprint") != "" && r.PostFormValue("had_password") != "" && r.PostFormValue("password") == "" {
+		s.confirmHost(w, r, &node.UnconfirmedHostError{
+			Host:        strings.TrimSpace(r.PostFormValue("host")),
+			Fingerprint: strings.TrimSpace(r.PostFormValue("confirm_fingerprint")),
+			KeyType:     strings.TrimSpace(r.PostFormValue("host_key_type")),
+		}, "Type the password again: it was not kept while you checked the host key.")
+		return
+	}
 	s.finishSFTP(w, r, node.SFTPRequest{
 		Name:            name,
 		Host:            r.PostFormValue("host"),
@@ -1010,6 +1040,7 @@ func (s *Server) addSFTPDestination(w http.ResponseWriter, r *http.Request, name
 		User:            r.PostFormValue("user"),
 		RemoteDir:       r.PostFormValue("root"),
 		RepositoryPath:  repositoryPath,
+		Auth:            r.PostFormValue("auth"),
 		Password:        r.PostFormValue("password"),
 		AdminUser:       strings.TrimSpace(r.PostFormValue("admin_user")),
 		AdminPassword:   r.PostFormValue("admin_password"),
@@ -1025,8 +1056,11 @@ func (s *Server) addSFTPDestination(w http.ResponseWriter, r *http.Request, name
 //
 // The password is not carried back -- no secret is -- so the operator
 // retypes it. That is the cost of not holding a remote server's root
-// password in this process between two page loads.
-func (s *Server) confirmHost(w http.ResponseWriter, r *http.Request, unconfirmed *node.UnconfirmedHostError) {
+// password in this process between two page loads. The form remembers
+// that one was typed, so the page says so and the second post is not
+// taken as a login without one. The note, when given, is why the form is
+// back again.
+func (s *Server) confirmHost(w http.ResponseWriter, r *http.Request, unconfirmed *node.UnconfirmedHostError, note string) {
 	views, err := s.destinationViews()
 	if err != nil {
 		s.fail(w, r, http.StatusInternalServerError, err)
@@ -1040,6 +1074,7 @@ func (s *Server) confirmHost(w http.ResponseWriter, r *http.Request, unconfirmed
 		ConfirmHost:     unconfirmed.Host,
 		HostFingerprint: unconfirmed.Fingerprint,
 		HostKeyType:     unconfirmed.KeyType,
+		FormError:       note,
 	}
 	for name, values := range r.PostForm {
 		switch name {
@@ -1050,6 +1085,10 @@ func (s *Server) confirmHost(w http.ResponseWriter, r *http.Request, unconfirmed
 			view.Submitted[name] = values[0]
 		}
 	}
+	if r.PostFormValue("password") != "" || r.PostFormValue("had_password") != "" {
+		view.Submitted["had_password"] = "1"
+	}
+	view.Submitted["host_key_type"] = unconfirmed.KeyType
 	s.keepPreparedKey(&view)
 	s.render(w, r, "destinations.html", "Destinations", "destinations", view)
 }
@@ -1061,7 +1100,7 @@ func (s *Server) finishSFTP(w http.ResponseWriter, r *http.Request, request node
 	if errors.As(err, &unconfirmed) {
 		// Nothing has been sent to that server. The form comes back with
 		// the fingerprint to check and a box to agree to it.
-		s.confirmHost(w, r, unconfirmed)
+		s.confirmHost(w, r, unconfirmed, "")
 		return
 	}
 	if err != nil {
@@ -1178,6 +1217,33 @@ func (s *Server) handleEditDestination(w http.ResponseWriter, r *http.Request) {
 		config["known_hosts_file"] = dest.Config["known_hosts_file"]
 		if port := strings.TrimSpace(r.PostFormValue("port")); port != "" && port != "22" {
 			config["port"] = port
+		}
+		// How the backups log in can change here: to a password, given
+		// now or already kept; back to the key the destination was made
+		// with, if it was made with one.
+		switch r.PostFormValue("auth") {
+		case "password":
+			askPass, err := s.engine.EnsureAskPass()
+			if err != nil {
+				s.redirect(w, r, "/destinations?edit="+id, "error", err.Error())
+				return
+			}
+			config["auth"], config["askpass_file"] = "password", askPass
+			switch password := r.PostFormValue("password"); {
+			case password != "":
+				secrets["password"] = password
+			case dest.Config["auth"] != "password":
+				s.redirect(w, r, "/destinations?edit="+id, "error",
+					"Give the password the backups will log in with.")
+				return
+			}
+		default:
+			if config["identity_file"] == "" {
+				s.redirect(w, r, "/destinations?edit="+id, "error",
+					"This destination was added with a password and has no key. To log in with a key, remove it and add it again.")
+				return
+			}
+			dest.CredentialsSecretID = ""
 		}
 	case destination.TypeS3:
 		config["bucket"] = strings.TrimSpace(r.PostFormValue("bucket"))

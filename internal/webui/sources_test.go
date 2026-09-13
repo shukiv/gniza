@@ -26,6 +26,13 @@ import (
 // one folder under the root.
 func newPlainServer(t *testing.T) (*Server, http.Handler, string) {
 	t.Helper()
+	return plainServer(t, false)
+}
+
+// plainServer is newPlainServer with, when asked, a psql that knows one
+// database, erp, owned by the login role erp_owner, and the superuser.
+func plainServer(t *testing.T, postgres bool) (*Server, http.Handler, string) {
+	t.Helper()
 	root := t.TempDir()
 	www := filepath.Join(root, "www")
 	shop := filepath.Join(www, "shop")
@@ -73,8 +80,16 @@ func newPlainServer(t *testing.T) (*Server, http.Handler, string) {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	psql := filepath.Join(root, "no-psql")
+	if postgres {
+		psql = filepath.Join(root, "psql")
+		pg := "#!/bin/sh\ncase \"$*\" in *pg_database_size*) printf 'erp\\t8192\\terp_owner\\n' ;; *pg_authid*) printf 'postgres\\tt\\tt\\tt\\tt\\tt\\tt\\t\\nerp_owner\\tt\\tf\\tf\\tf\\tf\\tf\\tSCRAM-SHA-256$4096:c2FsdA==$c3RvcmVk:c2VydmVy\\n' ;; *) cat >/dev/null ;; esac\n"
+		if err := os.WriteFile(psql, []byte(pg), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
 	provider := &plain.Provider{Roots: []string{www}, Catalog: store, MySQLPath: mysql,
-		PsqlPath: filepath.Join(root, "no-psql"), DockerPath: filepath.Join(root, "no-docker"),
+		PsqlPath: psql, DockerPath: filepath.Join(root, "no-docker"),
 		PodmanPath: filepath.Join(root, "no-podman"), PostgresUser: "-", Log: log}
 	engine, err := node.New(node.Config{
 		Store: store, Vault: v, Provider: provider, Log: log, HookSpool: filepath.Join(root, "hooks"),
@@ -575,7 +590,7 @@ func TestADatabaseUserTickedIsKeptWithItsDatabases(t *testing.T) {
 	}
 	page := getPage(handler, "/schedule", false).Body.String()
 	for _, want := range []string{
-		`name="mysql_user" value="shop_app@localhost" aria-label="shop_app@localhost" data-needs="shop"`,
+		`name="mysql_user" value="shop_app@localhost" aria-label="shop_app@localhost" checked data-needs="shop"`,
 		`aria-label="root@localhost is the server's own user"`,
 		`<h4 class="cpr:section-title cpr:mt-0 cpr:mb-2">Databases</h4>`,
 		`<h4 class="cpr:section-title cpr:mt-0 cpr:mb-2">Users</h4>`,
@@ -606,5 +621,60 @@ func TestADatabaseUserTickedIsKeptWithItsDatabases(t *testing.T) {
 	form := getPage(handler, "/schedule", false).Body.String()
 	if !strings.Contains(form, `name="source" value="mysql-shop" aria-label="shop_app@localhost"`) {
 		t.Errorf("the schedule form does not tick the user with its source: %s", firstLine(form, "shop_app@localhost"))
+	}
+}
+
+// The PostgreSQL tab lists every role beside the databases, the way the
+// MySQL tab lists its users, both ticked by default and neither
+// showing a verifier; a role ticked is kept with the source that dumps
+// the database it owns, and one ticked without its database is refused
+// by name.
+func TestAPostgreSQLRoleTickedIsKeptWithItsDatabase(t *testing.T) {
+	server, handler, _ := plainServer(t, true)
+	noted := time.Now()
+	destination, err := server.engine.Store().PutDestination(nodestore.Destination{Name: "usb", Type: "local", Config: map[string]string{"root": t.TempDir()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := server.engine.Store().PutRepository(nodestore.Repository{DestinationID: destination.ID, Path: "gniza", RecoveryNotedAt: &noted, InitialisedAt: &noted}); err != nil {
+		t.Fatal(err)
+	}
+	page := getPage(handler, "/schedule", false).Body.String()
+	for _, want := range []string{
+		`name="postgresql" value="erp" aria-label="erp" checked`,
+		`<tr data-db="erp">`,
+		`name="postgresql_user" value="erp_owner" aria-label="erp_owner" checked data-needs="erp"`,
+		`aria-label="postgres is the server's own role"`,
+		`data-tick-all aria-label="Tick every role"`,
+		`title="Authenticates with scram-sha-256">scram-sha-256</span>`,
+		`<span class="cpr:mono">erp</span> <span class="cpr:text-base-content/60">OWNER</span>`,
+		`<span class="cpr:text-base-content/60">CREATEDB, SUPERUSER, CREATEROLE, REPLICATION, BYPASSRLS</span>`,
+		`name="mysql_user" value="shop_app@localhost" aria-label="shop_app@localhost" checked data-needs="shop"`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the PostgreSQL tab lacks %q: %s", want, firstLine(page, "postgresql_user"))
+		}
+	}
+	for _, forbidden := range []string{"SCRAM-SHA-256$", "c2FsdA"} {
+		if strings.Contains(page, forbidden) {
+			t.Errorf("the page shows the verifier: %s", firstLine(page, forbidden))
+		}
+	}
+	alone := postForm(server, handler, "/accounts/add", url.Values{"postgresql_user": {"erp_owner"}})
+	if reason := refusal(t, alone); !strings.Contains(reason, "has rights on no database that is backed up; tick erp with it") {
+		t.Errorf("a role without its database is refused with %q", reason)
+	}
+	both := postForm(server, handler, "/accounts/add", url.Values{"postgresql": {"erp"}, "postgresql_user": {"erp_owner"}})
+	if location := both.Header().Get("Location"); both.Code != http.StatusSeeOther || !strings.Contains(location, "kind=ok") || !strings.Contains(location, "pg-erp+%28erp_owner+kept+with+it%29") {
+		t.Errorf("a role with its database = %d %s", both.Code, location)
+	}
+	sources, _ := server.engine.Chooser()
+	list, err := sources.Sources(context.Background())
+	if err != nil || len(list) != 1 || strings.Join(list[0].PostgreSQLUsers, ",") != "erp_owner" {
+		t.Fatalf("sources = %+v, %v", list, err)
+	}
+	form := getPage(handler, "/schedule", false).Body.String()
+	if !strings.Contains(form, `name="source" value="pg-erp" aria-label="erp_owner"`) {
+		t.Errorf("the schedule form does not tick the role with its source: %s", firstLine(form, "erp_owner"))
 	}
 }

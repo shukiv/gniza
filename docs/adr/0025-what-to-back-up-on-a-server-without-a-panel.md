@@ -114,7 +114,8 @@ dump into a database that exists, and creating accounts on a machine
 that may already have them is a decision for whoever restores. MySQL 8
 does not put the password in `SHOW GRANTS` anyway. The pages said
 "kept beside the dump for reference; not created again on restore";
-the third amendment below keeps the accounts the operator chooses.
+the third and fourth amendments below keep the accounts and roles the
+operator chooses.
 
 **A stack is its containers and the folder its compose file lives in.**
 Containers are grouped under the compose project their labels name
@@ -213,8 +214,32 @@ databases) -- so the agent's restore reads them as it reads a panel's,
 checks the databases are there, and `PutDatabaseUsers` makes the
 users again with the hashes they had. Grants on other databases,
 and the grant option, are not put back; the file says which, and so
-does the backup's report. The hash is never shown on a page. The
-PostgreSQL roles are listed as before and not chosen yet.
+does the backup's report. The hash is never shown on a page.
+
+**Amended: the PostgreSQL roles are chosen the same way.** The
+PostgreSQL tab lists every role the server has (`pg_authid`, the
+predefined `pg_*` ones left out) beside the databases, the way the
+MySQL tab lists its users: what authenticates it -- SCRAM or md5, never
+the verifier itself -- its attributes, the databases it owns
+(`pg_database.datdba`) and its rights on others (`aclexplode(datacl)`:
+CONNECT, CREATE, TEMPORARY). `Chooser.AttachPostgreSQLUser` keeps a
+role with every source that dumps a database it owns or has rights on,
+with the same refusals. The backup writes `_roles.json` and
+`_roles-runnable.sql` beside the dumps: each role as `CREATE ROLE`
+inside a `DO` block that skips one already there, with its verifier
+(`PASSWORD` takes a verifier as it is), then `ALTER DATABASE ... OWNER
+TO` and `GRANT ... ON DATABASE` for the source's databases, and the
+memberships among the roles kept. SUPERUSER, CREATEROLE, REPLICATION
+and BYPASSRLS are not given back, and the file and the report say so.
+The restore differs from MySQL's in when it runs: a plain `pg_dump`
+carries `ALTER TABLE ... OWNER TO role` for every table, and psql under
+`ON_ERROR_STOP` loading it on a server without that role stops at the
+first one. So `LoadDatabase` reads `_roles.json` from beside the dump
+and makes the roles that own or reach that database before it loads
+it, and a single-database restore takes the file along. A backup
+without the file loads as before. Both user tables are ticked by
+default, as the databases are: the operator who came to keep a
+database came to keep what opens it.
 
 **Saving adds first, then covers.** The save handler reads the names
 ticked, adds the fresh rows, and the schedule covers the union. What

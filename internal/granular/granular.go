@@ -336,6 +336,15 @@ func buildDatabase(parts reassemble.Parts, req Request) (Plan, error) {
 		}
 		plan.Include = append(plan.Include, path.Join(parts.Databases, name+".sql"))
 	}
+	// A PostgreSQL dump (plain.PostgresSuffix) is loaded after the roles
+	// kept beside it are made again, so they come along; a backup
+	// without the file restores as before.
+	for _, name := range req.Names {
+		if strings.HasSuffix(name, ".pg") {
+			plan.Include = append(plan.Include, path.Join(parts.Databases, PostgresRolesFile))
+			break
+		}
+	}
 	return plan, nil
 }
 
@@ -362,6 +371,16 @@ const RunnableDatabaseUsersFile = "_users-runnable.sql"
 // MySQL. Restoring a user from the SQL alone would recreate the login and
 // not what authenticates it, which is a user nothing can connect as.
 const DatabaseUsersAuthFile = DatabaseUsersFile + "-auth.json"
+
+// PostgresRolesFile is where the PostgreSQL roles kept with a source's
+// dumps are staged, as data, beside them: each role with its password
+// verifier, the databases it owns and its rights on the others. A
+// restore of a PostgreSQL dump reads it first and makes the roles the
+// dump names, since a plain dump stops at the first OWNER TO a role the
+// server does not have. RunnablePostgresRolesFile is the same as
+// statements a person can run through psql.
+const PostgresRolesFile = "_roles.json"
+const RunnablePostgresRolesFile = "_roles-runnable.sql"
 
 func buildDatabaseUsers(parts reassemble.Parts, names []string) (Plan, error) {
 	if parts.Databases == "" {

@@ -34,17 +34,22 @@ form per kind.
   each MySQL user with its privileges, PostgreSQL's owner -- all
   ticked by default, with a box in the header to tick or untick the
   column. Each becomes a source called `mysql-<name>` or `pg-<name>`,
-  dumped on every run. Beside the MySQL databases, **Users** lists
-  every database user the server has, what authenticates it and what it
-  can reach: its privileges on every database, or on single ones, with
-  a box in its header too. A user ticked is kept with each source that
-  dumps a database it has rights on (ticking it ticks those databases):
-  its password hash and its grants on those databases go beside the
-  dumps, in the files a panel's backup uses, and a restore makes the
-  user again with the password it had. The server's own users -- root,
-  mysql, mariadb.sys -- are shown and not offered. Every user's grants
-  (`SHOW GRANTS`) and the PostgreSQL roles (`pg_dumpall --roles-only`)
-  are also kept beside the record, for reference.
+  dumped on every run. Beside the databases on each tab, **Users**
+  lists every database user or role the server has, what authenticates
+  it and what it can reach -- a MySQL user's privileges on every
+  database or on single ones, a PostgreSQL role's attributes, the
+  databases it owns and its rights on others -- all ticked by default
+  too, with a box in that header. A user ticked is kept with each
+  source that dumps a database it has rights on (ticking it ticks those
+  databases): its password hash or verifier and its rights on those
+  databases go beside the dumps, and a restore makes the user again
+  with the password it had. For PostgreSQL that happens before the dump
+  is loaded, since a dump names the role that owns its tables and would
+  stop at the first of them on a server without it. The server's own
+  users -- root, mysql, mariadb.sys, postgres -- are shown and not
+  offered. Every user's grants (`SHOW GRANTS`) and every role
+  (`pg_dumpall --roles-only`) are also kept beside the record, for
+  reference.
 - **Docker / Podman.** Every container, grouped under the stack its
   compose file makes, with its image, status and how many mounts it
   has; a box on the stack ticks the whole stack. Each ticked container

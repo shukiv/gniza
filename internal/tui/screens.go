@@ -159,6 +159,7 @@ type candidates struct {
 	PostgreSQL      []database
 	PostgreSQLError string
 	MySQLUsers      []dbAccount
+	PostgreSQLUsers []dbAccount
 	Containers      []struct {
 		Engine, Name, Image, Status, Stack string
 		Mounts                             int
@@ -693,7 +694,7 @@ func databaseForm(offered candidates, engine string) (*form, bool) {
 		"Each database becomes a source of its own, dumped with mysqldump on every run. The database users with rights on it are shown. A user toggled on below is kept with the sources that dump the databases it reaches, hash and grants, so a restore brings the login back."
 	if engine == "postgresql" {
 		databases, title, help = offered.PostgreSQL, "Back up PostgreSQL databases",
-			"Each database becomes a source of its own, dumped with pg_dump on every run. The owner is shown; the roles are kept beside the dump as pg_dumpall writes them, for reference, and not created again on restore."
+			"Each database becomes a source of its own, dumped with pg_dump on every run. The owner is shown. A role toggled on below is kept with the sources that dump the databases it owns or reaches, password and rights, and made again before the dump is loaded."
 	}
 	var fields []field
 	for _, d := range databases {
@@ -709,24 +710,37 @@ func databaseForm(offered candidates, engine string) (*form, bool) {
 		}
 		fields = append(fields, toggleField(engine, label, d.Name, true))
 	}
-	if engine == "mysql" {
-		for _, account := range offered.MySQLUsers {
-			if account.System || account.AttachedTo != "" {
-				continue
-			}
-			label := "user " + account.User + "@" + account.Host
-			var reaches []string
-			for _, right := range account.Rights {
-				reaches = append(reaches, right.Database+": "+strings.Join(right.Privileges, ", "))
-			}
-			if len(account.Global) > 0 {
-				reaches = append([]string{"every database: " + strings.Join(account.Global, ", ")}, reaches...)
-			}
-			if len(reaches) > 0 {
-				label += " · " + strings.Join(reaches, "; ")
-			}
-			fields = append(fields, toggleField("mysql_user", label, account.User+"@"+account.Host, false))
+	// The users, or the roles, after the databases, every one not kept
+	// yet on by default like the databases: whoever came to keep a
+	// database came to keep what opens it.
+	accounts, kind, called := offered.MySQLUsers, "mysql_user", "user "
+	if engine == "postgresql" {
+		accounts, kind, called = offered.PostgreSQLUsers, "postgresql_user", "role "
+	}
+	for _, account := range accounts {
+		if account.System || account.AttachedTo != "" {
+			continue
 		}
+		who := account.User
+		if account.Host != "" {
+			who += "@" + account.Host
+		}
+		label := called + who
+		var reaches []string
+		for _, right := range account.Rights {
+			reaches = append(reaches, right.Database+": "+strings.Join(right.Privileges, ", "))
+		}
+		if len(account.Global) > 0 {
+			every := "every database: "
+			if engine == "postgresql" {
+				every = ""
+			}
+			reaches = append([]string{every + strings.Join(account.Global, ", ")}, reaches...)
+		}
+		if len(reaches) > 0 {
+			label += " · " + strings.Join(reaches, "; ")
+		}
+		fields = append(fields, toggleField(kind, label, who, true))
 	}
 	if len(fields) == 0 {
 		return nil, false

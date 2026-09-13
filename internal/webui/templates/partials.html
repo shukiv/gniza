@@ -379,7 +379,7 @@
       <tbody>
       {{range $k.MySQLUsers}}
         {{$a := .}}<tr{{if .System}} class="cpr:opacity-60"{{end}}>
-          <td>{{if .System}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" disabled aria-label="{{.Who}} is the server's own user">{{else}}{{$b := $c.Box "mysql_user" .Who .AttachedTo false .Who}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="{{$b.Name}}" value="{{$b.Value}}" aria-label="{{$b.Label}}"{{if $b.Checked}} checked{{end}}{{if $b.Existing}} data-existing data-same="{{$b.Value}}"{{end}} data-needs="{{range $i, $r := .Rights}}{{if $i}},{{end}}{{$r.Database}}{{end}}">{{end}}</td>
+          <td>{{if .System}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" disabled aria-label="{{.Who}} is the server's own user">{{else}}{{$b := $c.Box "mysql_user" .Who .AttachedTo true .Who}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="{{$b.Name}}" value="{{$b.Value}}" aria-label="{{$b.Label}}"{{if $b.Checked}} checked{{end}}{{if $b.Existing}} data-existing data-same="{{$b.Value}}"{{end}} data-needs="{{range $i, $r := .Rights}}{{if $i}},{{end}}{{$r.Database}}{{end}}">{{end}}</td>
           <td><span class="cpr:mono">{{.Who}}</span><br><span class="cpr:mono cpr:text-xs cpr:text-base-content/50" title="Authenticates with {{.Plugin}}">{{.Plugin}}</span></td>
           <td class="cpr:text-xs">{{if .Global}}<span class="cpr:font-semibold">every database</span> <span class="cpr:text-base-content/60" title="{{join .Global ", "}}">{{if gt (len .Global) 8}}{{len .Global}} privileges{{else}}{{join .Global ", "}}{{end}}</span>{{end}}{{range $i, $r := .Rights}}{{if or $i $a.Global}}<br>{{end}}<span class="cpr:mono">{{$r.Database}}</span> <span class="cpr:text-base-content/60">{{join $r.Privileges ", "}}</span>{{end}}{{if and (not .Global) (not .Rights)}}<span class="cpr:text-base-content/50">connect only</span>{{end}}</td>
           <td>{{if .System}}<span class="cpr:text-base-content/50">the server's own</span>{{else if .AttachedTo}}{{.AttachedTo}}{{else}}<span class="cpr:text-base-content/50">not yet</span>{{end}}</td>
@@ -394,7 +394,12 @@
 
   <section role="tabpanel" data-tab-panel="postgresql" aria-label="PostgreSQL">
     {{if or $k.PostgreSQL $c.ExtraPostgreSQL}}
-    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Each database becomes a source of its own, dumped with pg_dump on every run. The roles on the server are kept beside the dump as pg_dumpall writes them, for reference; they are not created again on restore.</p>
+    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Each database becomes a source of its own, dumped with pg_dump on every run. Its owner is listed beside it; tick a role to keep it with the databases it owns or reaches, password and rights, and a restore makes the role again before the dump is loaded.</p>
+    {{end}}
+    <div class="cpr:grid cpr:gap-4 cpr:xl:grid-cols-2 cpr:items-start">
+    <div>
+    <h4 class="cpr:section-title cpr:mt-0 cpr:mb-2">Databases</h4>
+    {{if or $k.PostgreSQL $c.ExtraPostgreSQL}}
     <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-tickable>
       <thead><tr>
         <th class="cpr:w-8"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-tick-all aria-label="Tick every database"></th>
@@ -402,7 +407,7 @@
       </tr></thead>
       <tbody>
       {{range $c.ExtraPostgreSQL}}
-        <tr>
+        <tr data-db="{{index .PostgreSQL 0}}">
           <td>{{template "tickbox" ($c.Box "postgresql" (index .PostgreSQL 0) .Name true .Name)}}</td>
           <td class="cpr:mono">{{join .PostgreSQL ", "}}</td>
           <td class="cpr:text-right cpr:text-base-content/50">&mdash;</td><td></td>
@@ -410,7 +415,7 @@
         </tr>
       {{end}}
       {{range $k.PostgreSQL}}
-        <tr>
+        <tr data-db="{{.Name}}">
           <td>{{template "tickbox" ($c.Box "postgresql" .Name .ChosenAs true .Name)}}</td>
           <td class="cpr:mono">{{.Name}}</td>
           <td class="cpr:text-right cpr:tabular-nums">{{bytes .Size}}</td>
@@ -425,6 +430,30 @@
     {{else}}
     <p class="cpr:hint cpr:mt-0">psql answered with no databases beyond its own.</p>
     {{end}}
+    </div>
+    {{if $k.PostgreSQLUsers}}
+    <div>
+    <h4 class="cpr:section-title cpr:mt-0 cpr:mb-2">Users</h4>
+    <p class="cpr:hint cpr:mt-0 cpr:mb-3">Every role the server has, what it owns and what it can reach. A role ticked is kept with each source that dumps a database it owns or has rights on; ticking it ticks those databases. The server's own role is shown and not offered.</p>
+    <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-tickable>
+      <thead><tr>
+        <th class="cpr:w-8"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" data-tick-all aria-label="Tick every role"></th>
+        <th>Role</th><th>Rights</th><th>Kept with</th>
+      </tr></thead>
+      <tbody>
+      {{range $k.PostgreSQLUsers}}
+        {{$a := .}}<tr{{if .System}} class="cpr:opacity-60"{{end}}>
+          <td>{{if .System}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" disabled aria-label="{{.User}} is the server's own role">{{else}}{{$b := $c.Box "postgresql_user" .User .AttachedTo true .User}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="{{$b.Name}}" value="{{$b.Value}}" aria-label="{{$b.Label}}"{{if $b.Checked}} checked{{end}}{{if $b.Existing}} data-existing data-same="{{$b.Value}}"{{end}} data-needs="{{range $i, $r := .Rights}}{{if $i}},{{end}}{{$r.Database}}{{end}}">{{end}}</td>
+          <td><span class="cpr:mono">{{.User}}</span><br><span class="cpr:mono cpr:text-xs cpr:text-base-content/50" title="Authenticates with {{.Plugin}}">{{.Plugin}}</span></td>
+          <td class="cpr:text-xs">{{if .Global}}<span class="cpr:text-base-content/60">{{join .Global ", "}}</span>{{end}}{{range $i, $r := .Rights}}{{if or $i $a.Global}}<br>{{end}}<span class="cpr:mono">{{$r.Database}}</span> <span class="cpr:text-base-content/60">{{join $r.Privileges ", "}}</span>{{end}}{{if and (not .Global) (not .Rights)}}<span class="cpr:text-base-content/50">login only</span>{{end}}</td>
+          <td>{{if .System}}<span class="cpr:text-base-content/50">the server's own</span>{{else if .AttachedTo}}{{.AttachedTo}}{{else}}<span class="cpr:text-base-content/50">not yet</span>{{end}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table></div>
+    </div>
+    {{end}}
+    </div>
   </section>
 
   <section role="tabpanel" data-tab-panel="containers" aria-label="Docker and Podman">

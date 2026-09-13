@@ -31,6 +31,10 @@ type Source struct {
 	// and grants are kept with the dumps so a restore brings back the
 	// login that opens the database. Each has rights on one of MySQL.
 	MySQLUsers []string `json:"mysql_users,omitempty"`
+	// PostgreSQLUsers are the roles, by name, whose password verifier
+	// and rights are kept with the dumps and made again before a dump
+	// is loaded. Each owns or has rights on one of PostgreSQL.
+	PostgreSQLUsers []string `json:"postgresql_users,omitempty"`
 	// Container is set on a source made from a container: Path is then
 	// one of its mounts on the host.
 	Container *ContainerRef `json:"container,omitempty"`
@@ -67,6 +71,9 @@ type Candidates struct {
 	// can reach, so the operator sees who opens which database and can
 	// choose the accounts to keep with the dumps.
 	MySQLUsers []DatabaseUserCandidate
+	// PostgreSQLUsers is every role the PostgreSQL server has, the
+	// predefined pg_* ones left out, with what it owns and can reach.
+	PostgreSQLUsers []DatabaseUserCandidate
 	// Containers is every container docker or podman knows about.
 	Containers []ContainerCandidate
 	// Stacks are the compose projects the containers belong to, with
@@ -113,20 +120,32 @@ type DatabaseRight struct {
 	Privileges []string
 }
 
-// Who is the account as user@host.
-func (r DatabaseRight) Who() string { return r.User + "@" + r.Host }
+// Who is the account as user@host, or the role's name alone: a
+// PostgreSQL role has no host.
+func (r DatabaseRight) Who() string {
+	if r.Host == "" {
+		return r.User
+	}
+	return r.User + "@" + r.Host
+}
 
-// DatabaseUserCandidate is one account of the MySQL server: who it is,
-// what authenticates it, and what it can reach.
+// DatabaseUserCandidate is one account of the MySQL server, or one role
+// of the PostgreSQL server: who it is, what authenticates it, and what
+// it can reach.
 type DatabaseUserCandidate struct {
 	User string
+	// Host is the account's host on MySQL, and empty for a PostgreSQL
+	// role, which has none.
 	Host string
-	// Plugin is the authentication plugin; the hash is never shown.
+	// Plugin is the authentication plugin, or the kind of verifier a
+	// PostgreSQL role has (scram-sha-256, md5); the hash is never
+	// shown.
 	Plugin string
 	// System says the account is the server's own or the operator's
-	// (root, mysql, mariadb.sys ...): shown, not offered.
+	// (root, mysql, mariadb.sys, postgres ...): shown, not offered.
 	System bool
-	// Global are the privileges held on every database, USAGE left out.
+	// Global are the privileges held on every database, USAGE left out;
+	// for a PostgreSQL role, its attributes (CREATEDB, SUPERUSER ...).
 	Global []string
 	// Rights are the privileges held on single databases.
 	Rights []DatabaseRight
@@ -135,8 +154,13 @@ type DatabaseUserCandidate struct {
 	AttachedTo string
 }
 
-// Who is the account as user@host.
-func (u DatabaseUserCandidate) Who() string { return u.User + "@" + u.Host }
+// Who is the account as user@host, or the role's name alone.
+func (u DatabaseUserCandidate) Who() string {
+	if u.Host == "" {
+		return u.User
+	}
+	return u.User + "@" + u.Host
+}
 
 // ContainerCandidate is one container that could be backed up.
 type ContainerCandidate struct {
@@ -250,6 +274,10 @@ type Chooser interface {
 	// server does not have, is refused with an error the operator can
 	// read.
 	AttachMySQLUser(ctx context.Context, who string) ([]string, error)
+	// AttachPostgreSQLUser keeps a role, by name, with every source that
+	// dumps a database it owns or has rights on, and returns those
+	// sources' names, with the same refusals as AttachMySQLUser.
+	AttachPostgreSQLUser(ctx context.Context, role string) ([]string, error)
 	// RemoveSource forgets a choice. The backups taken of it stay.
 	RemoveSource(ctx context.Context, name string) error
 }

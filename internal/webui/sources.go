@@ -252,6 +252,17 @@ func (s *Server) addTicked(r *http.Request, chooser panel.Chooser) (added, kept,
 			return names, nil
 		})
 	}
+	for _, role := range r.PostForm["postgresql_user"] {
+		role := strings.TrimSpace(role)
+		try("role "+role, func() ([]string, error) {
+			names, err := chooser.AttachPostgreSQLUser(r.Context(), role)
+			if err != nil {
+				return nil, err
+			}
+			kept = append(kept, role+" with "+strings.Join(names, ", "))
+			return names, nil
+		})
+	}
 	for _, ticked := range r.PostForm["container"] {
 		engine, name, found := strings.Cut(ticked, "/")
 		try(ticked, func() ([]string, error) {

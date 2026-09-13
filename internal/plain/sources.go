@@ -228,14 +228,23 @@ func (p *Provider) Candidates(ctx context.Context) (panel.Candidates, error) {
 	if sizes, owners, err := p.postgresList(ctx); err != nil {
 		found.PostgreSQLError = err.Error()
 	} else {
+		rights, err := p.postgresRights(ctx, owners)
+		if err != nil {
+			p.log().Debug("the PostgreSQL rights could not be listed", "error", err)
+		}
 		for name, size := range sizes {
-			candidate := panel.DatabaseCandidate{Name: name, Size: size, ChosenAs: postgresAs[name]}
+			candidate := panel.DatabaseCandidate{Name: name, Size: size, Rights: rights[name], ChosenAs: postgresAs[name]}
 			if owner := owners[name]; owner != "" {
 				candidate.Users = []string{owner}
 			}
 			found.PostgreSQL = append(found.PostgreSQL, candidate)
 		}
 		sort.Slice(found.PostgreSQL, func(i, j int) bool { return found.PostgreSQL[i].Name < found.PostgreSQL[j].Name })
+		if roles, err := p.postgresUserCandidates(ctx, sources, rights); err != nil {
+			p.log().Debug("the PostgreSQL roles could not be listed", "error", err)
+		} else {
+			found.PostgreSQLUsers = roles
+		}
 	}
 	for _, engine := range []string{"docker", "podman"} {
 		looked := panel.EngineCandidate{Name: engine}

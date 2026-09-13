@@ -321,9 +321,12 @@ type Record struct {
 	// Users are the MySQL accounts kept beside the dumps, as user@host:
 	// their hashes and grants are in the dumps directory, in the files
 	// a panel's backup uses, so a restore makes them again.
-	Users    []string  `json:"users,omitempty"`
-	Hostname string    `json:"hostname"`
-	TakenAt  time.Time `json:"taken_at"`
+	Users []string `json:"users,omitempty"`
+	// PostgreSQLUsers are the roles kept beside the dumps, by name: a
+	// restore makes them again before a dump is loaded.
+	PostgreSQLUsers []string  `json:"postgresql_users,omitempty"`
+	Hostname        string    `json:"hostname"`
+	TakenAt         time.Time `json:"taken_at"`
 }
 
 // Stage writes the dumps and the record into StagingDir and points the
@@ -435,8 +438,20 @@ func (p *Provider) Stage(ctx context.Context, req panel.StageRequest) (pkgacct.P
 		}
 	}
 
+	var roles []string
+	if !req.SkipDatabases && len(source.PostgreSQLUsers) > 0 {
+		kept, warnings, err := p.keepRoles(ctx, source, filepath.Join(metadata, DumpDir))
+		if err != nil {
+			payload.Missing = append(payload.Missing, pkgacct.Omission{What: "the roles of " + source.Name, Why: err.Error()})
+		}
+		roles = kept
+		for _, warning := range warnings {
+			payload.Missing = append(payload.Missing, pkgacct.Omission{What: "a role", Why: warning})
+		}
+	}
+
 	record := Record{
-		Account: source.Name, Path: source.Path, Databases: dumped, Grants: grants, Users: users,
+		Account: source.Name, Path: source.Path, Databases: dumped, Grants: grants, Users: users, PostgreSQLUsers: roles,
 		MySQL: source.MySQL, PostgreSQL: source.PostgreSQL, Container: source.Container,
 		TakenAt: time.Now().UTC(),
 	}
@@ -653,7 +668,8 @@ func (p *Provider) CreateDatabase(ctx context.Context, user, database string) er
 }
 
 // LoadDatabase feeds a dump to the client it came from, into a database
-// the source was chosen with.
+// the source was chosen with. A PostgreSQL dump names the roles that own
+// its tables, so the roles kept beside it are made again first.
 func (p *Provider) LoadDatabase(ctx context.Context, user, database, dumpPath string) error {
 	name, postgres, err := p.databaseOf(user, database)
 	if err != nil {
@@ -661,6 +677,15 @@ func (p *Provider) LoadDatabase(ctx context.Context, user, database, dumpPath st
 	}
 	if !usableName(name) {
 		return fmt.Errorf("plain: %q is not a database name", name)
+	}
+	if postgres {
+		source, err := p.source(user)
+		if err != nil {
+			return err
+		}
+		if err := p.putRoles(ctx, source, name, filepath.Dir(dumpPath)); err != nil {
+			return err
+		}
 	}
 	dump, err := os.Open(dumpPath)
 	if err != nil {

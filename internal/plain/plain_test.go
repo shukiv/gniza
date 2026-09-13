@@ -70,23 +70,31 @@ func fakeMySQL(t *testing.T, databases ...string) (mysql, mysqldump string) {
 }
 
 // fakePostgres writes a psql and a pg_dump: psql lists the databases
-// with their sizes, and logs a CREATE DATABASE or a load; pg_dump prints
-// a dump.
+// with their sizes, the roles, the rights and the memberships, and logs
+// anything else it is asked to run, arguments and standard input;
+// pg_dump prints a dump.
 func fakePostgres(t *testing.T, databases ...string) (psql, pgdump string) {
 	t.Helper()
 	dir := t.TempDir()
 	psql = filepath.Join(dir, "psql")
 	pgdump = filepath.Join(dir, "pg_dump")
-	// Each database is owned by <name>_owner. pg_dumpall lives beside
+	// Each database is owned by <name>_owner, a login role with a SCRAM
+	// verifier, and reporter, a login role with an md5 hash and
+	// CREATEROLE, may connect to every one; each owner is a member of
+	// reporter. postgres is the superuser. pg_dumpall lives beside
 	// pg_dump and answers --roles-only with one role.
 	roles := "#!/bin/sh\nprintf 'CREATE ROLE erp_owner;\\n'\n"
 	if err := os.WriteFile(filepath.Join(dir, "pg_dumpall"), []byte(roles), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	list := strings.Join(databases, " ")
 	script := "#!/bin/sh\n" +
 		"case \"$*\" in\n" +
-		"  *pg_database_size*) for d in " + strings.Join(databases, " ") + "; do printf '%s\\t8192\\t%s_owner\\n' \"$d\" \"$d\"; done ;;\n" +
-		"  *) cat > /dev/null; printf 'psql %s\\n' \"$*\" >> \"$(dirname \"$0\")/psql.log\" ;;\n" +
+		"  *pg_database_size*) for d in " + list + "; do printf '%s\\t8192\\t%s_owner\\n' \"$d\" \"$d\"; done ;;\n" +
+		"  *pg_authid*) printf 'postgres\\tt\\tt\\tt\\tt\\tt\\tt\\t\\n'; for d in " + list + "; do printf '%s_owner\\tt\\tf\\tf\\tf\\tf\\tf\\tSCRAM-SHA-256$4096:c2FsdA==$c3RvcmVk:c2VydmVy\\n' \"$d\"; done; printf 'reporter\\tt\\tf\\tf\\tt\\tf\\tf\\tmd5d41d8cd98f00b204e9800998ecf8427e\\n' ;;\n" +
+		"  *aclexplode*) for d in " + list + "; do printf '%s\\treporter\\tCONNECT\\n%s\\t%s_owner\\tCONNECT\\n' \"$d\" \"$d\" \"$d\"; done ;;\n" +
+		"  *pg_auth_members*) for d in " + list + "; do printf '%s_owner\\treporter\\n' \"$d\"; done ;;\n" +
+		"  *) { printf 'psql %s\\n' \"$*\"; cat; } >> \"$(dirname \"$0\")/psql.log\" ;;\n" +
 		"esac\n"
 	if err := os.WriteFile(psql, []byte(script), 0o755); err != nil {
 		t.Fatal(err)

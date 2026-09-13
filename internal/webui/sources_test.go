@@ -622,6 +622,11 @@ func TestADatabaseUserTickedIsKeptWithItsDatabases(t *testing.T) {
 	if !strings.Contains(form, `name="source" value="mysql-shop" aria-label="shop_app@localhost"`) {
 		t.Errorf("the schedule form does not tick the user with its source: %s", firstLine(form, "shop_app@localhost"))
 	}
+	// A new schedule still ticks what is not chosen yet, sources or no
+	// sources.
+	if want := `name="mysql" value="blog" aria-label="blog" checked`; !strings.Contains(form, want) {
+		t.Errorf("the new-schedule form lacks %q once a source exists: %s", want, firstLine(form, "blog"))
+	}
 }
 
 // The PostgreSQL tab lists every role beside the databases, the way the

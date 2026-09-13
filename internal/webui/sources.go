@@ -43,9 +43,10 @@ type chooseView struct {
 	Extra   []panel.Source
 	// Chosen is which sources the schedule form draws ticked, by name.
 	Chosen map[string]bool
-	// Fresh says nothing has been chosen yet, so the schedule form ticks
-	// the databases and containers, and the first schedule saved backs
-	// something up.
+	// Fresh says the form is for a new schedule, so it ticks the
+	// databases, the users and the containers not chosen yet, and
+	// saving it backs them up. An edit does not: saving it adds nothing
+	// that was not asked for.
 	Fresh bool
 	// containerAs names the sources made from each container, comma
 	// joined, keyed "<engine>/<name>".
@@ -177,18 +178,18 @@ func (v chooseView) extraOf(mysql bool) []panel.Source {
 
 // chooseForSchedule reads the tables for the schedule form, where what
 // is ticked is what the schedule covers. A new schedule starts with
-// every source ticked; one being edited with what it covers. When
-// nothing has been chosen yet the databases and containers come up
-// ticked, so the first schedule backs something up. The candidates are
-// read for a person only, not for the terminal's five-second read of
-// the page.
+// every source ticked, and the databases, users and containers not
+// chosen yet ticked too, so that saving it backs up what the server
+// has; one being edited starts with what it covers and nothing else.
+// The candidates are read for a person only, not for the terminal's
+// five-second read of the page.
 func (s *Server) chooseForSchedule(r *http.Request, chooser panel.Chooser, editing *nodestore.Policy) chooseView {
 	view := chooseView{Tab: chooseTabs[0], Chosen: map[string]bool{}}
 	if wantsData(r) || r.Header.Get("X-Gniza-Live") != "" {
 		return view
 	}
 	view.load(r.Context(), chooser)
-	view.Fresh = len(view.Sources) == 0
+	view.Fresh = editing == nil
 	for _, source := range view.Sources {
 		view.Chosen[source.Name] = editing == nil || editing.AllAccounts()
 	}

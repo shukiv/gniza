@@ -484,10 +484,19 @@ func TestAPasswordTypedBeforeTheHostKeyIsAskedForAgain(t *testing.T) {
 	for _, want := range []string{
 		"Type the password again", "SHA256:abc", `name="had_password" value="1"`,
 		`name="host_key_type" value="ssh-ed25519"`, `value="shuki"`, `name="auth" value="password" checked`,
+		// The check is a dialog over the form, open on arrival, whose own
+		// form carries what was typed, asks for the password again and
+		// agrees to the fingerprint; its other button only closes it.
+		`<dialog id="host-check" class="cpr:modal" open data-host-check`,
+		`name="confirm_fingerprint" value="SHA256:abc"`, `id="confirm_password" name="password"`,
+		`name="host" value="127.0.0.1"`, `formmethod="dialog"`, "Yes, this is the server",
 	} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the form came back without %q", want)
 		}
+	}
+	if strings.Count(page, `name="confirm_fingerprint"`) != 2 {
+		t.Errorf("confirm_fingerprint appears %d times, want one in the dialog and one in the form", strings.Count(page, `name="confirm_fingerprint"`))
 	}
 
 	// A password login asked for with no password at all is refused

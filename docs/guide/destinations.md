@@ -52,10 +52,10 @@ The form asks how the backups log in, under *Log in with*:
 
 Either way there is no `ssh-keygen`, no `ssh-copy-id`, and no `known_hosts` to
 write: the host key is learnt on the first connection and shown to you to agree
-to, which is the one decision only a person can make. That page comes back
-without the password in it — no secret is carried between pages — so if you
-typed one, type it again there; the page says so, and will not save without
-it.
+to, which is the one decision only a person can make. It comes up as a dialog
+over the form, with a button to agree and one to go back to the form. The
+dialog has no password in it — no secret is carried between pages — so if you
+typed one, type it again there; it asks, and will not save without it.
 
 **Edit** on a destination's card can switch it to a password: the directory is
 made with it, and the card stops showing the key, which nothing uses from

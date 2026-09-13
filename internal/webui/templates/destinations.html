@@ -329,23 +329,47 @@ so it is done for you.</p>
 {{define "destinationform"}}
 {{$data := .Data}}
 {{$editing := $data.Editing}}
-{{with $data.FormError}}
-<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:mb-4"><div>{{.}}</div></div>
+{{if and $data.FormError (not $data.ConfirmHost)}}
+<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:mb-4"><div>{{$data.FormError}}</div></div>
 {{end}}
 {{if $data.ConfirmHost}}
 {{/* The far side has answered and nothing has been sent to it yet. An
      operator who has not looked at the fingerprint has not checked
-     anything, so this is a stop rather than a notice. */}}
-<div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:mb-4"><div class="cpr:min-w-0">
-  <b>Is this the right server?</b><br>
-  <span class="cpr:mono">{{$data.ConfirmHost}}</span> identifies itself with a
-  {{$data.HostKeyType}} key:
-  <div class="cpr:log cpr:my-2">{{$data.HostFingerprint}}</div>
-  Check that against the server itself before going on — on it, run
-  <span class="cpr:mono">ssh-keygen -lf /etc/ssh/ssh_host_{{hostKeyFile $data.HostKeyType}}_key.pub</span>.
-  Nothing has been sent to that address yet; no password leaves this server until you agree
-  this is the right one.
-</div></div>
+     anything, so this is a stop rather than a notice: a dialog over the
+     form, open on arrival so that it is there without scripting, whose
+     own form carries what was typed and agrees to the host key. Closing
+     it leaves the form beneath, filled in, to be corrected. */}}
+<dialog id="host-check" class="cpr:modal" open data-host-check aria-labelledby="host-check-title">
+  <div class="cpr:modal-box cpr:w-[min(600px,calc(100vw-2rem))] cpr:max-w-none">
+    <h3 id="host-check-title" class="cpr:text-lg cpr:font-semibold">Is this the right server?</h3>
+    <p class="cpr:mt-2"><span class="cpr:mono">{{$data.ConfirmHost}}</span> identifies itself with a
+    {{$data.HostKeyType}} key:</p>
+    <div class="cpr:log cpr:my-2 cpr:select-all">{{$data.HostFingerprint}}</div>
+    <p class="cpr:hint">Check that against the server itself before going on — on it, run
+    <span class="cpr:mono">ssh-keygen -lf /etc/ssh/ssh_host_{{hostKeyFile $data.HostKeyType}}_key.pub</span>.
+    Nothing has been sent to that address yet; no password leaves this server until you agree
+    this is the right one.</p>
+    {{if and $data.FormError (not $data.Submitted.had_password)}}
+    <div class="cpr:alert cpr:alert-soft cpr:alert-warning cpr:mt-3"><div>{{$data.FormError}}</div></div>
+    {{end}}
+    <form method="post" action="?p=destinations/add" class="cpr:mt-4">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <input type="hidden" name="confirm_fingerprint" value="{{$data.HostFingerprint}}">
+      {{range $name, $value := $data.Submitted}}{{if ne $name "confirm_fingerprint"}}
+      <input type="hidden" name="{{$name}}" value="{{$value}}">{{end}}{{end}}
+      {{if $data.Submitted.had_password}}
+      <label class="cpr:field-label" for="confirm_password">Password for {{$data.Field "user"}}</label>
+      <input type="password" class="cpr:input cpr:input-sm cpr:w-full" id="confirm_password" name="password"
+             autocomplete="off" required>
+      <small class="cpr:hint">Type the password again: it was not kept while you checked the host key.</small>
+      {{end}}
+      <div class="cpr:modal-action">
+        <button type="submit" formmethod="dialog" formnovalidate class="cpr:btn cpr:btn-sm cpr:btn-ghost">Not this one</button>
+        <button type="submit" class="cpr:btn cpr:btn-sm cpr:btn-primary">Yes, this is the server</button>
+      </div>
+    </form>
+  </div>
+</dialog>
 {{end}}
   <form method="post" action="{{if $editing}}?p=destinations/edit{{else}}?p=destinations/add{{end}}">
     <input type="hidden" name="csrf" value="{{.CSRF}}">

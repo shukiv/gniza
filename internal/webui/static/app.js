@@ -1171,6 +1171,16 @@
     }
   });
 
+  // The host-key check arrives as a dialog already open, so that it is
+  // there without scripting. Made modal here, it holds focus and Escape
+  // closes it back onto the form beneath.
+  var check = document.querySelector("dialog[data-host-check][open]");
+  if (check && check.showModal) {
+    check.close();
+    check.showModal();
+    focusFirst(check);
+  }
+
   // A form that came back with something wrong reopens where it was being
   // filled in, rather than leaving the reason on a page behind it.
   var refused = document.querySelector("dialog[data-sheet][data-drawer-open]");

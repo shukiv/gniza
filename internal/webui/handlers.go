@@ -659,6 +659,34 @@ password:
 			card.SSHPrivateKey, card.SSHHostKey, card.URI, card.Password,
 			card.SSHUser, card.SSHHost, card.URI)
 
+	case card.SSHUser != "":
+		// The destination logs in with the account's password, which is
+		// the operator's and is not written here. The host key it pinned
+		// is, so that a restore elsewhere talks to the same server.
+		fmt.Fprintf(&body, `Reaching it from %s
+------------------------------------------------------------------
+    export RESTIC_REPOSITORY='%s'
+    export RESTIC_PASSWORD='%s'
+
+    restic -o sftp.args="%s" snapshots
+    restic -o sftp.args="%s" restore <snapshot-id> --target /somewhere
+
+Reaching it from anywhere else
+------------------------------------------------------------------
+This server logs in to %s@%s with that user's password, which is not
+in this file. ssh asks for it. The host key below is the one this
+server pinned; give it to ssh so that a restore talks to the same
+server:
+
+    printf '%%s\n' '%s' > /root/gniza-known-hosts
+
+    export RESTIC_REPOSITORY='%s'
+    export RESTIC_PASSWORD='%s'
+    restic -o sftp.args="-o UserKnownHostsFile=/root/gniza-known-hosts -o StrictHostKeyChecking=yes" snapshots
+
+`, card.Hostname, card.URI, card.Password, card.ResticOptions, card.ResticOptions,
+			card.SSHUser, card.SSHHost, card.SSHHostKey, card.URI, card.Password)
+
 	default:
 		fmt.Fprintf(&body, `To restore without Gniza, on any machine with restic installed:
 

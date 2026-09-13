@@ -1,12 +1,14 @@
 package webui_test
 
 import (
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/shukiv/gniza/internal/node"
 	"github.com/shukiv/gniza/internal/nodestore"
 )
 
@@ -81,6 +83,38 @@ func TestAnSFTPDestinationIsEditedToLogInWithAPassword(t *testing.T) {
 	}
 	if strings.Contains(page, "hunter2") {
 		t.Error("the password is on the page")
+	}
+
+	// The recovery file for it pins the host key and says ssh asks for
+	// the account's password; it does not hand over the key nothing uses.
+	passwordID, err := node.SealRepositoryPassword(engine.Store(), engine.Vault(), "repo-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo, err := engine.Store().PutRepository(nodestore.Repository{
+		DestinationID: dest.ID, Path: "cp01", PasswordSecretID: passwordID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err = client.PostForm("http://ui/destinations/recovery/card",
+		url.Values{"csrf": {csrfToken(t, page)}, "repository": {repo.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	for _, want := range []string{
+		"with that user's password", "[127.0.0.1]:1 ssh-ed25519", "PubkeyAuthentication=no",
+		"shuki@127.0.0.1", "repo-secret",
+	} {
+		if !strings.Contains(string(card), want) {
+			t.Errorf("the recovery file lacks %q", want)
+		}
+	}
+	for _, forbidden := range []string{"not really", "hunter2", "-i "} {
+		if strings.Contains(string(card), forbidden) {
+			t.Errorf("the recovery file carries %q", forbidden)
+		}
 	}
 
 	// Back to the key, which is still there.

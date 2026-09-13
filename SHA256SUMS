@@ -1,5 +1,5 @@
-# cprest v0.3.11-17-gb9deb0d 2026-09-12T23:43:28+03:00
-91becb0c513ab2861cdfc9aba284e2e134b6a6fb520757bdadf657848815260a  cprest-plugin-amd64.tar.gz
-f0109c59c93da33a3f5f16bfa926c76bf9ca34e8651023ca476554cfba03d4f4  gniza-directadmin-amd64.tar.gz
-fe5badf9d0212c12475140dcba4c31b45b96128c4f5d2ff66c2ead5a70822b46  gniza-plain-amd64.tar.gz
+# cprest v0.3.11-18-g3d04e5f 2026-09-13T19:12:34+03:00
+2361d9d4d97d0fe8c6d1d88a2900eb05b3fba674bae2d56ba29e17bfdcbb8292  cprest-plugin-amd64.tar.gz
+fee7e37f8aa1bc862599ff7b8b0ca0c2cdc8f4e4d47d73bc8ad66666c2933166  gniza-directadmin-amd64.tar.gz
+0a83f2477137493cf8db4af89708d9acd949eb9b20cbade879906ed1dc04d624  gniza-plain-amd64.tar.gz
 1c6cf10bf99530511a8b148643551c7106489c99ad4e67fcb2eb87f179e993fb  get.sh

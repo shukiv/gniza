@@ -324,7 +324,11 @@ func (p Policy) AllAccounts() bool { return len(p.Accounts) == 0 }
 type Job struct {
 	ID       string `json:"id"`
 	PolicyID string `json:"policy_id"`
-	Account  string `json:"account"`
+	// PolicyName is what the schedule was called when the run started.
+	// The history outlives the schedule, and a row that names a schedule
+	// since renamed or removed should still say which one it was.
+	PolicyName string `json:"policy_name,omitempty"`
+	Account    string `json:"account"`
 	// CompleteAccount records what this particular run staged. Looking at
 	// today's policy is insufficient because payload exclusions may have
 	// changed since an older snapshot was made. Jobs from before this field
@@ -346,6 +350,10 @@ type Job struct {
 	// it is the difference between a backup and a restore, and nobody
 	// finds it out on the day they need it unless it is written here.
 	Warnings []string `json:"warnings,omitempty"`
+	// Staged is what the run put in front of restic: the parts, the
+	// paths and the databases. Runs from before this was recorded have
+	// none, and say so rather than guess.
+	Staged *JobStaged `json:"staged,omitempty"`
 	// Progress is what restic last reported about a running job. It is
 	// cleared when the job finishes: a percentage on a job that is over
 	// says nothing, and "100%" beside a failure would be a lie.
@@ -390,6 +398,15 @@ type JobProgress struct {
 	At         time.Time `json:"at"`
 }
 
+// JobStaged is what one run staged (protocol.Staged, as kept).
+type JobStaged struct {
+	Mode      string   `json:"mode,omitempty"`
+	Parts     []string `json:"parts,omitempty"`
+	Paths     []string `json:"paths,omitempty"`
+	Databases []string `json:"databases,omitempty"`
+	Skipped   []string `json:"skipped,omitempty"`
+}
+
 // JobTarget is one repository's outcome within a job.
 type JobTarget struct {
 	RepositoryID   string           `json:"repository_id"`
@@ -397,9 +414,14 @@ type JobTarget struct {
 	SnapshotID     string           `json:"snapshot_id,omitempty"`
 	BytesAdded     uint64           `json:"bytes_added"`
 	BytesProcessed uint64           `json:"bytes_processed"`
-	DurationSecs   float64          `json:"duration_seconds"`
-	Incomplete     bool             `json:"incomplete"`
-	Error          string           `json:"error,omitempty"`
+	// The files restic counted, when the run recorded them.
+	FilesNew        uint64  `json:"files_new,omitempty"`
+	FilesChanged    uint64  `json:"files_changed,omitempty"`
+	FilesUnmodified uint64  `json:"files_unmodified,omitempty"`
+	FilesTotal      uint64  `json:"files_total,omitempty"`
+	DurationSecs    float64 `json:"duration_seconds"`
+	Incomplete      bool    `json:"incomplete"`
+	Error           string  `json:"error,omitempty"`
 	// Detail is restic's own account of the run: the files it could not
 	// read, and any warnings. Kept so "some files unreadable" can be
 	// looked into rather than merely noticed.

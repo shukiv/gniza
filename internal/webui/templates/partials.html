@@ -120,32 +120,35 @@
      an operator can see there is something under a tab without opening it. */}}
 {{define "logtabs"}}
 <nav class="cpr:tabs cpr:tabs-border cpr:tabs-sm cpr:mb-3" aria-label="Logs">
-  <a class="cpr:tab {{if eq .Tab "backups"}}cpr:tab-active{{end}}" href="?p=logs" {{if eq .Tab "backups"}}aria-current="page"{{end}}>Backups
+  <a class="cpr:tab {{if eq .Tab "backups"}}cpr:tab-active{{end}}" href="?p=logs{{if .Query}}&amp;q={{.Query}}{{end}}" {{if eq .Tab "backups"}}aria-current="page"{{end}}>Backups
     <span class="cpr:badge cpr:badge-ghost cpr:badge-xs cpr:ml-1.5 cpr:tabular-nums">{{index .Counts "backups"}}</span></a>
-  <a class="cpr:tab {{if eq .Tab "system"}}cpr:tab-active{{end}}" href="?p=logs&amp;tab=system" {{if eq .Tab "system"}}aria-current="page"{{end}}>System backups
+  <a class="cpr:tab {{if eq .Tab "system"}}cpr:tab-active{{end}}" href="?p=logs&amp;tab=system{{if .Query}}&amp;q={{.Query}}{{end}}" {{if eq .Tab "system"}}aria-current="page"{{end}}>System backups
     <span class="cpr:badge cpr:badge-ghost cpr:badge-xs cpr:ml-1.5 cpr:tabular-nums">{{index .Counts "system"}}</span></a>
-  <a class="cpr:tab {{if eq .Tab "restores"}}cpr:tab-active{{end}}" href="?p=logs&amp;tab=restores" {{if eq .Tab "restores"}}aria-current="page"{{end}}>Restores
+  <a class="cpr:tab {{if eq .Tab "restores"}}cpr:tab-active{{end}}" href="?p=logs&amp;tab=restores{{if .Query}}&amp;q={{.Query}}{{end}}" {{if eq .Tab "restores"}}aria-current="page"{{end}}>Restores
     <span class="cpr:badge cpr:badge-ghost cpr:badge-xs cpr:ml-1.5 cpr:tabular-nums">{{index .Counts "restores"}}</span></a>
-  <a class="cpr:tab {{if eq .Tab "lifecycle"}}cpr:tab-active{{end}}" href="?p=logs&amp;tab=lifecycle" {{if eq .Tab "lifecycle"}}aria-current="page"{{end}}>Account events
+  <a class="cpr:tab {{if eq .Tab "lifecycle"}}cpr:tab-active{{end}}" href="?p=logs&amp;tab=lifecycle{{if .Query}}&amp;q={{.Query}}{{end}}" {{if eq .Tab "lifecycle"}}aria-current="page"{{end}}>Account events
     <span class="cpr:badge cpr:badge-ghost cpr:badge-xs cpr:ml-1.5 cpr:tabular-nums">{{index .Counts "lifecycle"}}</span></a>
-  <a class="cpr:tab {{if eq .Tab "service"}}cpr:tab-active{{end}}" href="?p=logs&amp;tab=service" {{if eq .Tab "service"}}aria-current="page"{{end}}>Service log</a>
+  <a class="cpr:tab {{if eq .Tab "service"}}cpr:tab-active{{end}}" href="?p=logs&amp;tab=service{{if .Query}}&amp;q={{.Query}}{{end}}" {{if eq .Tab "service"}}aria-current="page"{{end}}>Service log</a>
 </nav>
 {{end}}
 
 {{/* One tab of backup rows: accounts, or the server's own settings. The two
      are the same work on different subjects, so they share this. */}}
 {{define "jobtable"}}
+{{$t := .}}
 {{$dest := .Destination}}
 <div class="cpr:panel">
   {{if .Rows}}
   <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm" data-sortable>
-    <thead><tr><th>When</th><th>Account</th><th>Result</th><th data-nosort>Copies</th><th>Stored</th><th class="cpr:text-right" data-nosort>&nbsp;</th></tr></thead>
+    <thead><tr><th>When</th><th>Account</th><th>Result</th><th data-nosort>What</th><th data-nosort>Copies</th><th>Stored</th><th>Took</th><th class="cpr:text-right" data-nosort>&nbsp;</th></tr></thead>
     <tbody data-live="{{.Live}}">
     {{range .Rows}}
     <tr class="{{template "runstripe" .Status}}" {{if not .Status.Terminal}}data-running="1"{{end}}>
       <td class="cpr:whitespace-nowrap cpr:mono cpr:text-base-content/70" data-sort="{{unix .QueuedAt}}">{{stamp .QueuedAt}}</td>
-      <td class="cpr:font-semibold">{{.Account}}</td>
+      <td><span class="cpr:font-semibold">{{.Account}}</span>
+        {{with $t.ScheduleOf .}}<div class="cpr:sublabel">{{.}}</div>{{end}}</td>
       <td data-sort="{{.Status}}">{{template "runstate" .Status}}{{template "jobprogress" .}}</td>
+      <td class="cpr:text-xs">{{with staged .}}{{join . ", "}}{{else}}<span class="cpr:text-base-content/50">&mdash;</span>{{end}}</td>
       <td>
         {{range .Targets}}
           {{$name := index $dest .RepositoryID}}
@@ -170,36 +173,70 @@
         <div>{{bytes .BytesAdded}} new of {{bytes .BytesProcessed}}</div>
         {{end}}{{end}}
       </td>
+      <td class="cpr:mono cpr:whitespace-nowrap" data-sort="{{if and .StartedAt .FinishedAt}}{{printf "%.0f" (.FinishedAt.Sub .StartedAt).Seconds}}{{else}}0{{end}}">{{ranFor .}}</td>
       <td class="cpr:text-right">
-        {{$reportable := false}}
-        {{range .Targets}}{{if or .Detail .SnapshotID}}{{$reportable = true}}{{end}}{{end}}
-        {{if $reportable}}<div class="cpr:flex cpr:justify-end cpr:gap-2">
-          <button type="button" class="cpr:btn cpr:btn-xs cpr:btn-ghost" data-dialog="report-{{.ID}}">Report</button>
-        </div>{{end}}
+        <button type="button" class="cpr:btn cpr:btn-xs cpr:btn-ghost" data-dialog="report-{{.ID}}">Details</button>
       </td>
     </tr>
     {{end}}
     </tbody>
   </table></div>
 
+  {{/* A run's detail: when, under which schedule, what it backed up, and
+       each copy with where it went and what restic counted. */}}
   {{range .Rows}}
-  {{$reportable := false}}
-  {{range .Targets}}{{if or .Detail .SnapshotID}}{{$reportable = true}}{{end}}{{end}}
-  {{if $reportable}}
-  <dialog id="report-{{.ID}}" class="cpr:modal" aria-label="What restic reported for {{.Account}}">
+  <dialog id="report-{{.ID}}" class="cpr:modal" aria-label="The backup of {{.Account}} on {{stamp .QueuedAt}}">
     <div class="cpr:modal-box cpr:w-[min(820px,92vw)] cpr:max-w-none cpr:p-0">
       <div class="cpr:flex cpr:items-center cpr:justify-between cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
-        <h2 class="cpr:text-sm cpr:font-semibold">What restic reported for {{.Account}}</h2>
+        <h2 class="cpr:text-sm cpr:font-semibold">The backup of {{.Account}} on {{stamp .QueuedAt}}</h2>
         <button type="button" class="cpr:btn cpr:btn-sm cpr:btn-ghost cpr:btn-square" data-dialog-close aria-label="Close">✕</button>
       </div>
-      <div class="cpr:p-4 cpr:overflow-auto cpr:max-h-[60vh]">
+      <div class="cpr:p-4 cpr:overflow-auto cpr:max-h-[70vh]">
+        <h3 class="cpr:k cpr:mb-1">The run</h3>
+        <div class="cpr:overflow-x-auto"><table class="cpr:table cpr:table-sm">
+          <tbody>
+            <tr><th class="cpr:w-40">Result</th><td>{{template "runstate" .Status}}</td></tr>
+            <tr><th>Schedule</th><td>{{with $t.ScheduleOf .}}{{.}}{{else}}<span class="cpr:text-base-content/50">one that is gone</span>{{end}}</td></tr>
+            <tr><th>Queued</th><td class="cpr:mono">{{stamp .QueuedAt}}</td></tr>
+            <tr><th>Started</th><td class="cpr:mono">{{stampPtr .StartedAt}}</td></tr>
+            <tr><th>Finished</th><td class="cpr:mono">{{stampPtr .FinishedAt}}{{with ranFor .}} <span class="cpr:text-base-content/60">· took {{.}}</span>{{end}}</td></tr>
+            <tr><th>Run</th><td class="cpr:mono cpr:text-xs cpr:select-all">{{.ID}}</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3 class="cpr:k cpr:mt-4 cpr:mb-1">What was backed up</h3>
+        {{if .Staged}}
+        <div class="cpr:overflow-x-auto"><table class="cpr:table cpr:table-sm">
+          <tbody>
+            <tr><th class="cpr:w-40">Parts</th><td>{{range $i, $p := .Staged.Parts}}{{if $i}}, {{end}}{{stagedPart $p}}{{end}}</td></tr>
+            {{if .Staged.Paths}}<tr><th>Read from</th><td class="cpr:mono cpr:text-xs">{{range $i, $p := .Staged.Paths}}{{if $i}}<br>{{end}}{{$p}}{{end}}</td></tr>{{end}}
+            {{if .Staged.Databases}}<tr><th>Databases ({{len .Staged.Databases}})</th><td class="cpr:mono cpr:text-xs">{{join .Staged.Databases ", "}}</td></tr>{{end}}
+            {{if .Staged.Skipped}}<tr><th>Left out by the schedule</th><td>{{range $i, $p := .Staged.Skipped}}{{if $i}}, {{end}}{{skippedPart $p}}{{end}}</td></tr>{{end}}
+          </tbody>
+        </table></div>
+        {{else}}
+        <p class="cpr:hint">This run is from before Gniza wrote down what a run backed up. What it holds is in its snapshot: browse it from Restore.</p>
+        {{end}}
+        {{range .Missing}}<p class="cpr:mt-1"><span class="cpr:pill cpr:badge-warning">not backed up</span> <span class="cpr:text-xs">{{.}}</span></p>{{end}}
+        {{range .Warnings}}<p class="cpr:mt-1"><span class="cpr:pill cpr:badge-warning">may not restore in full</span> <span class="cpr:text-xs">{{.}}</span></p>{{end}}
+        {{if .StagingErr}}<div class="cpr:alert cpr:alert-soft cpr:alert-error cpr:mt-2" role="alert"><div>Nothing was stored: {{.StagingErr}}</div></div>{{end}}
+
         {{range .Targets}}
         {{$name := index $dest .RepositoryID}}
-        <h3 class="cpr:k cpr:mt-4 cpr:mb-1">{{if $name}}{{$name}}{{else}}{{short .RepositoryID}}{{end}}</h3>
-        {{if .SnapshotID}}<p class="cpr:hint">Snapshot <span class="cpr:mono">{{short .SnapshotID}}</span>
-          · took {{printf "%.0f" .DurationSecs}}s{{if .BytesAdded}} · {{bytes .BytesAdded}} new of {{bytes .BytesProcessed}}{{end}}</p>{{end}}
-        {{if .Detail}}<pre class="cpr:log cpr:max-h-none">{{.Detail}}</pre>
-        {{else}}<p class="cpr:hint">restic reported nothing beyond the summary.</p>{{end}}
+        <h3 class="cpr:k cpr:mt-4 cpr:mb-1">The copy at {{if $name}}{{$name}}{{else}}{{short .RepositoryID}}{{end}}</h3>
+        <div class="cpr:overflow-x-auto"><table class="cpr:table cpr:table-sm">
+          <tbody>
+            <tr><th class="cpr:w-40">Destination</th><td>{{if $name}}{{$name}}{{else}}<span class="cpr:text-base-content/50">one that is gone</span>{{end}}{{with index $t.Where .RepositoryID}}<div class="cpr:sublabel">{{.}}</div>{{end}}</td></tr>
+            <tr><th>Result</th><td>{{if eq (printf "%s" .Status) "success"}}<span class="cpr:pill cpr:badge-success">stored</span>{{else}}<span class="cpr:pill cpr:badge-error">{{.Status}}</span>{{end}}
+              {{if .Incomplete}}<span class="cpr:pill cpr:badge-warning">some files unreadable</span>{{end}}
+              {{if .Error}}<div class="cpr:text-xs cpr:mt-1">{{.Error}}</div>{{end}}</td></tr>
+            {{if .SnapshotID}}<tr><th>Snapshot</th><td class="cpr:mono cpr:text-xs cpr:select-all">{{.SnapshotID}}</td></tr>{{end}}
+            {{if or .BytesProcessed .BytesAdded}}<tr><th>Size</th><td>{{bytes .BytesProcessed}} read, {{bytes .BytesAdded}} of it new to the destination</td></tr>{{end}}
+            {{if .FilesTotal}}<tr><th>Files</th><td>{{count .FilesTotal}} read: {{count .FilesNew}} new, {{count .FilesChanged}} changed, {{count .FilesUnmodified}} as they were</td></tr>{{end}}
+            {{with tookSecs .DurationSecs}}<tr><th>Upload took</th><td>{{.}}</td></tr>{{end}}
+          </tbody>
+        </table></div>
+        {{if .Detail}}<p class="cpr:hint cpr:mb-1">What restic said:</p><pre class="cpr:log cpr:max-h-none">{{.Detail}}</pre>{{end}}
         {{if .Incomplete}}
         <p class="cpr:hint">Files that vanish or cannot be read mid-backup are normal on a
         live server — sessions, sockets, caches. What matters is whether anything above
@@ -213,11 +250,11 @@
     </div>
   </dialog>
   {{end}}
-  {{end}}
 
   <div class="cpr:px-4 cpr:py-2.5 cpr:border-t cpr:border-base-300">
     <p class="cpr:hint cpr:mt-0">"Stored" is what the backup actually cost in storage. On an
-    unchanged account it should be a small fraction of what was read.</p>
+    unchanged account it should be a small fraction of what was read. Details says when a run
+    ran, under which schedule, what it backed up and where each copy went.</p>
   </div>
   {{else}}<div class="cpr:px-4 cpr:py-6 cpr:text-center cpr:text-base-content/70"><p>{{.Empty}}</p></div>{{end}}
 </div>

@@ -328,6 +328,7 @@ func (e *Engine) runBackup(ctx context.Context, stored nodestore.Job) error {
 	}
 	stored.CompleteAccount = stored.Account != cpanel.SystemAccount &&
 		!policy.SkipHomedir && !policy.SkipDatabases && !policy.SkipEmail
+	stored.PolicyName = policy.Name
 
 	now := time.Now().UTC()
 	stored.Status = job.StatusRunning
@@ -346,6 +347,13 @@ func (e *Engine) runBackup(ctx context.Context, stored nodestore.Job) error {
 	stored.StagingErr = report.StagingError
 	stored.Missing = report.Missing
 	stored.Warnings = report.Warnings
+	stored.Staged = nil
+	if report.Staged != nil {
+		stored.Staged = &nodestore.JobStaged{
+			Mode: report.Staged.Mode, Parts: report.Staged.Parts, Paths: report.Staged.Paths,
+			Databases: report.Staged.Databases, Skipped: report.Staged.Skipped,
+		}
+	}
 	if len(report.Missing) > 0 {
 		// Something the account has is not in this backup. It is worth
 		// keeping and worth reporting, but it cannot authorise deleting
@@ -361,10 +369,12 @@ func (e *Engine) runBackup(ctx context.Context, stored nodestore.Job) error {
 			SnapshotID:     target.SnapshotID,
 			BytesAdded:     target.BytesAdded,
 			BytesProcessed: target.BytesProcessed,
-			DurationSecs:   target.DurationSecs,
-			Incomplete:     target.Incomplete,
-			Error:          target.Error,
-			Detail:         target.Detail,
+			FilesNew:       target.FilesNew, FilesChanged: target.FilesChanged,
+			FilesUnmodified: target.FilesUnmodified, FilesTotal: target.FilesTotal,
+			DurationSecs: target.DurationSecs,
+			Incomplete:   target.Incomplete,
+			Error:        target.Error,
+			Detail:       target.Detail,
 		})
 		results = append(results, job.TargetResult{Status: job.TargetStatus(target.Status), Incomplete: target.Incomplete})
 	}

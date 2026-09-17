@@ -388,6 +388,21 @@ func templateFuncs() template.FuncMap {
 		// took renders how long a run lasted, in the unit someone would
 		// say it in.
 		"took": humanTook,
+		// ranFor is how long a run took from its start to its finish, and
+		// tookSecs the same for a number of seconds.
+		"ranFor": func(run nodestore.Job) string {
+			if run.StartedAt == nil || run.FinishedAt == nil {
+				return ""
+			}
+			return humanTook(run.FinishedAt.Sub(*run.StartedAt))
+		},
+		"tookSecs": func(seconds float64) string {
+			return humanTook(time.Duration(seconds * float64(time.Second)))
+		},
+		"staged":      stagedWords,
+		"stagedPart":  stagedPart,
+		"skippedPart": skippedPart,
+		"count":       countedNumber,
 		"percent": func(value float64) string {
 			// Half rounds up: 42.5% reads as 43%, not 42%, which is what
 			// anyone watching a bar expects of the number beside it.

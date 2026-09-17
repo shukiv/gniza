@@ -289,6 +289,7 @@ func (s *Server) operatorMux() *http.ServeMux {
 
 	mux.HandleFunc("GET /logs", s.handleLogs)
 	mux.HandleFunc("GET /logs/download", s.handleLogDownload)
+	mux.HandleFunc("POST /logs/clear", s.guard(s.handleClearLogs))
 	// The page was called History and lived at /jobs. Somebody's bookmark
 	// and somebody's runbook still say so.
 	mux.HandleFunc("GET /jobs", s.handleLogs)

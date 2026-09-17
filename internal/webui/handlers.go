@@ -3661,9 +3661,18 @@ type logsView struct {
 	Restores    []restoreRow
 	Lifecycle   []nodestore.LifecycleEvent
 	Destination map[string]string
+	// Where says what each destination is and where, and Schedule what
+	// each schedule is called, for a run's detail.
+	Where    map[string]string
+	Schedule map[string]string
+	// Query is what the history was searched for, or empty. The search
+	// reads all of the history, not the rows a tab would have shown.
+	Query string
 	// Counts label the tabs, so an operator can see there is something
-	// under one without opening it.
+	// under one without opening it: with a search, what matches. Totals
+	// are what there is without one.
 	Counts map[string]int
+	Totals map[string]int
 	// Service is the service's own log, which is the one tab that is not
 	// built from what this server recorded about a job but read back from
 	// the journal it wrote as the job ran.
@@ -3676,37 +3685,53 @@ type logsView struct {
 type logTable struct {
 	Rows        []nodestore.Job
 	Destination map[string]string
+	Where       map[string]string
+	Schedule    map[string]string
 	Live        string
 	Empty       string
 }
 
-func (v logsView) BackupTable() logTable {
-	return logTable{
-		Rows: v.Jobs, Destination: v.Destination, Live: "backups",
-		Empty: "No backups have run yet. They will appear here as schedules fire.",
+func (v logsView) table(rows []nodestore.Job, live, empty string) logTable {
+	if v.Query != "" {
+		empty = "Nothing here matches that. The search reads the account, the schedule, the destination, " +
+			"the snapshot, the databases and what went wrong, in every run this server remembers."
 	}
+	return logTable{Rows: rows, Destination: v.Destination, Where: v.Where, Schedule: v.Schedule, Live: live, Empty: empty}
+}
+
+func (v logsView) BackupTable() logTable {
+	return v.table(v.Jobs, "backups", "No backups have run yet. They will appear here as schedules fire.")
 }
 
 func (v logsView) SystemTable() logTable {
-	return logTable{
-		Rows: v.System, Destination: v.Destination, Live: "systembackups",
-		Empty: "Nothing has backed up the server's own settings yet. " +
-			"A schedule that covers the server as well as its accounts puts them here.",
+	return v.table(v.System, "systembackups", "Nothing has backed up the server's own settings yet. "+
+		"A schedule that covers the server as well as its accounts puts them here.")
+}
+
+// ScheduleOf is what the run's schedule is called: as it was called when
+// the run started, or as it is called now for a run from before that was
+// written down.
+func (t logTable) ScheduleOf(run nodestore.Job) string {
+	if run.PolicyName != "" {
+		return run.PolicyName
 	}
+	return t.Schedule[run.PolicyID]
 }
 
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
-	jobs, err := s.engine.Store().Jobs(200)
+	// All of it, so that a search reads the whole history and not the
+	// rows a tab would have shown; what is shown is cut down below.
+	jobs, err := s.engine.Store().Jobs(0)
 	if err != nil {
 		s.fail(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	restores, err := s.engine.Store().Restores(100)
+	restores, err := s.engine.Store().Restores(0)
 	if err != nil {
 		s.fail(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	lifecycle, err := s.engine.Store().LifecycleEvents(100)
+	lifecycle, err := s.engine.Store().LifecycleEvents(0)
 	if err != nil {
 		s.fail(w, r, http.StatusInternalServerError, err)
 		return
@@ -3716,30 +3741,64 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	names := map[string]string{}
+	names, where := map[string]string{}, map[string]string{}
 	for _, dest := range destinations {
 		names[dest.Repository.ID] = dest.Name
+		where[dest.Repository.ID] = strings.TrimSpace(dest.TypeName() + " · " + dest.Endpoint)
+	}
+	schedules := map[string]string{}
+	if policies, err := s.engine.Store().Policies(); err == nil {
+		for _, policy := range policies {
+			schedules[policy.ID] = policy.Name
+		}
 	}
 
+	search := newLogSearch(r.URL.Query().Get("q"))
 	view := logsView{
 		Tab:         logTab(r.URL.Query().Get("tab")),
-		Restores:    collectableRows(restores),
-		Lifecycle:   lifecycle,
 		Destination: names,
+		Where:       where,
+		Schedule:    schedules,
+		Query:       search.String(),
+		Totals:      map[string]int{"restores": len(restores), "lifecycle": len(lifecycle)},
 	}
 	for _, run := range jobs {
+		kind, rows := "backups", &view.Jobs
 		if run.Account == cpanel.SystemAccount {
-			view.System = append(view.System, run)
-			continue
+			kind, rows = "system", &view.System
 		}
-		view.Jobs = append(view.Jobs, run)
+		view.Totals[kind]++
+		if search.matchesJob(run, names, schedules) {
+			*rows = append(*rows, run)
+		}
+	}
+	var found []nodestore.Restore
+	for _, restore := range restores {
+		if search.matchesRestore(restore, names) {
+			found = append(found, restore)
+		}
+	}
+	for _, event := range lifecycle {
+		if search.matchesEvent(event) {
+			view.Lifecycle = append(view.Lifecycle, event)
+		}
 	}
 	view.Counts = map[string]int{
 		"backups":   len(view.Jobs),
 		"system":    len(view.System),
-		"restores":  len(view.Restores),
+		"restores":  len(found),
 		"lifecycle": len(view.Lifecycle),
 	}
+	// What a tab draws is the newest of what matched; the counts say how
+	// many there are.
+	view.Jobs, view.System = firstRuns(view.Jobs, logRunsShown), firstRuns(view.System, logRunsShown)
+	if len(found) > logOthersShown {
+		found = found[:logOthersShown]
+	}
+	if len(view.Lifecycle) > logOthersShown {
+		view.Lifecycle = view.Lifecycle[:logOthersShown]
+	}
+	view.Restores = collectableRows(found)
 	// Reading the journal costs a process, so it happens for the tab that
 	// shows it and not for the four that do not.
 	if view.Tab == "service" {

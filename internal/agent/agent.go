@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -365,6 +366,28 @@ func recordPayload(report *protocol.JobReport, payload pkgacct.Payload, log *slo
 	}
 }
 
+// recordStaged writes down what the run staged, for the history: a row
+// that says "success" and not of what is half a record.
+func recordStaged(report *protocol.JobReport, payload pkgacct.Payload, assignment protocol.JobAssignment) {
+	staged := &protocol.Staged{Mode: string(payload.Mode), Paths: payload.Paths()}
+	for _, part := range payload.Parts {
+		staged.Parts = append(staged.Parts, string(part.Kind))
+	}
+	for name := range payload.DumpPaths {
+		staged.Databases = append(staged.Databases, name)
+	}
+	sort.Strings(staged.Databases)
+	for skipped, left := range map[string]bool{
+		"homedir": assignment.SkipHomedir, "databases": assignment.SkipDatabases, "email": assignment.SkipEmail,
+	} {
+		if left {
+			staged.Skipped = append(staged.Skipped, skipped)
+		}
+	}
+	sort.Strings(staged.Skipped)
+	report.Staged = staged
+}
+
 func (a *Agent) RunJob(ctx context.Context, assignment protocol.JobAssignment) protocol.JobReport {
 	// The token says which attempt this is. The controller refuses a
 	// report that does not carry the token of the attempt it is running,
@@ -437,6 +460,7 @@ func (a *Agent) RunJob(ctx context.Context, assignment protocol.JobAssignment) p
 		return report
 	}
 	recordPayload(&report, payload, log)
+	recordStaged(&report, payload, assignment)
 	log.Debug("staged an account", "dir", dir.Path, "mode", mode,
 		"parts", len(payload.Parts), "dumps", len(payload.DumpPaths),
 		"degraded", payload.Degraded, "missing", len(payload.Missing))
@@ -688,6 +712,10 @@ func (a *Agent) backupTarget(ctx context.Context, log *slog.Logger,
 	result.SnapshotID = backup.Summary.SnapshotID
 	result.BytesAdded = backup.Summary.DataAdded
 	result.BytesProcessed = backup.Summary.TotalBytesProcessed
+	result.FilesNew = backup.Summary.FilesNew
+	result.FilesChanged = backup.Summary.FilesChanged
+	result.FilesUnmodified = backup.Summary.FilesUnmodified
+	result.FilesTotal = backup.Summary.TotalFilesProcessed
 	result.Incomplete = backup.Incomplete
 	result.Detail = trimDetail(backup.Stderr)
 

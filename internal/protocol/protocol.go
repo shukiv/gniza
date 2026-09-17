@@ -237,9 +237,16 @@ type TargetReport struct {
 	BytesAdded     uint64  `json:"bytes_added"`
 	BytesProcessed uint64  `json:"bytes_processed"`
 	DurationSecs   float64 `json:"duration_seconds"`
-	Attempt        int     `json:"attempt"`
-	Incomplete     bool    `json:"incomplete"`
-	Error          string  `json:"error,omitempty"`
+	// The files restic counted: new, changed and left as they were since
+	// the snapshot before, and how many it read in all. They say whether
+	// a night's backup saw what it was expected to see.
+	FilesNew        uint64 `json:"files_new,omitempty"`
+	FilesChanged    uint64 `json:"files_changed,omitempty"`
+	FilesUnmodified uint64 `json:"files_unmodified,omitempty"`
+	FilesTotal      uint64 `json:"files_total,omitempty"`
+	Attempt         int    `json:"attempt"`
+	Incomplete      bool   `json:"incomplete"`
+	Error           string `json:"error,omitempty"`
 	// Detail is what restic reported on its error stream: which files it
 	// could not read, and any warning it raised. Without it "some files
 	// unreadable" is a dead end for whoever has to decide whether it
@@ -266,6 +273,25 @@ type JobReport struct {
 	// to put back, one line each. Unlike Missing it is not a hole in the
 	// backup and does not make the run partial.
 	Warnings []string `json:"warnings,omitempty"`
+	// Staged is what this run put in front of restic, so the history can
+	// say what a backup was a backup of.
+	Staged *Staged `json:"staged,omitempty"`
+}
+
+// Staged is what one run staged: the shape of the payload, its parts,
+// the paths restic read and the databases dumped.
+type Staged struct {
+	// Mode is the payload's shape: split, archive or system.
+	Mode string `json:"mode,omitempty"`
+	// Parts are the kinds of part staged: homedir, metadata, database,
+	// archive, system.
+	Parts []string `json:"parts,omitempty"`
+	// Paths are what restic was pointed at, in order.
+	Paths []string `json:"paths,omitempty"`
+	// Databases are the dumps taken, by name.
+	Databases []string `json:"databases,omitempty"`
+	// Skipped is what the schedule left out: homedir, databases, email.
+	Skipped []string `json:"skipped,omitempty"`
 }
 
 // ErrorResponse is the body of any non-2xx reply.

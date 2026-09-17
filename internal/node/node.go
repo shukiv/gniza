@@ -575,7 +575,12 @@ func (e *Engine) incompleteSnapshots(repositoryID string) (map[string]bool, erro
 	if err != nil {
 		return nil, err
 	}
-	incomplete := map[string]bool{}
+	// The runs say it, and so do the marks left by runs cleared out of
+	// the history since.
+	incomplete, err := e.store.IncompleteSnapshotMarks(repositoryID)
+	if err != nil {
+		return nil, err
+	}
 	for _, stored := range jobs {
 		for _, target := range stored.Targets {
 			if target.RepositoryID == repositoryID && target.Incomplete && target.SnapshotID != "" {

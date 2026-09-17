@@ -6,6 +6,57 @@
 </div>
 {{template "logtabs" $data}}
 
+{{/* Search and clearing, above every tab. The service log has its own
+     form, which carries the words to look for with its other choices. */}}
+<div class="cpr:flex cpr:flex-wrap cpr:items-end cpr:justify-between cpr:gap-3 cpr:mb-3">
+  {{if ne $data.Tab "service"}}
+  <form method="get" role="search" class="cpr:flex cpr:flex-wrap cpr:items-end cpr:gap-2">
+    <input type="hidden" name="p" value="logs">
+    <input type="hidden" name="tab" value="{{$data.Tab}}">
+    <div>
+      <label class="cpr:field-label" for="log_q">Search the logs</label>
+      <input type="search" class="cpr:input cpr:input-sm cpr:w-72 cpr:max-w-full" id="log_q" name="q" value="{{$data.Query}}"
+             placeholder="account, destination, snapshot, error">
+    </div>
+    <button class="cpr:btn cpr:btn-sm cpr:btn-primary" type="submit">Search</button>
+    {{if $data.Query}}<a class="cpr:btn cpr:btn-sm cpr:btn-ghost" href="?p=logs&amp;tab={{$data.Tab}}">Show everything</a>{{end}}
+  </form>
+  {{else}}<span></span>{{end}}
+  <button type="button" class="cpr:btn cpr:btn-sm cpr:btn-outline cpr:btn-error" data-dialog="clear-logs">Clear logs…</button>
+</div>
+{{if and $data.Query (ne $data.Tab "service")}}
+<p class="cpr:hint cpr:mt-0 cpr:mb-3" role="status">{{index $data.Counts $data.Tab}} of {{index $data.Totals $data.Tab}} here
+match <b>{{$data.Query}}</b>. Every word has to be in the row somewhere: its account, schedule, date, destination, snapshot,
+databases, or what went wrong. The search reads everything this server remembers, not only the rows a tab shows.</p>
+{{end}}
+
+<dialog id="clear-logs" class="cpr:modal" aria-labelledby="clear-logs-title">
+  <div class="cpr:modal-box cpr:w-[min(600px,calc(100vw-2rem))] cpr:max-w-none">
+    <h3 id="clear-logs-title" class="cpr:text-lg cpr:font-semibold">Clear the logs?</h3>
+    <p class="cpr:mt-2">This removes the history ticked below from this server. It cannot be undone.
+    The backups themselves are not touched: every snapshot stays at its destination and can be restored.</p>
+    <form method="post" action="?p=logs/clear" class="cpr:mt-3">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <input type="hidden" name="tab" value="{{$data.Tab}}">
+      <div class="cpr:grid cpr:gap-2">
+        <label class="cpr:check"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="kind" value="backups" checked> Backups <span class="cpr:text-base-content/60 cpr:tabular-nums">({{index $data.Totals "backups"}})</span></label>
+        <label class="cpr:check"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="kind" value="system" checked> System backups <span class="cpr:text-base-content/60 cpr:tabular-nums">({{index $data.Totals "system"}})</span></label>
+        <label class="cpr:check"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="kind" value="restores" checked> Restores <span class="cpr:text-base-content/60 cpr:tabular-nums">({{index $data.Totals "restores"}})</span></label>
+        <label class="cpr:check"><input type="checkbox" class="cpr:checkbox cpr:checkbox-sm" name="kind" value="lifecycle" checked> Account events <span class="cpr:text-base-content/60 cpr:tabular-nums">({{index $data.Totals "lifecycle"}})</span></label>
+      </div>
+      <p class="cpr:hint cpr:mt-3">A few rows stay, because they are more than a log: the last run and the last
+      good copy of each account at each destination, which is what the overview and termination protection read
+      to say an account is protected; the last rehearsal; a download still waiting to be collected; and anything
+      still running. A search does not narrow this: what is ticked is cleared whatever is showing. The service
+      log is the system journal's and is not cleared from here.</p>
+      <div class="cpr:modal-action">
+        <button type="button" class="cpr:btn cpr:btn-sm cpr:btn-ghost" data-dialog-close>Keep them</button>
+        <button type="submit" class="cpr:btn cpr:btn-sm cpr:btn-error">Clear the logs</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
 {{if eq $data.Tab "backups"}}
 {{template "jobtable" $data.BackupTable}}
 {{else if eq $data.Tab "system"}}
@@ -44,6 +95,12 @@
       </select>
     </div>
     <div>
+      <label class="cpr:field-label" for="log_words">Containing</label>
+      <input type="search" class="cpr:input cpr:input-sm cpr:w-full" id="log_words" name="q" value="{{$log.Query}}"
+             placeholder="any words">
+      <small class="cpr:help">Keeps the lines that hold every word, in any case.</small>
+    </div>
+    <div>
       <label class="cpr:field-label" for="log_account">Account</label>
       <input type="text" class="cpr:input cpr:input-sm cpr:w-full" id="log_account" name="account" value="{{$log.Account}}"
              placeholder="every account">
@@ -58,7 +115,7 @@
     </div>
     <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:self-end">
       <button class="cpr:btn cpr:btn-sm cpr:btn-primary" type="submit">Show</button>
-      <a class="cpr:btn cpr:btn-sm" href="?p=logs/download&amp;level={{$log.Level}}&amp;span={{$log.Span}}&amp;account={{$log.Account}}">Download all of it</a>
+      <a class="cpr:btn cpr:btn-sm" href="?p=logs/download&amp;level={{$log.Level}}&amp;span={{$log.Span}}&amp;account={{$log.Account}}&amp;q={{$log.Query}}">Download all of it</a>
     </div>
   </form>
   {{if $log.Follow}}<span data-running="1" hidden></span>{{end}}

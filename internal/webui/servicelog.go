@@ -49,6 +49,8 @@ var logSizes = []struct{ Key, Label, Lines string }{
 
 // serviceLogView is the service log tab.
 type serviceLogView struct {
+	// Query is text a line has to hold to be kept, every word of it.
+	Query   string
 	Text    string
 	Level   string
 	Account string
@@ -80,6 +82,7 @@ func (s *Server) serviceLog(ctx context.Context, r *http.Request) serviceLogView
 	view := serviceLogView{
 		Level:   logLevelAsked(r.URL.Query().Get("level")),
 		Account: strings.TrimSpace(r.URL.Query().Get("account")),
+		Query:   newLogSearch(r.URL.Query().Get("q")).String(),
 		Follow:  r.URL.Query().Get("follow") == "1",
 		Levels:  []string{"debug", "info", "warn", "error"},
 	}
@@ -109,7 +112,7 @@ func (s *Server) serviceLog(ctx context.Context, r *http.Request) serviceLogView
 		view.Error = "the service log could not be read: " + err.Error()
 		return view
 	}
-	text := narrowLog(string(raw), view.Level, view.Account)
+	text := narrowLog(string(raw), view.Level, view.Account, view.Query)
 	view.Empty = strings.TrimSpace(text) == ""
 	view.Text = bugreport.Clip(text, serviceLogBytes)
 	return view
@@ -122,17 +125,21 @@ func (s *Server) serviceLog(ctx context.Context, r *http.Request) serviceLogView
 // the journal at the same priority and -p would filter nothing. A line with
 // no level on it -- restic's own output, a panic -- is always kept, because
 // a line nobody can classify is exactly the one worth seeing.
-func narrowLog(text, level, account string) string {
+func narrowLog(text, level, account, query string) string {
 	want, err := parseLevel(level)
 	if err != nil {
 		want = slog.LevelDebug
 	}
+	search := newLogSearch(query)
 	var kept []string
 	for _, line := range strings.Split(text, "\n") {
 		if line == "" {
 			continue
 		}
 		if account != "" && !namesAccount(line, account) {
+			continue
+		}
+		if !search.matches(line) {
 			continue
 		}
 		if at, found := lineLevel(line); found && at < want {
@@ -238,7 +245,7 @@ func (s *Server) handleLogDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	text := narrowLog(string(raw), logLevelAsked(r.URL.Query().Get("level")),
-		strings.TrimSpace(r.URL.Query().Get("account")))
+		strings.TrimSpace(r.URL.Query().Get("account")), r.URL.Query().Get("q"))
 	name := fmt.Sprintf("gniza-log-%s.txt", time.Now().UTC().Format("20060102-1504"))
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)

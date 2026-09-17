@@ -38,6 +38,11 @@ var (
 	// bucketSources holds what an operator chose to back up on a server
 	// without a panel (panel.Source), keyed by name.
 	bucketSources = []byte("sources")
+	// bucketIncomplete marks the snapshots restic could not read every
+	// file for, keyed repository/snapshot. The mark lives on the job that
+	// made the snapshot; clearing the history moves it here, so the
+	// restore page goes on saying which snapshots have a hole in them.
+	bucketIncomplete = []byte("incomplete_snapshots")
 )
 
 var allBuckets = [][]byte{
@@ -48,6 +53,7 @@ var allBuckets = [][]byte{
 	bucketLifecycle,
 	bucketBaskets,
 	bucketSources,
+	bucketIncomplete,
 }
 
 // Store is the on-disk state file.

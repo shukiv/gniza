@@ -171,3 +171,36 @@ func TestAPlanOlderThanTheLastFailureIsNotOfferedForApproval(t *testing.T) {
 		t.Error("a plan three weeks older than the last failure was offered for approval")
 	}
 }
+
+// What happened on 182.54.236.10 the evening the fix was installed: the
+// hourly look removed three locks, and the page went on saying the
+// repository was locked, because that was the last thing retention had
+// said and it would not be asked again until the next night.
+func TestThePlanIsTakenAgainOnceTheSweepHasRemovedTheLocks(t *testing.T) {
+	for name, gone := range map[string]bool{
+		"the sweep removes the lock":        false,
+		"the lock had been removed already": true,
+	} {
+		restic := &lockedRestic{lockedAt: time.Now().Add(-19 * 24 * time.Hour), unlocked: gone}
+		engine, store, repo := lockedEngine(t, restic)
+		made := time.Now().Add(-30 * 24 * time.Hour).UTC()
+		failed := time.Now().Add(-time.Hour).UTC()
+		repo.InitialisedAt = &made
+		repo.Retention = nodestore.RetentionState{AttemptedAt: &failed,
+			LastError: "resticrun: the repository is locked: restic exited 11"}
+		if _, err := store.PutRepository(repo); err != nil {
+			t.Fatal(err)
+		}
+
+		engine.SweepLocksForTest(t.Context())
+
+		after, err := store.Repository(repo.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if after.Retention.LastError != "" || after.Retention.PlannedAt == nil ||
+			!after.Retention.PlannedAt.After(failed) {
+			t.Errorf("%s, and the page still says: %+v", name, after.Retention)
+		}
+	}
+}

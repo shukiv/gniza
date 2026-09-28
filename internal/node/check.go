@@ -49,7 +49,10 @@ func (e *Engine) checkRepositories(ctx context.Context, now time.Time) {
 		return
 	}
 	busy, err := e.anyJobRunning()
-	if err != nil || busy {
+	if err != nil || busy || e.sweepingLocks.Load() {
+		// The sweep for stale locks is removing them now. A check that
+		// started beside it would find the lock, try to remove it too,
+		// and one of the two would be told it had gone.
 		return
 	}
 	if !e.checking.CompareAndSwap(false, true) {

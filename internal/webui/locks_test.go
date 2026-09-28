@@ -113,6 +113,56 @@ func TestALockedRepositoryOffersToRemoveItsStaleLocks(t *testing.T) {
 	}
 }
 
+// Pressed for a repository whose locks have gone already, the button says
+// so and takes the plan. It used to say that whatever held the repository
+// was still running, of a repository nothing held.
+func TestTheButtonSaysSoWhenThereIsNoLockLeft(t *testing.T) {
+	restic := &staleRestic{unlocked: true}
+	client, _, engine := newUIWithExec(t, restic)
+	store := engine.Store()
+	_, repo, err := engine.AddDestination(nodestore.Destination{
+		Name: "offsite", Type: "local", Config: map[string]string{"root": t.TempDir()},
+	}, nil, "backups")
+	if err != nil {
+		t.Fatal(err)
+	}
+	made := time.Now().Add(-20 * 24 * time.Hour).UTC()
+	failed := time.Now().Add(-time.Hour).UTC()
+	keeps := nodestore.Retention{KeepDaily: 7}
+	repo.InitialisedAt = &made
+	repo.Retention = nodestore.RetentionState{AttemptedAt: &failed,
+		LastError: "resticrun: restic exited 11: repository is already locked by PID 338155 on uscp"}
+	if _, err := store.PutRepository(repo); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PutPolicy(nodestore.Policy{
+		Name: "Nightly", ScheduleCron: "0 2 * * *", Enabled: true,
+		RepositoryIDs: []string{repo.ID}, Retention: keeps,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, page := get(t, client, "/destinations")
+	resp, err := client.PostForm("http://ui/destinations/unlock", url.Values{
+		"csrf": {csrfToken(t, page)}, "repository": {repo.ID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	said, err := url.QueryUnescape(resp.Header.Get("Location"))
+	if err != nil || !strings.Contains(said, "no lock on this repository any more") ||
+		strings.Contains(said, "still running") {
+		t.Errorf("the answer: %q", said)
+	}
+	stored, err := store.Repository(repo.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Retention.LastError != "" || stored.Retention.PlannedAt == nil {
+		t.Errorf("no fresh plan was taken: %+v", stored.Retention)
+	}
+}
+
 // "Checked" on a destination used to mean that a login to it had worked,
 // which is not what anybody reading it took it to mean. The card now says
 // reached for that, and says separately whether the repository has been

@@ -170,28 +170,27 @@ func (r *Runner) ForgetPlanned(ctx context.Context, repo Repository, spec Forget
 	if err != nil {
 		return ForgetPlan{}, err
 	}
-	result, err := r.run(ctx, repo, args, secondary{}, nil)
+	// Read as restic writes it, not captured and then parsed: see
+	// planStream.
+	stream := newPlanStream()
+	result, err := r.run(ctx, repo, args, secondary{}, nil, stream)
+	groups, planErr := stream.finish(result.Stdout)
 	if err != nil {
 		return ForgetPlan{}, err
 	}
 	if err := classifyExit(result.ExitCode, result.Stderr, false); err != nil {
 		return ForgetPlan{}, err
 	}
-	if result.Truncated {
+	if result.Truncated && len(result.Stdout) > 0 {
 		// The plan is what an operator agrees to and what gets applied.
 		// A cut-off one reads as a smaller, complete answer.
-		return ForgetPlan{}, fmt.Errorf(
-			"resticrun: the retention plan was too large to read in full")
+		return ForgetPlan{}, errPlanTooLarge
 	}
-	if _, err := ParseForgetPlan(result.Stdout); err != nil {
-		return ForgetPlan{}, err
+	if planErr != nil {
+		return ForgetPlan{}, planErr
 	}
-	if len(bytes.TrimSpace(result.Stdout)) == 0 {
+	if len(groups) == 0 {
 		return ForgetPlan{}, nil
-	}
-	var groups []retentionGroupJSON
-	if err := json.Unmarshal(result.Stdout, &groups); err != nil {
-		return ForgetPlan{}, err
 	}
 	needsReceipts := false
 	for _, group := range groups {

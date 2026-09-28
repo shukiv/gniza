@@ -145,7 +145,7 @@ func (e *Engine) rehearseOnce(ctx context.Context, now time.Time) (string, error
 		return "", err
 	}
 	every := settings.RehearseEvery()
-	if every <= 0 || !rehearsalHour(now) || e.checking.Load() {
+	if every <= 0 || !rehearsalHour(now) || e.checking.Load() || e.sweepingLocks.Load() {
 		return "", nil
 	}
 	if !e.quietFor(now, rehearseQuietBefore) {

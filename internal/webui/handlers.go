@@ -5048,13 +5048,23 @@ func (s *Server) handleClearLocks(w http.ResponseWriter, r *http.Request) {
 		s.redirect(w, r, "/destinations", "error", err.Error())
 		return
 	}
-	if removed == 0 {
-		s.redirect(w, r, "/destinations", "warn",
-			"No lock there is stale: whatever holds the repository is still running, "+
-				"or took its lock less than half an hour ago.")
-		return
-	}
 	said := counted(removed, "stale lock") + " removed."
+	if removed == 0 {
+		held, err := s.engine.LocksHeld(r.Context(), id)
+		if err != nil {
+			s.redirect(w, r, "/destinations", "error", err.Error())
+			return
+		}
+		if held > 0 {
+			s.redirect(w, r, "/destinations", "warn",
+				"No lock there is stale: whatever holds the repository is still running, "+
+					"or took its lock less than half an hour ago.")
+			return
+		}
+		// Removed already, by the hourly look for them or by somebody
+		// else. What the page still says is what retention said last.
+		said = "There is no lock on this repository any more."
+	}
 	if _, err := s.engine.PlanRetention(r.Context(), id); err != nil {
 		s.redirect(w, r, "/destinations", "warn", said+" The plan still could not be taken: "+err.Error())
 		return

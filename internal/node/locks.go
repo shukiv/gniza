@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/shukiv/gniza/internal/nodestore"
 	"github.com/shukiv/gniza/internal/resticrun"
 )
 
@@ -55,10 +57,54 @@ func (e *Engine) sweepLocksOnce(ctx context.Context) {
 		if repo.InitialisedAt == nil {
 			continue
 		}
-		if _, err := e.ClearStaleLocks(ctx, repo.ID); err != nil {
+		removed, err := e.ClearStaleLocks(ctx, repo.ID)
+		if err != nil {
 			e.log.Warn("look for stale locks", "repository_id", repo.ID, "error", err)
+			continue
+		}
+		// What retention last said is on the page until it is asked
+		// again, and it is not asked again for most of a day. A
+		// repository that was locked then and is not now would go on
+		// saying it is.
+		if removed > 0 || retentionStoppedAtALock(repo) {
+			e.planAfterUnlock(ctx, repo.ID)
 		}
 	}
+}
+
+// retentionStoppedAtALock reports whether the last thing retention said
+// about a repository is that it was locked.
+func retentionStoppedAtALock(repo nodestore.Repository) bool {
+	return strings.Contains(repo.Retention.LastError, "locked")
+}
+
+// planAfterUnlock takes the retention plan again for a repository that
+// has no lock on it any more. Nothing is removed: a plan is what an
+// operator reads before anything is.
+func (e *Engine) planAfterUnlock(ctx context.Context, repositoryID string) {
+	held, err := e.LocksHeld(ctx, repositoryID)
+	if err != nil || held > 0 {
+		return
+	}
+	if _, err := e.PlanRetention(ctx, repositoryID); err != nil {
+		e.log.Warn("plan retention after the locks were removed",
+			"repository_id", repositoryID, "error", err)
+	}
+}
+
+// LocksHeld is how many locks a repository carries, stale or not.
+func (e *Engine) LocksHeld(ctx context.Context, repositoryID string) (int, error) {
+	repo, err := e.OpenRepository(repositoryID, true)
+	if err != nil {
+		return 0, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, lockTimeout)
+	defer cancel()
+	locks, err := e.runner.Locks(ctx, repo)
+	if err != nil {
+		return 0, err
+	}
+	return len(locks), nil
 }
 
 // ClearStaleLocks removes the locks nothing holds any more from a

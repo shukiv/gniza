@@ -607,7 +607,8 @@ func (e *Engine) runRestore(ctx context.Context, stored nodestore.Restore) error
 	if err != nil {
 		return e.failRestore(stored, err.Error())
 	}
-	account.SizeBytes = restoreStagingEstimate(stored.Kind, snapshotBytes, e.itemBytes(ctx, stored))
+	itemBytes := e.itemBytes(ctx, stored)
+	account.SizeBytes = restoreStagingEstimate(stored.Kind, snapshotBytes, itemBytes)
 
 	now := time.Now().UTC()
 	stored.Status = job.StatusRunning
@@ -642,6 +643,7 @@ func (e *Engine) runRestore(ctx context.Context, stored nodestore.Restore) error
 		Unrestricted: stored.Unrestricted,
 		Source:       target,
 		SizeEstimate: account.SizeBytes,
+		ItemBytes:    itemBytes,
 	})
 
 	stored.Status = job.Status(report.Status)

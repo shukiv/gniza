@@ -103,7 +103,11 @@ type RestoreAssignment struct {
 	Source Target `json:"source"`
 	// SizeEstimate drives the staging space preflight, taken from the
 	// snapshot's recorded size.
-	SizeEstimate   uint64    `json:"size_estimate"`
+	SizeEstimate uint64 `json:"size_estimate"`
+	// ItemBytes is what the parts of the account this restore asks for
+	// come to, when whoever assigned it asked the backup. Zero means
+	// nobody did, and the whole snapshot's figure stands.
+	ItemBytes      uint64    `json:"item_bytes,omitempty"`
 	LeaseExpiresAt time.Time `json:"lease_expires_at"`
 }
 

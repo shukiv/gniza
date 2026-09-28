@@ -63,8 +63,7 @@ func (a *Agent) RunRestore(ctx context.Context, assignment protocol.RestoreAssig
 		report.Error = err.Error()
 		return report
 	}
-	estimate := max(assignment.SizeEstimate,
-		reassemble.RestoreBytes(sourceBytes, a.provider.Layout()))
+	estimate := restoreEstimate(assignment, sourceBytes, a.provider.Layout())
 	// The key carries the kind as well as the account: a granular restore
 	// and a whole-account rebuild are different output, and one must not
 	// silently replace the other while somebody is downloading it.
@@ -186,6 +185,26 @@ func (a *Agent) RunRestore(ctx context.Context, assignment protocol.RestoreAssig
 		report.Error = fmt.Sprintf("agent: unknown restore kind %q", assignment.Kind)
 		return report
 	}
+}
+
+// restoreEstimate is the scratch space this restore is given.
+//
+// A whole account is sized from the snapshot, never from less than what
+// the assignment said. A restore of part of one is sized from that part
+// when the backup was asked what it comes to: measuring it against the
+// whole snapshot here, after the node had sized it by the item, made
+// taking one 800 KiB database out of a 48.7 GiB account ask for room for
+// the account, and refused it on every server such an account lives on.
+func restoreEstimate(assignment protocol.RestoreAssignment, sourceBytes uint64,
+	layout panel.ArchiveLayout) uint64 {
+
+	switch assignment.Kind {
+	case protocol.RestoreItems, protocol.RestoreFiles:
+		if assignment.ItemBytes > 0 {
+			return reassemble.ArchiveBytes(assignment.ItemBytes)
+		}
+	}
+	return max(assignment.SizeEstimate, reassemble.RestoreBytes(sourceBytes, layout))
 }
 
 // restoreAccount rebuilds the account archive and, when asked, hands it to

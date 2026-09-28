@@ -46,6 +46,16 @@
       {{end}}
     </div>
   </div>
+  {{/* What is wrong with the server itself. Every account can be covered
+       while the server's own configuration is not, or while a repository
+       cannot be read. */}}
+  {{range $d.Concerns}}
+  <div class="cpr:px-4 cpr:py-2.5 cpr:border-t cpr:border-base-300 cpr:text-xs cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-x-3 cpr:gap-y-1">
+    <span class="cpr:pill {{if eq .Tone "bad"}}cpr:badge-error{{else}}cpr:badge-warning{{end}}">{{if eq .Tone "bad"}}At risk{{else}}Needs attention{{end}}</span>
+    <span class="cpr:min-w-0 cpr:flex-1">{{.Said}}</span>
+    <a class="cpr:link cpr:link-primary cpr:link-hover" href="?p={{.Page}}{{with .Tab}}&amp;tab={{.}}{{end}}">{{.Link}}</a>
+  </div>
+  {{end}}
   {{if and $d.Destinations $d.Unscheduled}}
   <div class="cpr:px-4 cpr:py-2.5 cpr:border-t cpr:border-base-300 cpr:text-xs cpr:text-base-content/70">An old backup is not continuing protection. Put those {{if $.Choosing}}sources{{else}}accounts{{end}} on a
     schedule, or use a schedule over {{if $.Choosing}}everything on the list, so what is chosen later is covered on its own{{else}}every account, so accounts added later are enrolled on their own{{end}}.

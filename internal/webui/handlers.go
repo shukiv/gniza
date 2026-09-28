@@ -105,6 +105,25 @@ type dashboardView struct {
 	// reader of the page as data.
 	Sentence string
 	Severity string
+	// Concerns is what is wrong with the server rather than with an
+	// account on it: a configuration that is not being backed up, a
+	// repository that did not pass its check, retention that cannot run.
+	// Every account can be covered while any of these is true, which is
+	// how a page came to say "ok" over all three.
+	Concerns []concern
+}
+
+// concern is one thing about the server that wants looking at.
+type concern struct {
+	// Tone is "bad" for what puts a restore in doubt and "warn" for what
+	// costs something else.
+	Tone string
+	Said string
+	// Page is where it is dealt with, Tab the part of that page, and
+	// Link what the way there says.
+	Page string
+	Tab  string
+	Link string
 }
 
 // Verdict is the first line of the page: whether this server's accounts
@@ -136,14 +155,69 @@ func (d dashboardView) Verdict() string {
 // whose copy is a day older than its schedule promised, and a page that
 // draws both in red is a page whose red means nothing.
 func (d dashboardView) Band() string {
+	worst := ""
+	for _, concern := range d.Concerns {
+		if concern.Tone == "bad" {
+			worst = "bad"
+			break
+		}
+		worst = "warn"
+	}
 	switch {
-	case len(d.Destinations) == 0, d.Unprotected > 0, d.Failed > 0:
+	case len(d.Destinations) == 0, d.Unprotected > 0, d.Failed > 0, worst == "bad":
 		return "bad"
-	case d.Stale > 0, d.Unscheduled > 0, d.Partial > 0:
+	case d.Stale > 0, d.Unscheduled > 0, d.Partial > 0, worst == "warn":
 		return "warn"
 	default:
 		return "ok"
 	}
+}
+
+// concernsOf reads what is wrong with the server off what it has
+// recorded: the repositories, and the last backup of its own
+// configuration.
+func concernsOf(destinations []destinationView, jobs []nodestore.Job,
+	policies []nodestore.Policy) []concern {
+
+	var found []concern
+	for _, dest := range destinations {
+		check := dest.Repository.Check
+		if check.Known() && !check.Passed {
+			found = append(found, concern{Tone: "bad", Page: "destinations", Link: "Read what it found",
+				Said: fmt.Sprintf("%s did not pass its integrity check, so some of what is "+
+					"stored there may not restore.", dest.Name)})
+		}
+		if dest.Locked {
+			found = append(found, concern{Tone: "warn", Page: "destinations", Link: "Remove stale locks",
+				Said: fmt.Sprintf("%s is locked, so nothing old is being removed from it "+
+					"and it cannot be checked.", dest.Name)})
+		} else if dest.Repository.Retention.LastError != "" {
+			found = append(found, concern{Tone: "warn", Page: "destinations", Link: "Read why",
+				Said: fmt.Sprintf("Retention could not run on %s, so nothing old is being "+
+					"removed from it.", dest.Name)})
+		}
+	}
+
+	wanted := false
+	for _, policy := range policies {
+		wanted = wanted || (policy.Enabled && policy.IncludeSystem)
+	}
+	if !wanted {
+		return found
+	}
+	// Newest first, so the first one that finished is the last night's.
+	for _, run := range jobs {
+		if run.Account != cpanel.SystemAccount || !run.Status.Terminal() {
+			continue
+		}
+		if run.Status != job.StatusSuccess {
+			found = append(found, concern{Tone: "warn", Page: "logs", Tab: "system", Link: "Read why",
+				Said: "The server's own configuration was not backed up the last time it " +
+					"was tried, so a replacement server would have to be set up by hand."})
+		}
+		break
+	}
+	return found
 }
 
 // attentionLimit keeps the overview short: it is a prompt to act, not a
@@ -210,14 +284,14 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	view.NextRun, view.NextRunPolicy, view.NextRunIn = nextRun(policies, time.Now())
-	view.Sentence, view.Severity = view.Verdict(), view.Band()
 	view.Now = time.Now()
 	view.Held = holdingsOf(destinations, view.Now)
 
 	// What last night actually did. The job bucket holds every backup
 	// this server has ever made, so only the recent past is read back
 	// into runs; anything still in flight is reported however old it is.
-	if jobs, err := s.engine.Store().Jobs(0); err == nil {
+	jobs, err := s.engine.Store().Jobs(0)
+	if err == nil {
 		if runs := runsOf(jobs, policies, time.Now().Add(-recentRuns)); len(runs) > 0 {
 			view.Runs, view.LastRun = runs, &runs[0]
 			view.BackedUp = backedUp(runs)
@@ -225,6 +299,8 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	} else {
 		s.log.Error("read the recent runs", "error", err)
 	}
+	view.Concerns = concernsOf(destinations, jobs, policies)
+	view.Sentence, view.Severity = view.Verdict(), view.Band()
 
 	settings := s.engine.Settings()
 	if free, err := stagingFree(settings.StagingRoot); err == nil {

@@ -323,9 +323,32 @@
 </div>
 
 <div class="cpr:panel">
+  <div class="cpr:pad cpr:border-b cpr:border-base-300"><h2 class="cpr:section-title">Where restores are rebuilt</h2></div>
+  <div class="cpr:pad">
+  <p><span class="cpr:mono">{{$data.RestoreRoot}}</span> — {{bytes $data.RestoreFree}} free{{if not $data.RestoreApart}} · the staging directory{{end}}</p>
+  <p class="cpr:hint">A restore of a whole account needs room for two copies of it, three on
+  DirectAdmin, and a rehearsal for one. When the volume staging is on is the smallest this
+  server has, name a directory on a larger one. It has to be a place no account can reach:
+  every directory down to it belongs to root and can be written by nobody else. Backups are
+  not affected, and this path is in none of them.</p>
+  <form method="post" action="?p=settings/restore-root" class="cpr:flex cpr:flex-wrap cpr:items-end cpr:gap-2 cpr:mt-3">
+    <input type="hidden" name="csrf" value="{{$.CSRF}}">
+    <div class="cpr:min-w-0 cpr:flex-1">
+      <label class="cpr:field-label" for="restore_root">Directory</label>
+      <input class="cpr:input cpr:input-sm cpr:w-full cpr:font-mono" id="restore_root" name="restore_root"
+             value="{{if $data.RestoreApart}}{{$data.RestoreRoot}}{{end}}" maxlength="1024"
+             placeholder="{{$data.Settings.StagingRoot}}" autocomplete="off" spellcheck="false">
+      <small class="cpr:help">Leave it empty to rebuild restores in the staging directory.</small>
+    </div>
+    <button class="cpr:btn cpr:btn-sm cpr:btn-primary">Save</button>
+  </form>
+  </div>
+</div>
+
+<div class="cpr:panel">
   <div class="cpr:pad cpr:flex cpr:flex-wrap cpr:items-center cpr:justify-between cpr:gap-3 cpr:border-b cpr:border-base-300">
     <h2 class="cpr:section-title">Restored files waiting to be collected</h2>
-    <span class="cpr:hint cpr:mt-0">{{bytes $data.OutputBytes}} in <span class="cpr:mono">{{$data.Settings.StagingRoot}}</span></span>
+    <span class="cpr:hint cpr:mt-0">{{bytes $data.OutputBytes}} in <span class="cpr:mono">{{$data.RestoreRoot}}</span></span>
   </div>
   {{if $data.Outputs}}
   <div class="cpr:overflow-x-auto" data-tablewrap><table class="cpr:table cpr:table-sm">

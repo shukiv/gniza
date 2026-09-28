@@ -28,8 +28,10 @@ to replace.
 
 ## How much room a restore needs
 
-The staging volume is checked before anything is written, and a restore
-that would not fit is refused rather than started. What is needed depends
+The volume restores are rebuilt on is checked before anything is written,
+and a restore that would not fit is refused rather than started. That is the
+staging volume unless Settings → Storage names another directory, which is
+the thing to do when staging is on the smallest volume the server has. What is needed depends
 on what the restore does:
 
 | What you asked for | Room needed |

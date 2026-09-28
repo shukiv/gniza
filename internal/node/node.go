@@ -89,7 +89,10 @@ type Engine struct {
 	// looked for.
 	lastKeySweep time.Time
 	staging      *staging.Manager
-	log          *slog.Logger
+	// restoreStaging is where restores and rehearsals are rebuilt. It is
+	// the staging manager itself on a server that was given nowhere else.
+	restoreStaging *atomic.Pointer[staging.Manager]
+	log            *slog.Logger
 
 	// items remembers what a snapshot holds in the parts of an account
 	// that are not files, so browsing between them does not stream the
@@ -186,9 +189,23 @@ func New(cfg Config) (*Engine, error) {
 	// The worker is the fleet agent with no controller attached: RunJob and
 	// RunRestore never touch its client, so the same tested code path runs
 	// here.
+	restores := stagingManager
+	if settings.RestoreRoot != "" && settings.RestoreRoot != settings.StagingRoot {
+		if err := os.MkdirAll(settings.RestoreRoot, 0o700); err != nil {
+			// The volume it is on may not be mounted yet. Restores say
+			// so when they are asked for; backups must not wait for it.
+			log.Error("the directory restores are rebuilt in cannot be made",
+				"path", settings.RestoreRoot, "error", err)
+		}
+		restores = restoreManager(settings)
+	}
+	restoresIn := new(atomic.Pointer[staging.Manager])
+	restoresIn.Store(restores)
+
 	worker := agent.New(agent.Config{
 		Provider:      cfg.Provider,
 		Staging:       stagingManager,
+		Restores:      restoresIn.Load,
 		Runner:        runner,
 		Log:           log,
 		Hostname:      settings.Hostname,
@@ -212,7 +229,8 @@ func New(cfg Config) (*Engine, error) {
 	engine := &Engine{
 		store: cfg.Store, vault: cfg.Vault, provider: cfg.Provider,
 		runner: runner, worker: worker, staging: stagingManager,
-		log: log, settings: settings, lastProgress: map[string]progressMark{},
+		restoreStaging: restoresIn,
+		log:            log, settings: settings, lastProgress: map[string]progressMark{},
 		accountUID: uidLookup,
 		hookSpool:  spoolDir,
 		logLevel:   cfg.LogLevel,
@@ -284,17 +302,26 @@ func (e *Engine) RecoverFromRestart() error {
 	// Whatever those left behind is debris. Finished output is kept: a
 	// rebuilt archive somebody was told to download should still be there
 	// after a restart.
-	dirs, err := e.staging.Active()
-	if err != nil {
-		return err
-	}
-	for _, dir := range dirs {
-		if err := e.staging.Release(&dir); err != nil {
-			e.log.Error("remove stale staging", "path", dir.Path, "error", err)
-			continue
+	for _, manager := range e.workManagers() {
+		dirs, err := manager.Active()
+		if err != nil {
+			if manager != e.staging {
+				// The volume restores are rebuilt on is not there. That
+				// is said when a restore is asked for; it is no reason
+				// for the service not to start.
+				e.log.Error("read the directory restores are rebuilt in", "error", err)
+				continue
+			}
+			return err
 		}
-		e.log.Warn("removed a staging directory left by a previous run",
-			"key", dir.Key, "path", dir.Path)
+		for _, dir := range dirs {
+			if err := manager.Release(&dir); err != nil {
+				e.log.Error("remove stale staging", "path", dir.Path, "error", err)
+				continue
+			}
+			e.log.Warn("removed a staging directory left by a previous run",
+				"key", dir.Key, "path", dir.Path)
+		}
 	}
 
 	if interrupted > 0 {
@@ -320,7 +347,7 @@ func (e *Engine) SweepWorkdir() error {
 	if ttl <= 0 {
 		return nil
 	}
-	outputs, err := e.staging.Retained()
+	outputs, err := e.retained()
 	if err != nil {
 		return err
 	}
@@ -330,7 +357,7 @@ func (e *Engine) SweepWorkdir() error {
 			continue
 		}
 		dir := output.Dir
-		if err := e.staging.Release(&dir); err != nil {
+		if err := output.in.Release(&dir); err != nil {
 			e.log.Error("remove collected output", "key", output.Key, "error", err)
 			continue
 		}
@@ -852,14 +879,24 @@ type progressMark struct {
 
 // RetainedOutput lists what finished restores have left in the work
 // directory, so an operator can see what is using the disk.
-func (e *Engine) RetainedOutput() ([]staging.Output, error) { return e.staging.Retained() }
+func (e *Engine) RetainedOutput() ([]staging.Output, error) {
+	found, err := e.retained()
+	if err != nil {
+		return nil, err
+	}
+	outputs := make([]staging.Output, 0, len(found))
+	for _, output := range found {
+		outputs = append(outputs, output.Output)
+	}
+	return outputs, nil
+}
 
 // DeleteOutput removes one piece of collected output.
 //
 // Only finished output can be removed this way: work in progress is not
 // listed, and Release refuses any path outside the work directory.
 func (e *Engine) DeleteOutput(key string) error {
-	outputs, err := e.staging.Retained()
+	outputs, err := e.retained()
 	if err != nil {
 		return err
 	}
@@ -868,7 +905,7 @@ func (e *Engine) DeleteOutput(key string) error {
 			continue
 		}
 		dir := output.Dir
-		if err := e.staging.Release(&dir); err != nil {
+		if err := output.in.Release(&dir); err != nil {
 			return err
 		}
 		e.log.Info("removed collected output", "key", key, "bytes", output.Bytes)

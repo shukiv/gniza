@@ -52,8 +52,10 @@ type Agent struct {
 	client   *Client
 	provider panel.Provider
 	staging  *staging.Manager
-	runner   *resticrun.Runner
-	log      *slog.Logger
+	// restoresIn answers where restores are rebuilt; see restores.
+	restoresIn func() *staging.Manager
+	runner     *resticrun.Runner
+	log        *slog.Logger
 
 	// PollInterval is the pause after an empty poll. The controller holds
 	// the request open, so this is a backstop, not the polling rate.
@@ -87,9 +89,12 @@ type Agent struct {
 
 // Config assembles an Agent.
 type Config struct {
-	Client        *Client
-	Provider      panel.Provider
-	Staging       *staging.Manager
+	Client   *Client
+	Provider panel.Provider
+	Staging  *staging.Manager
+	// Restores answers where a restore is rebuilt, asked at the start of
+	// each one. Nil means the staging directory.
+	Restores      func() *staging.Manager
 	Runner        *resticrun.Runner
 	Log           *slog.Logger
 	Hostname      string
@@ -116,6 +121,7 @@ func New(cfg Config) *Agent {
 		client:        cfg.Client,
 		provider:      cfg.Provider,
 		staging:       cfg.Staging,
+		restoresIn:    cfg.Restores,
 		runner:        cfg.Runner,
 		log:           log,
 		Hostname:      cfg.Hostname,
@@ -156,6 +162,17 @@ func (a *Agent) Enrol(ctx context.Context) error {
 		StagingRoot:  a.staging.Root,
 	})
 	return err
+}
+
+// restores is the directory restores are rebuilt in: the staging
+// directory, unless this server was given another for them.
+func (a *Agent) restores() *staging.Manager {
+	if a.restoresIn != nil {
+		if manager := a.restoresIn(); manager != nil {
+			return manager
+		}
+	}
+	return a.staging
 }
 
 // CleanStaleStaging removes staging directories left by a previous process.

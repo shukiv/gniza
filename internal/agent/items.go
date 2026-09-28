@@ -182,7 +182,7 @@ func (a *Agent) restoreItems(ctx context.Context, log *slog.Logger,
 		log.Warn("remove the raw restore tree", "error", err)
 	}
 
-	retained, err := a.staging.Retain(dir)
+	retained, err := a.restores().Retain(dir)
 	if err != nil {
 		log.Error("retain the restored items", "error", err)
 		report.Error = err.Error()

@@ -4045,13 +4045,17 @@ func (s *Server) settingsPage() (settingsView, error) {
 	if settings.LogLevel == "" {
 		settings.LogLevel = nodestore.DefaultLogLevel
 	}
+	restoreRoot := s.engine.RestoreRoot()
+	restoreFree, _ := stagingFree(restoreRoot)
 	return settingsView{
 		Settings:    settings,
 		StagingFree: free,
-		Outputs:     outputs,
-		OutputBytes: held,
-		KeepDays:    keepDays(settings),
-		DeletedDays: deletedDays(settings), DeletedPreset: deletedPreset(settings),
+		RestoreRoot: restoreRoot, RestoreFree: restoreFree,
+		RestoreApart: restoreRoot != settings.StagingRoot,
+		Outputs:      outputs,
+		OutputBytes:  held,
+		KeepDays:     keepDays(settings),
+		DeletedDays:  deletedDays(settings), DeletedPreset: deletedPreset(settings),
 		LogLevels:   nodestore.LogLevels,
 		Version:     agent.Version,
 		LastChecked: lastChecked, CheckError: checkError,
@@ -4070,9 +4074,14 @@ func (s *Server) settingsPage() (settingsView, error) {
 type settingsView struct {
 	Settings    nodestore.Settings
 	StagingFree uint64
-	Outputs     []staging.Output
-	OutputBytes uint64
-	KeepDays    int
+	// RestoreRoot is where restores are rebuilt and RestoreFree the room
+	// there; RestoreApart says it is somewhere other than staging.
+	RestoreRoot  string
+	RestoreFree  uint64
+	RestoreApart bool
+	Outputs      []staging.Output
+	OutputBytes  uint64
+	KeepDays     int
 	// DeletedDays is how long a deleted account's backups are kept, and
 	// DeletedPreset is which of the offered periods that is -- "custom"
 	// when it is a number somebody typed rather than one on the list.
@@ -4365,6 +4374,22 @@ func (s *Server) handleClearOutput(w http.ResponseWriter, r *http.Request) {
 	s.redirect(w, r, settingsTab("storage"), "ok",
 		fmt.Sprintf("Removed %s of restored files. The backups themselves are untouched.",
 			humanBytes(freed)))
+}
+
+// handleRestoreRoot moves where restores and rehearsals are rebuilt.
+func (s *Server) handleRestoreRoot(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimSpace(r.PostFormValue("restore_root"))
+	if err := s.engine.SetRestoreRoot(path); err != nil {
+		s.redirect(w, r, settingsTab("storage"), "error", err.Error())
+		return
+	}
+	if s.engine.RestoreRoot() == s.engine.Settings().StagingRoot {
+		s.redirect(w, r, settingsTab("storage"), "ok",
+			"Restores are rebuilt in the staging directory.")
+		return
+	}
+	s.redirect(w, r, settingsTab("storage"), "ok",
+		"Restores and rehearsals are rebuilt in "+s.engine.RestoreRoot()+" from now on.")
 }
 
 func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {

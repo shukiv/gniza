@@ -569,7 +569,13 @@ type Settings struct {
 	// StagingRoot is where pkgacct writes. Snapshot paths embed it and
 	// restic groups retention by path, so changing it after the first
 	// backup orphans every existing retention group. Treat it as fixed.
-	StagingRoot   string `json:"staging_root"`
+	StagingRoot string `json:"staging_root"`
+	// RestoreRoot is where a restore and a rehearsal are rebuilt, when
+	// that is not the staging directory. A restore needs room for two or
+	// three copies of an account, and the volume staging is on is often
+	// the smallest the server has. Empty means the staging directory.
+	// Unlike StagingRoot it is in no backup, and may be changed.
+	RestoreRoot   string `json:"restore_root,omitempty"`
 	MaxConcurrent int    `json:"max_concurrent"`
 	// IdentitiesBackfilledAt is when every account then on the server was
 	// recorded against the unix account it meant. After it, an account

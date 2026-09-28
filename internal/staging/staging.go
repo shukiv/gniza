@@ -400,6 +400,12 @@ func (m *Manager) Release(dir *Dir) error {
 	return nil
 }
 
+// Owns reports whether a name in a staging root is one a Manager gave a
+// directory: work in progress, or finished output.
+func Owns(name string) bool {
+	return strings.HasPrefix(name, dirPrefix) || strings.HasPrefix(name, keepPrefix)
+}
+
 // AvailableBytes reports free space on the filesystem holding path,
 // counting only space available to unprivileged writes.
 func AvailableBytes(path string) (uint64, error) {

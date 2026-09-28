@@ -88,7 +88,7 @@ func (a *Agent) RunRestore(ctx context.Context, assignment protocol.RestoreAssig
 	// Its output is removed rather than allowed to accumulate on a disk
 	// that also has to hold tonight's backup; what it does not do any more
 	// is take this restore's place on the way.
-	superseded, err := a.staging.SupersedeOutputs(group)
+	superseded, err := a.restores().SupersedeOutputs(group)
 	if err != nil {
 		log.Error("remove a superseded restore's output", "error", err)
 		report.Error = err.Error()
@@ -98,7 +98,7 @@ func (a *Agent) RunRestore(ctx context.Context, assignment protocol.RestoreAssig
 		log.Warn("removed a superseded restore's output", "key", key)
 	}
 
-	dir, err := a.staging.Allocate(stagingKey, estimate)
+	dir, err := a.restores().Allocate(stagingKey, estimate)
 	if err != nil {
 		log.Error("allocate restore staging", "error", err)
 		report.Error = err.Error()
@@ -111,7 +111,7 @@ func (a *Agent) RunRestore(ctx context.Context, assignment protocol.RestoreAssig
 		if retain {
 			return
 		}
-		if err := a.staging.Release(dir); err != nil {
+		if err := a.restores().Release(dir); err != nil {
 			log.Error("release restore staging", "error", err)
 		}
 	}()
@@ -150,7 +150,7 @@ func (a *Agent) RunRestore(ctx context.Context, assignment protocol.RestoreAssig
 			// counting as work in progress — an uncollected download used
 			// to hold a concurrency slot and block every other account —
 			// and lets it survive a restart.
-			retained, err := a.staging.Retain(dir)
+			retained, err := a.restores().Retain(dir)
 			if err != nil {
 				log.Error("retain the rebuilt archive", "error", err)
 				report.Error = err.Error()
@@ -409,7 +409,7 @@ func (a *Agent) restoreFiles(ctx context.Context, log *slog.Logger,
 	if ours {
 		// The same move a rebuilt archive makes: it stops counting as
 		// work in progress, and it survives a restart.
-		retained, err := a.staging.Retain(dir)
+		retained, err := a.restores().Retain(dir)
 		if err != nil {
 			log.Error("retain the restored files", "error", err)
 			report.Error = err.Error()

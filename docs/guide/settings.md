@@ -72,6 +72,28 @@ Where an account is rebuilt before upload, and how much room is left there. A
 backup needs room for one full account; the Overview shows the same figure,
 because it is the thing that stops a backup at 02:00.
 
+## Where restores are rebuilt
+
+A restore and a rehearsal are rebuilt in the staging directory unless another
+one is named here. Name one when staging sits on the smallest volume the
+server has: a server with 7 GB free on `/` and 38 GB on `/home` can restore
+nothing larger than a few gigabytes until restores are moved to `/home`.
+
+The directory has to be one no account can reach. Every directory from the
+top of the filesystem down to it must belong to root and be writable by
+nobody else, and Gniza makes the last one itself, closed to everybody but
+root. `/home/gniza-restores` is a good choice on a panel server;
+`/home/alice/restores` is refused, because alice could swap what is being
+restored for something of her own. A directory that anybody may write to is
+accepted only when it is sticky, the way `/tmp` is. One that is there already
+has to be empty or hold only Gniza's own work: `/home` itself is refused.
+
+It cannot be changed while a backup or a restore is running, or while
+restored files are still waiting to be collected in the directory being left
+— collect or remove those first. Leave the field empty to go back to staging.
+Backups are not affected: staging stays where it is, and this path is
+recorded in none of them.
+
 ## Restored files waiting to be collected
 
 Rebuilt archives and restored files that nobody has collected. They are not

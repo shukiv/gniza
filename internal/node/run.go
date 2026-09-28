@@ -1313,13 +1313,14 @@ func (e *Engine) Drill(ctx context.Context, repositoryID, account string) (
 	// account being rehearsed on a server with 63 GiB free. On a panel
 	// whose rehearsal has to build the archive to check it, two is the
 	// honest figure and the layout says so.
-	dir, err := e.staging.Allocate("drill-"+account,
+	restores := e.restores()
+	dir, err := restores.Allocate("drill-"+account,
 		reassemble.RehearsalBytes(sourceBytes, e.provider.Layout()))
 	if err != nil {
 		return nil, nil, err
 	}
 	defer func() {
-		if releaseErr := e.staging.Release(dir); releaseErr != nil {
+		if releaseErr := restores.Release(dir); releaseErr != nil {
 			e.log.Error("release drill scratch", "path", dir.Path, "error", releaseErr)
 		}
 	}()
@@ -1594,21 +1595,32 @@ func (e *Engine) statArchive(restore nodestore.Restore) (path, filename string, 
 
 	// Both sides are resolved before containment is decided: a lexical
 	// prefix check is satisfied by a symlink pointing anywhere.
-	root, err := filepath.EvalSymlinks(e.settings.StagingRoot)
-	if err != nil {
-		return "", "", 0, fmt.Errorf("node: resolve the staging area: %w", err)
-	}
 	resolved, err := filepath.EvalSymlinks(restore.ArchivePath)
 	if err != nil {
 		return "", "", 0, fmt.Errorf(
 			"node: the archive is gone — it is replaced when the account is rebuilt "+
 				"again: %w", err)
 	}
-
-	relative, err := filepath.Rel(root, resolved)
-	if err != nil || relative == ".." ||
-		strings.HasPrefix(relative, ".."+string(filepath.Separator)) ||
-		filepath.IsAbs(relative) {
+	// An archive is in the staging directory, or in the one restores are
+	// rebuilt in when that is somewhere else.
+	inside := false
+	for _, manager := range e.workManagers() {
+		root, err := filepath.EvalSymlinks(manager.Root)
+		if err != nil {
+			if manager == e.staging {
+				return "", "", 0, fmt.Errorf("node: resolve the staging area: %w", err)
+			}
+			continue
+		}
+		relative, err := filepath.Rel(root, resolved)
+		if err == nil && relative != ".." &&
+			!strings.HasPrefix(relative, ".."+string(filepath.Separator)) &&
+			!filepath.IsAbs(relative) {
+			inside = true
+			break
+		}
+	}
+	if !inside {
 		return "", "", 0, fmt.Errorf("node: that archive is not in the staging area")
 	}
 

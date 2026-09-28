@@ -303,6 +303,7 @@ func (s *Server) operatorMux() *http.ServeMux {
 
 	mux.HandleFunc("GET /settings", s.handleSettings)
 	mux.HandleFunc("POST /settings/save", s.guard(s.handleSaveSettings))
+	mux.HandleFunc("POST /settings/restore-root", s.guard(s.handleRestoreRoot))
 	mux.HandleFunc("POST /settings/output/delete", s.guard(s.handleDeleteOutput))
 	mux.HandleFunc("POST /settings/output/clear", s.guard(s.handleClearOutput))
 	mux.HandleFunc("POST /settings/update/check", s.guard(s.handleCheckUpdate))

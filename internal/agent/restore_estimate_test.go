@@ -6,6 +6,7 @@ import (
 	"github.com/shukiv/gniza/internal/layout/cpmove"
 	"github.com/shukiv/gniza/internal/layout/dabackup"
 	"github.com/shukiv/gniza/internal/protocol"
+	"github.com/shukiv/gniza/internal/reassemble"
 )
 
 // The finding from the fleet check of 2026-09-22: the node sized a
@@ -36,11 +37,12 @@ func TestARestoreOfOnePartIsGivenRoomForThatPart(t *testing.T) {
 			t.Errorf("%s: %d GiB, want %d", c.name, got/gib, c.want/gib)
 		}
 	}
-	// A panel whose archive is packed pays for the copy in between, for
-	// a whole account and not for one part of it.
+	// A panel whose archive is packed is sized by its own rule, for a
+	// whole account and not for one part of it.
 	whole := protocol.RestoreAssignment{Kind: protocol.RestoreAccount}
-	if got := restoreEstimate(whole, snapshot, dabackup.Layout{}); got != 148*gib {
-		t.Errorf("a packed whole account: %d GiB, want 148", got/gib)
+	if got, want := restoreEstimate(whole, snapshot, dabackup.Layout{}),
+		reassemble.PackedBytes(snapshot); got != want {
+		t.Errorf("a packed whole account: %d GiB, want %d", got/gib, want/gib)
 	}
 	part := protocol.RestoreAssignment{Kind: protocol.RestoreItems, ItemBytes: gib}
 	if got := restoreEstimate(part, snapshot, dabackup.Layout{}); got != 3*gib {

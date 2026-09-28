@@ -679,3 +679,23 @@ and `custom/` are what it is compiled from.
 A server where none of the listed paths is found fails rather than storing
 an empty backup, and a file that vanishes between being listed and being
 opened is skipped: this copies a server that is running.
+
+## Two copies for a restore, not three — 2026-09-28
+
+The scratch estimate above was the account three times: the tree, the home
+directory's own archive, and the outer archive it is copied into. The fleet
+check of 2026-09-28 found what that cost. On `182.54.236.10` an account of
+17 GiB was refused a restore with 42.7 GiB free, and on `.143` one of 7 GiB
+with 21.
+
+The third copy was never needed, only kept. The rebuild now removes each of
+the account's files from the tree once it has gone into the home archive,
+removes the other names of a file that had several, and removes the home
+archive as soon as it has been copied into the outer one. `dabackup`'s own
+test measures the most a rebuild holds, for an account that does not
+compress, and it is under two copies; `reassemble.PackedBytes` is two.
+
+What it costs is that a tree can be packed once. Nothing packed one twice:
+what DirectAdmin restores, and what a rehearsal checks, is the archive, and
+the account's records — which the databases are named from afterwards —
+stay in the tree.

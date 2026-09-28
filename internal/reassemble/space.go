@@ -34,16 +34,23 @@ func ArchiveBytes(source uint64) uint64 { return multiple(source, 2) }
 // PackedBytes is what a restore needs on a panel whose archive is built
 // from the parts rather than restored beside them.
 //
-// Three copies, not two. The tree is one and the archive built from it is
-// two, as anywhere else. The third is between them and is easy to miss:
-// DirectAdmin's home directory arrives as an archive inside the account
-// archive, and its compressed length is a header in the outer one, so it
-// has to be finished on disk before the outer one can be started -- see
-// dabackup.PackArchive. It is deleted when the outer archive is closed,
-// and until then all three are on the same filesystem. A home directory
-// that does not compress, which is most of the large ones, makes each of
-// those copies about the size of the account.
-func PackedBytes(source uint64) uint64 { return multiple(source, 3) }
+// Two copies, and it takes care to stay at two. The tree is one and the
+// archive built from it is the other, as anywhere else. Between them is
+// a third that is easy to miss: DirectAdmin's home directory arrives as
+// an archive inside the account archive, and its compressed length is a
+// header in the outer one, so it has to be finished on disk before the
+// outer one can be started -- see dabackup.PackArchive. Each of the
+// account's files is therefore removed from the tree once it is in that
+// inner archive, so the two of them together are never more than one
+// copy and the largest file; and the inner archive is removed as soon as
+// it has been copied into the outer one. A home directory that does not
+// compress, which is most of the large ones, makes each copy about the
+// size of the account.
+//
+// This was three until 2026-09-28, when the tree was left whole until
+// the restore had finished. On a server with 42.7 GiB free that refused
+// the restore of an account of 17.
+func PackedBytes(source uint64) uint64 { return multiple(source, 2) }
 
 // RehearsalBytes is what a rehearsal needs, which is not the same number
 // on every panel.

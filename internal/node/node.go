@@ -380,6 +380,17 @@ func (e *Engine) PanelName() string {
 	return e.provider.Name()
 }
 
+// PacksArchive reports whether this panel's restore reads an archive
+// Gniza builds, which is what makes a rehearsal here cost what a restore
+// costs.
+func (e *Engine) PacksArchive() bool {
+	if e.provider == nil {
+		return false
+	}
+	_, packs := e.provider.Layout().(panel.ArchivePacker)
+	return packs
+}
+
 // Vault exposes the credential vault to the UI, which seals what an
 // operator types before it is written.
 func (e *Engine) Vault() *vault.Vault { return e.vault }

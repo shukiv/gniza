@@ -4052,6 +4052,7 @@ func (s *Server) settingsPage() (settingsView, error) {
 		StagingFree: free,
 		RestoreRoot: restoreRoot, RestoreFree: restoreFree,
 		RestoreApart: restoreRoot != settings.StagingRoot,
+		PacksArchive: s.engine.PacksArchive(),
 		Outputs:      outputs,
 		OutputBytes:  held,
 		KeepDays:     keepDays(settings),
@@ -4079,6 +4080,9 @@ type settingsView struct {
 	RestoreRoot  string
 	RestoreFree  uint64
 	RestoreApart bool
+	// PacksArchive says a rehearsal here builds the archive, and needs
+	// room for it.
+	PacksArchive bool
 	Outputs      []staging.Output
 	OutputBytes  uint64
 	KeepDays     int

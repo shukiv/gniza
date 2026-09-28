@@ -326,8 +326,8 @@
   <div class="cpr:pad cpr:border-b cpr:border-base-300"><h2 class="cpr:section-title">Where restores are rebuilt</h2></div>
   <div class="cpr:pad">
   <p><span class="cpr:mono">{{$data.RestoreRoot}}</span> — {{bytes $data.RestoreFree}} free{{if not $data.RestoreApart}} · the staging directory{{end}}</p>
-  <p class="cpr:hint">A restore of a whole account needs room for two copies of it, three on
-  DirectAdmin, and a rehearsal for one. When the volume staging is on is the smallest this
+  <p class="cpr:hint">A restore of a whole account needs room for two copies of it, and a
+  rehearsal for {{if $data.PacksArchive}}two{{else}}one{{end}}. When the volume staging is on is the smallest this
   server has, name a directory on a larger one. It has to be a place no account can reach:
   every directory down to it belongs to root and can be written by nobody else. Backups are
   not affected, and this path is in none of them.</p>

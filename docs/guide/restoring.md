@@ -39,12 +39,15 @@ on what the restore does:
 | **Restore one thing**, or picked files | about what those parts come to |
 | Rebuild it for me to download | twice the account |
 | Overwrite the live account | twice the account |
-| The nightly rehearsal | once the account |
+| A rehearsal on cPanel | once the account |
+| A rehearsal on DirectAdmin | twice the account |
 
 Twice, because cPanel copies whatever it is handed before it restores it,
 and because a download has to be packed into a file as well as extracted.
 Once, for a rehearsal, because it reads the account and hands nothing
-over. The safety margin in Settings is added on top of all of these.
+over. On DirectAdmin a rehearsal is twice too: what DirectAdmin restores
+is an archive, so the rehearsal builds it, and the archive and what it is
+built from are on the disk together. The safety margin in Settings is added on top of all of these.
 
 A restore of a folder is sized as a whole account, not as the folder: the
 backup can say what a list of files comes to, but not what is under a

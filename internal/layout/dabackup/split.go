@@ -481,6 +481,13 @@ func (u *unpacker) reserveBody(preferred string) string {
 // compression is not byte for byte -- compressing the same bytes twice
 // does not produce the same file -- and does not need to be: what reads
 // it is tar.
+//
+// The account's own files are taken out of the tree as they go into the
+// archive, so the tree cannot be packed a second time. That is what makes
+// two copies of the account enough room rather than three -- see
+// reassemble.PackedBytes -- and nothing reads those files afterwards:
+// what the panel restores, and what a rehearsal checks, is the archive.
+// DirectAdmin's own records stay where they are.
 func (Layout) PackArchive(ctx context.Context, dir, account, outDir string) (string, error) {
 	manifest, err := readManifest(dir)
 	if err != nil {
@@ -534,6 +541,7 @@ func (Layout) PackArchive(ctx context.Context, dir, account, outDir string) (str
 			return "", err
 		}
 		defer func() { _ = os.Remove(nested) }()
+		dropLinks(root, manifest)
 	}
 
 	out, err := os.OpenFile(archivePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
@@ -554,11 +562,16 @@ func (Layout) PackArchive(ctx context.Context, dir, account, outDir string) (str
 			if err := copyNested(tw, member, nested); err != nil {
 				return "", err
 			}
+			// It is in the archive now, and everything written after it
+			// would otherwise be written beside a copy nothing reads.
+			afterMember()
+			_ = os.Remove(nested)
 			continue
 		}
 		if err := writeBack(tw, root, member); err != nil {
 			return "", err
 		}
+		afterMember()
 	}
 	if err := tw.Close(); err != nil {
 		return "", fmt.Errorf("dabackup: finish %s: %w", archivePath, err)
@@ -571,6 +584,12 @@ func (Layout) PackArchive(ctx context.Context, dir, account, outDir string) (str
 	}
 	return archivePath, nil
 }
+
+// afterMember is called each time a member has gone into an archive,
+// before what it was read from is removed: the moments a rebuild holds
+// the most. It is here for the test that measures that, which is a
+// number no test can see from outside.
+var afterMember = func() {}
 
 // writeNested rebuilds the archive that goes inside the archive and
 // reports the file it is in.
@@ -595,6 +614,14 @@ func writeNested(ctx context.Context, root *os.Root, home *ArchivePart, archiveP
 			_ = os.Remove(file.Name())
 			return "", err
 		}
+		// The file is in the archive, so the tree gives its room back
+		// before the next one is read. One that will not go is left: the
+		// archive is right either way, and a volume that fills because
+		// of it says so itself.
+		afterMember()
+		if member.Body != "" {
+			_ = root.Remove(member.Body)
+		}
 	}
 	if err := tw.Close(); err == nil {
 		err = finish()
@@ -610,6 +637,45 @@ func writeNested(ctx context.Context, root *os.Root, home *ArchivePart, archiveP
 		return "", fmt.Errorf("dabackup: finish the home archive: %w", err)
 	}
 	return file.Name(), nil
+}
+
+// dropLinks removes the other names of the files that went into the home
+// archive. A file with two names is carried once, and a link after it;
+// taking away the name it was read under leaves it on the disk for as
+// long as the other name is there, and an account that keeps its history
+// as links keeps most of what it holds that way.
+//
+// A name the outer archive still has to read a file from is left alone.
+func dropLinks(root *os.Root, manifest Manifest) {
+	var links []string
+	for _, member := range manifest.Home.Members {
+		if member.Typeflag != tar.TypeLink {
+			continue
+		}
+		clean, err := safeMemberName(member.Name)
+		if err != nil || clean == "." {
+			continue
+		}
+		links = append(links, treePath(clean, true))
+	}
+	if len(links) == 0 {
+		return
+	}
+	needed := map[string]bool{}
+	for _, member := range manifest.Outer.Members {
+		if member.Body != "" {
+			needed[member.Body] = true
+		}
+	}
+	for _, link := range links {
+		if needed[link] {
+			continue
+		}
+		if info, err := root.Lstat(link); err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		_ = root.Remove(link)
+	}
 }
 
 // copyNested writes the rebuilt home archive back into the outer one

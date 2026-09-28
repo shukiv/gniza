@@ -1,6 +1,7 @@
 package resticrun
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -178,6 +179,12 @@ type secondary struct {
 	env     map[string]string
 }
 
+// ErrDamaged means restic read the repository and found something wrong
+// with it. It is told apart from a check that could not be run -- a
+// destination that did not answer, a lock -- because those say nothing
+// about the backups, and this says they may not restore.
+var ErrDamaged = errors.New("resticrun: the repository did not pass its check")
+
 // Check verifies repository integrity. It is run by the maintenance runner,
 // not by agents: reading pack data back costs the same bandwidth as the
 // backup did.
@@ -190,7 +197,25 @@ func (r *Runner) Check(ctx context.Context, repo Repository, spec CheckSpec) err
 	if err != nil {
 		return err
 	}
+	if result.ExitCode == exitOK {
+		return nil
+	}
+	if ctx.Err() != nil {
+		// Stopped from here, by a timeout or a shutdown. What restic
+		// printed on its way out is not a finding.
+		return ctx.Err()
+	}
+	if checkFound(result.Stderr) || checkFound(result.Stdout) {
+		return fmt.Errorf("%w: %s", ErrDamaged, explain(result.Stderr, 8))
+	}
 	return classifyExit(result.ExitCode, result.Stderr, false)
+}
+
+// checkFound reports whether restic read the repository and found fault
+// with it. restic exits 1 for a damaged repository and for a destination
+// it could not open alike, and says this only for the first.
+func checkFound(output []byte) bool {
+	return bytes.Contains(output, []byte("repository contains errors"))
 }
 
 // Forget applies a retention policy and optionally prunes.

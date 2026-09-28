@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"os/exec"
+	"syscall"
 	"time"
 )
 
@@ -89,6 +90,12 @@ func (o *OSExec) Exec(ctx context.Context, cmd Command) (CommandResult, error) {
 	// Killing restic on cancellation leaves the pipe open, so a Wait
 	// without a deadline waits for a process nobody is going to stop.
 	c.WaitDelay = o.waitDelay()
+	// Asked to stop, not killed. restic removes its lock on the way out
+	// when it is sent a signal it can catch, and a kill gives it no way
+	// out: the lock stays on the repository for good, and everything
+	// that needs the repository to itself fails on it from then on. One
+	// that does not stop when asked is killed when WaitDelay is up.
+	c.Cancel = func() error { return c.Process.Signal(syscall.SIGTERM) }
 
 	var stdout, stderr bytes.Buffer
 	capped := &cappedWriter{buf: &stdout, limit: limit}

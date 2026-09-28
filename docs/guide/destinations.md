@@ -72,8 +72,8 @@ you need to know what to put back.
 ## The list
 
 Each row carries the name, where the backups actually are — repository path,
-the machine under it, whether it was reachable and when that was last checked —
-and how much room is left there.
+the machine under it, when it was last **reached**, whether what it holds has
+been read back (**Integrity**) — and how much room is left there.
 
 Free space is measured honestly: `statfs` for a local path, `df -Pk` over SSH
 for SFTP. Object stores do not report a size, so they say so rather than
@@ -81,6 +81,27 @@ inventing one.
 
 **Edit** sits on the row. Everything else — test the connection, browse what it
 holds, remove it — is under the row menu.
+
+## Reading it back
+
+A backup that was written is not a backup that can be read, and *Reached* only
+says that a login to the destination worked. **Integrity** is restic's own
+check: the whole structure of the repository, and a tenth of the stored data
+read back — a different tenth each time, so a season of weekly checks has read
+most of it.
+
+It runs by itself once a week for each repository, a day after the repository
+was made at the earliest. A check needs the repository to itself, so it starts
+only when nothing is running and no schedule fires for four hours, stops after
+three and a half, and backups and restores asked for meanwhile wait for it
+rather than fail. **Check now** under the list runs one at once.
+
+A repository that *did not pass* carries restic's words for what it found, the
+overview says so, and the *A repository failed its integrity check*
+notification is sent once — and once more when it passes again. Backups carry
+on. Rehearse a restore of the accounts that matter most before repairing
+anything. A check that could not be run — the destination did not answer —
+says so underneath and leaves the last result standing.
 
 ## A locked repository
 

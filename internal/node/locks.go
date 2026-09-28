@@ -15,6 +15,52 @@ import (
 // is a round trip to the destination and there are only ever a few.
 const lockTimeout = 5 * time.Minute
 
+// lockSweepEvery is how often the repositories are looked at for locks
+// nothing holds. A lock that stops retention costs a night; one left by a
+// prune or a check that was killed stops every backup, and must not be
+// there when the next schedule fires.
+const lockSweepEvery = time.Hour
+
+// sweepLocks removes stale locks from every repository, off the
+// scheduler's own goroutine, when the server has nothing running.
+func (e *Engine) sweepLocks(ctx context.Context, now time.Time) {
+	if now.Sub(e.lastLockSweep) < lockSweepEvery || e.checking.Load() {
+		return
+	}
+	busy, err := e.anyJobRunning()
+	if err != nil || busy {
+		return
+	}
+	if !e.sweepingLocks.CompareAndSwap(false, true) {
+		return
+	}
+	e.lastLockSweep = now
+	go func() {
+		defer e.sweepingLocks.Store(false)
+		e.sweepLocksOnce(ctx)
+	}()
+}
+
+// sweepLocksOnce looks at each repository in turn.
+func (e *Engine) sweepLocksOnce(ctx context.Context) {
+	repositories, err := e.store.Repositories()
+	if err != nil {
+		e.log.Error("read repositories", "error", err)
+		return
+	}
+	for _, repo := range repositories {
+		if ctx.Err() != nil {
+			return
+		}
+		if repo.InitialisedAt == nil {
+			continue
+		}
+		if _, err := e.ClearStaleLocks(ctx, repo.ID); err != nil {
+			e.log.Warn("look for stale locks", "repository_id", repo.ID, "error", err)
+		}
+	}
+}
+
 // ClearStaleLocks removes the locks nothing holds any more from a
 // repository, and reports how many went.
 //

@@ -376,6 +376,9 @@ type destinationView struct {
 	// in force now. Approving any other plan is refused, so the button
 	// is not offered for one.
 	PlanApprovable bool
+	// Checking says a repository on this server is being checked now,
+	// which is when another check cannot be asked for.
+	Checking bool
 	// Locked says the last attempt at retention here stopped at the
 	// repository's lock, which is when removing stale locks is offered.
 	Locked bool
@@ -443,6 +446,7 @@ func (s *Server) destinationViews() ([]destinationView, error) {
 			view.PublicKey = s.engine.PublicKeyFor(dest)
 			view.RemoteTarget = dest.Config["user"] + "@" + dest.Config["host"]
 		}
+		view.Checking = s.engine.Checking()
 		if view.Repository.ID != "" {
 			view.Keeps = node.MergedRetention(policies, view.Repository.ID)
 			view.KeepsChanged = view.Repository.RetentionApprovedAt != nil &&
@@ -4876,6 +4880,19 @@ func (s *Server) handlePlanRetention(w http.ResponseWriter, r *http.Request) {
 	s.redirect(w, r, "/destinations", "warn", fmt.Sprintf(
 		"%d of %d backups would be removed. Read what is below before approving it.",
 		state.WouldDrop, state.WouldDrop+state.WouldKeep))
+}
+
+// handleCheckRepository starts an integrity check of one repository and
+// answers at once: the check runs for as long as it takes, and the page
+// says what it found when it has.
+func (s *Server) handleCheckRepository(w http.ResponseWriter, r *http.Request) {
+	if err := s.engine.CheckNow(r.Context(), r.PostFormValue("repository")); err != nil {
+		s.redirect(w, r, "/destinations", "error", err.Error())
+		return
+	}
+	s.redirect(w, r, "/destinations", "ok",
+		"The check has started. Backups and restores asked for meanwhile wait for it; "+
+			"what it finds is shown here when it has finished.")
 }
 
 // handleClearLocks removes the locks nothing holds from a repository,

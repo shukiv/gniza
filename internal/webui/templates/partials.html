@@ -32,7 +32,7 @@
 
 {{define "deststate"}}
   {{if eq .Status "ok"}}<span class="cpr:pill cpr:badge-success">Reachable</span>
-    {{if .LastCheckedAt}}<div class="cpr:sublabel">checked {{ago .LastCheckedAt}}</div>{{end}}
+    {{if .LastCheckedAt}}<div class="cpr:sublabel">reached {{ago .LastCheckedAt}}</div>{{end}}
   {{else if eq .Status "error"}}<span class="cpr:pill cpr:badge-error">Unreachable</span>
     <div class="cpr:sublabel">{{.LastCheckError}}</div>
   {{else}}<span class="cpr:pill cpr:badge-ghost">Not checked</span>{{end}}

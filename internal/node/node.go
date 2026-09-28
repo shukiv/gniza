@@ -76,6 +76,15 @@ type Engine struct {
 	// minutes, so it runs beside the scheduler rather than in it, and a
 	// second tick does not start a second one.
 	censusing atomic.Bool
+	// checking is set while a repository's integrity is being checked.
+	// The check holds the repository to itself, so the worker starts
+	// nothing until it is over.
+	checking atomic.Bool
+	// sweepingLocks is set while the repositories are being looked at
+	// for locks nothing holds, and lastLockSweep is when that was last
+	// started.
+	sweepingLocks atomic.Bool
+	lastLockSweep time.Time
 	// lastKeySweep is when prepared SFTP keys nobody used were last
 	// looked for.
 	lastKeySweep time.Time

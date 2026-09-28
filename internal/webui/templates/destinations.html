@@ -114,9 +114,21 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
         {{end}}
         {{end}}
         {{if eq .Status "ok"}}
-        {{if .LastCheckedAt}}<dt class="cpr:text-base-content/60">Checked</dt><dd class="cpr:mono">checked {{ago .LastCheckedAt}}</dd>{{end}}
+        {{if .LastCheckedAt}}<dt class="cpr:text-base-content/60">Reached</dt><dd class="cpr:mono" title="A login to the destination. Whether what is stored there can be read back is Integrity, below.">reached {{ago .LastCheckedAt}}</dd>{{end}}
         {{else if eq .Status "error"}}
-        <dt class="cpr:text-base-content/60">Checked</dt><dd class="cpr:text-error cpr:break-words">{{.LastCheckError}}</dd>
+        <dt class="cpr:text-base-content/60">Reached</dt><dd class="cpr:text-error cpr:break-words">{{.LastCheckError}}</dd>
+        {{end}}
+        {{if .Repository.InitialisedAt}}
+        {{$checking := .Checking}}
+        {{with .Repository.Check}}
+        <dt class="cpr:text-base-content/60">Integrity</dt>
+        {{if $checking}}<dd class="cpr:text-base-content/70">being checked now</dd>
+        {{else if not .Known}}<dd class="cpr:text-base-content/70">not checked yet</dd>
+        {{else if .Passed}}<dd class="cpr:mono" title="restic read the whole structure of the repository and {{.SubsetPercent}}% of the stored data back.">passed {{ago .CheckedAt}}</dd>
+        {{else}}<dd class="cpr:text-error cpr:break-words"><strong>did not pass</strong> {{ago .CheckedAt}}</dd>
+        {{end}}
+        {{with .LastError}}<dt class="cpr:text-base-content/60">&nbsp;</dt><dd class="cpr:text-warning cpr:break-words">could not be checked since: {{.}}</dd>{{end}}
+        {{end}}
         {{end}}
         <dt class="cpr:text-base-content/60">Created</dt>
         <dd>{{if .Repository.InitialisedAt}}<span class="cpr:mono">{{stampPtr .Repository.InitialisedAt}}</span>{{else}}not created yet — <b>Test</b> creates it, and so does the first backup{{end}}</dd>
@@ -162,6 +174,35 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
       <h2 class="cpr:section-title">{{.Name}}</h2>
       <span class="cpr:text-xs cpr:text-base-content/60">{{.TypeName}}</span>
     </div>
+    {{/* Integrity: whether what is stored can be read back, which a
+         backup that succeeded says nothing about. */}}
+    {{if .Repository.InitialisedAt}}
+    <div class="cpr:pad cpr:border-b cpr:border-base-300">
+      {{$c := .Repository.Check}}
+      <div class="cpr:flex cpr:flex-wrap cpr:items-start cpr:justify-between cpr:gap-3">
+        <div>
+          <h3 class="cpr:font-semibold">Reading it back</h3>
+          <p class="cpr:hint cpr:mt-1">
+          {{if .Checking}}A check is running now. Backups and restores asked for meanwhile wait for it.
+          {{else if not $c.Known}}This repository has not been checked yet. One runs by itself every week, when nothing is due for a few hours.
+          {{else if $c.Passed}}Passed {{ago $c.CheckedAt}}: restic read the whole structure and {{$c.SubsetPercent}}% of the stored data, in {{tookSecs $c.Seconds}}. The next runs by itself within a week.
+          {{else}}<strong>Did not pass</strong> {{ago $c.CheckedAt}}. Some of what is stored here may not restore.{{end}}</p>
+        </div>
+        <form method="post" action="?p=destinations/check" class="cpr:inline-block cpr:align-middle"
+              data-confirm="Check this repository now? Backups and restores wait until it has finished, which can take an hour on a large one.">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <input type="hidden" name="repository" value="{{.Repository.ID}}">
+          <button class="cpr:btn cpr:btn-xs"{{if .Checking}} disabled{{end}}>Check now</button>
+        </form>
+      </div>
+      {{if and $c.Known (not $c.Passed)}}
+      <div class="cpr:lead cpr:lead-bad cpr:my-3 cpr:text-xs cpr:break-words">{{$c.Problem}}</div>
+      {{end}}
+      {{with $c.LastError}}
+      <div class="cpr:lead cpr:lead-warn cpr:my-3 cpr:text-xs cpr:break-words">Could not be checked: {{.}}</div>
+      {{end}}
+    </div>
+    {{end}}
     {{/* Retention: the one thing here that destroys data, so it says what
          it would do before it is allowed to do it. */}}
     {{if .Repository.ID}}

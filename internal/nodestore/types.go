@@ -100,9 +100,37 @@ type Repository struct {
 	// is taken on a slow cadence and stored: a page that ran it while
 	// drawing would take minutes to render and would do it again on every
 	// refresh.
-	Census    RepositoryCensus `json:"census,omitempty"`
-	CreatedAt time.Time        `json:"created_at"`
+	Census RepositoryCensus `json:"census,omitempty"`
+	// Check is the last time restic was asked whether this repository
+	// is whole. A backup that was written is not a backup that can be
+	// read, and nothing else here reads one back.
+	Check     RepositoryCheck `json:"check,omitempty"`
+	CreatedAt time.Time       `json:"created_at"`
 }
+
+// RepositoryCheck is what the last integrity check of a repository found.
+//
+// As with the census, the last check that finished is kept apart from the
+// last that did not: a destination that could not be reached tonight has
+// not stopped being the repository that passed last week.
+type RepositoryCheck struct {
+	// CheckedAt is when a check last ran to the end, and Passed what it
+	// said. Problem is restic's own words when it did not pass.
+	CheckedAt *time.Time `json:"checked_at,omitempty"`
+	Passed    bool       `json:"passed,omitempty"`
+	Problem   string     `json:"problem,omitempty"`
+	// SubsetPercent is how much of the stored data was read back, as
+	// well as the whole of the structure. Seconds is how long it took.
+	SubsetPercent int     `json:"subset_percent,omitempty"`
+	Seconds       float64 `json:"seconds,omitempty"`
+	// AttemptedAt and LastError are the last check that could not be
+	// run at all, which says nothing about the repository.
+	AttemptedAt *time.Time `json:"attempted_at,omitempty"`
+	LastError   string     `json:"last_error,omitempty"`
+}
+
+// Known reports whether this repository has ever been checked.
+func (c RepositoryCheck) Known() bool { return c.CheckedAt != nil }
 
 // RepositoryCensus is how many copies a repository holds and what they
 // cost the storage under it.

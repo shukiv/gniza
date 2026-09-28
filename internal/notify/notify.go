@@ -58,6 +58,10 @@ const (
 	EventStuck Event = "stuck"
 	// EventDestinationDown is a destination that could not be reached.
 	EventDestinationDown Event = "destination_down"
+	// EventCheckFailed is a repository that restic found damaged. It is
+	// the one event here about backups already taken rather than the one
+	// being taken.
+	EventCheckFailed Event = "check_failed"
 	// EventRestore is a restore finishing, either way.
 	EventRestore Event = "restore"
 	// EventStarted is a backup or a restore beginning. Off unless
@@ -71,7 +75,8 @@ const (
 // Events is every event, in the order the interface offers them.
 var Events = []Event{
 	EventBackupFailed, EventBackupPartial, EventOverdue, EventStuck,
-	EventDestinationDown, EventRestore, EventBackupSucceeded, EventStarted,
+	EventDestinationDown, EventCheckFailed, EventRestore, EventBackupSucceeded,
+	EventStarted,
 }
 
 // Title is the event as an operator would name it.
@@ -89,6 +94,8 @@ func (e Event) Title() string {
 		return "A run is taking far too long"
 	case EventDestinationDown:
 		return "A destination could not be reached"
+	case EventCheckFailed:
+		return "A repository failed its integrity check"
 	case EventRestore:
 		return "A restore finished"
 	case EventStarted:
@@ -109,7 +116,8 @@ const (
 // Severity of an event, for the channels that have a notion of it.
 func (e Event) Severity() Severity {
 	switch e {
-	case EventBackupFailed, EventStuck, EventDestinationDown, EventOverdue:
+	case EventBackupFailed, EventStuck, EventDestinationDown, EventOverdue,
+		EventCheckFailed:
 		return SeverityError
 	case EventBackupPartial:
 		return SeverityWarning

@@ -40,3 +40,22 @@ func (e *Engine) TakeCensusForTest(ctx context.Context, now time.Time) {
 // InstallerWrapperForTest is the script the transient unit runs, so a
 // test can run it the way systemd would rather than a copy of it.
 const InstallerWrapperForTest = installerWrapper
+
+// CheckForTest checks one repository on the caller's goroutine, so a test
+// can read what was recorded instead of waiting for it.
+func (e *Engine) CheckForTest(ctx context.Context, repositoryID string) {
+	e.checkOne(ctx, repositoryID, checkSubsetPercent)
+}
+
+// CheckDueForTest exposes the rule that decides when a repository is
+// checked.
+func CheckDueForTest(repo nodestore.Repository, now time.Time, quiet bool) bool {
+	return checkDueFor(repo, now, quiet)
+}
+
+// SweepLocksForTest looks at every repository for stale locks on the
+// caller's goroutine.
+func (e *Engine) SweepLocksForTest(ctx context.Context) { e.sweepLocksOnce(ctx) }
+
+// SetCheckingForTest says a check is, or is no longer, running.
+func (e *Engine) SetCheckingForTest(running bool) { e.checking.Store(running) }

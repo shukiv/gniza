@@ -41,6 +41,45 @@ func TestTruncatedOutputSaysSo(t *testing.T) {
 	}
 }
 
+// TestACancelledCommandIsAskedToStopBeforeItIsKilled: restic removes its
+// lock when it is signalled and cannot when it is killed, and a lock left
+// on a repository stops retention, pruning and checking until somebody
+// removes it by hand.
+func TestACancelledCommandIsAskedToStopBeforeItIsKilled(t *testing.T) {
+	dir := t.TempDir()
+	started := filepath.Join(dir, "started")
+	cleaned := filepath.Join(dir, "cleaned")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		exec := &resticrun.OSExec{WaitDelay: 5 * time.Second}
+		_, _ = exec.Exec(ctx, resticrun.Command{
+			Path: "/bin/sh",
+			Args: []string{"-c", `trap 'touch "$1"; exit 0' TERM; touch "$0"; while :; do sleep 0.05; done`,
+				started, cleaned},
+		})
+	}()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(started); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the command never started")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	if _, err := os.Stat(cleaned); err != nil {
+		t.Fatal("the command was killed without being given the chance to clean up")
+	}
+}
+
 // TestTheDefaultWaitDelayIsNotForever guards the value production uses.
 // Nothing outside the tests sets WaitDelay, so if the zero value reached
 // exec unchanged, every caller would keep the behaviour this package

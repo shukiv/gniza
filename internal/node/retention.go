@@ -388,7 +388,7 @@ func (e *Engine) recordRetention(repositoryID string, update func(*nodestore.Ret
 // at.
 func (e *Engine) sweepRetention(ctx context.Context, now time.Time) {
 	busy, err := e.anyJobRunning()
-	if err != nil || busy {
+	if err != nil || busy || e.checking.Load() {
 		// A backup holds the same lock. Retention can wait; a backup
 		// cannot.
 		return

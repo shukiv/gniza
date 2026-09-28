@@ -112,3 +112,53 @@ func TestALockedRepositoryOffersToRemoveItsStaleLocks(t *testing.T) {
 		t.Errorf("no fresh plan was taken: %+v", stored.Retention)
 	}
 }
+
+// "Checked" on a destination used to mean that a login to it had worked,
+// which is not what anybody reading it took it to mean. The card now says
+// reached for that, and says separately whether the repository has been
+// read back.
+func TestTheDestinationsPageTellsReachingFromReadingBack(t *testing.T) {
+	restic := &staleRestic{unlocked: true}
+	client, _, engine := newUIWithExec(t, restic)
+	store := engine.Store()
+	dest, repo, err := engine.AddDestination(nodestore.Destination{
+		Name: "offsite", Type: "local", Config: map[string]string{"root": t.TempDir()},
+	}, nil, "backups")
+	if err != nil {
+		t.Fatal(err)
+	}
+	made := time.Now().Add(-30 * 24 * time.Hour).UTC()
+	reached := time.Now().Add(-5 * time.Minute).UTC()
+	repo.InitialisedAt = &made
+	if _, err := store.PutRepository(repo); err != nil {
+		t.Fatal(err)
+	}
+	dest.LastCheckedAt = &reached
+	if _, err := store.PutDestination(dest); err != nil {
+		t.Fatal(err)
+	}
+
+	_, page := get(t, client, "/destinations")
+	for _, want := range []string{"Reached", "Integrity", "not checked yet", "Check now",
+		`action="?p=destinations/check"`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page does not say %q", want)
+		}
+	}
+	if strings.Contains(page, ">Checked<") {
+		t.Error("a login to the destination is still called a check")
+	}
+
+	checked := time.Now().Add(-2 * 24 * time.Hour).UTC()
+	repo.Check = nodestore.RepositoryCheck{CheckedAt: &checked, Passed: false, SubsetPercent: 10,
+		Problem: "resticrun: the repository did not pass its check: pack 3f2a1c9e: not referenced in any index"}
+	if _, err := store.PutRepository(repo); err != nil {
+		t.Fatal(err)
+	}
+	_, page = get(t, client, "/destinations")
+	for _, want := range []string{"did not pass", "may not restore", "pack 3f2a1c9e"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("a repository that failed its check does not say %q", want)
+		}
+	}
+}

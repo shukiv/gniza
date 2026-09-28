@@ -262,6 +262,12 @@ func (e *Engine) QueueRestore(restore nodestore.Restore) (nodestore.Restore, err
 // RunOnce performs the oldest piece of pending work, if any, and reports
 // whether it did anything.
 func (e *Engine) RunOnce(ctx context.Context) (bool, error) {
+	if e.checking.Load() {
+		// A check holds the repository to itself. Work that is queued
+		// stays queued until it is over; started now, it would fail on
+		// the lock.
+		return false, nil
+	}
 	restore, backup, err := e.store.PendingWork()
 	if err != nil {
 		return false, err
@@ -887,7 +893,9 @@ func (e *Engine) Schedule(ctx context.Context, now time.Time) (int, error) {
 	// or not anybody has set up somewhere to be told about it.
 	e.probeDestinations(ctx, now)
 	e.censusRepositories(ctx, now)
+	e.sweepLocks(ctx, now)
 	e.sweepRetention(ctx, now)
+	e.checkRepositories(ctx, now)
 	e.sweepDeletedAccounts(ctx, now)
 	e.checkForUpdate(ctx, now)
 	e.sweepPreparedKeys(now)

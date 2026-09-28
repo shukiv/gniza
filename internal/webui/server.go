@@ -258,6 +258,7 @@ func (s *Server) operatorMux() *http.ServeMux {
 	mux.HandleFunc("POST /destinations/recovery/card", s.guard(s.handleRecoveryCard))
 	mux.HandleFunc("POST /destinations/retention/plan", s.guard(s.handlePlanRetention))
 	mux.HandleFunc("POST /destinations/unlock", s.guard(s.handleClearLocks))
+	mux.HandleFunc("POST /destinations/check", s.guard(s.handleCheckRepository))
 	mux.HandleFunc("POST /destinations/retention/approve", s.guard(s.handleApproveRetention))
 	mux.HandleFunc("POST /destinations/retention/withdraw", s.guard(s.handleWithdrawRetention))
 	mux.HandleFunc("POST /destinations/retention/run", s.guard(s.handleRunRetention))

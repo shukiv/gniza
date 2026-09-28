@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -4053,6 +4054,7 @@ func (s *Server) settingsPage() (settingsView, error) {
 		RestoreRoot: restoreRoot, RestoreFree: restoreFree,
 		RestoreApart: restoreRoot != settings.StagingRoot,
 		PacksArchive: s.engine.PacksArchive(),
+		RehearseDays: rehearseDays(settings),
 		Outputs:      outputs,
 		OutputBytes:  held,
 		KeepDays:     keepDays(settings),
@@ -4083,6 +4085,9 @@ type settingsView struct {
 	// PacksArchive says a rehearsal here builds the archive, and needs
 	// room for it.
 	PacksArchive bool
+	// RehearseDays is how often every account is rehearsed, with the
+	// default spelt out; -1 is never.
+	RehearseDays int
 	Outputs      []staging.Output
 	OutputBytes  uint64
 	KeepDays     int
@@ -4325,6 +4330,31 @@ func keepDays(settings nodestore.Settings) int {
 	return settings.KeepOutputDays
 }
 
+// rehearseDays is how often an account is rehearsed, with the default
+// spelt out and never as -1 whatever negative number was stored.
+func rehearseDays(settings nodestore.Settings) int {
+	switch {
+	case settings.RehearseDays < 0:
+		return -1
+	case settings.RehearseDays == 0:
+		return nodestore.DefaultRehearseDays
+	}
+	return settings.RehearseDays
+}
+
+// rehearsePresets are the periods the form offers.
+var rehearsePresets = []int{7, 14, 30, 60, 90}
+
+// RehearseCustom is the period in force when it is none of those the
+// form offers, so that saving the page does not change it; zero when it
+// is one of them.
+func (v settingsView) RehearseCustom() int {
+	if v.RehearseDays < 0 || slices.Contains(rehearsePresets, v.RehearseDays) {
+		return 0
+	}
+	return v.RehearseDays
+}
+
 // deletedDays is how long a deleted account's backups are kept, with the
 // default spelt out rather than left as a zero to interpret.
 func deletedDays(settings nodestore.Settings) int {
@@ -4420,6 +4450,13 @@ func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if days, err := strconv.Atoi(strings.TrimSpace(chosen)); err == nil && days != 0 {
 			settings.DeletedAccountDays = days
+		}
+	}
+	// How often every account is rehearsed. Never is -1; anything that
+	// is not a number of days leaves the setting as it was.
+	if chosen := strings.TrimSpace(r.PostFormValue("rehearse_days")); chosen != "" {
+		if days, err := strconv.Atoi(chosen); err == nil && (days == -1 || (days >= 1 && days <= 365)) {
+			settings.RehearseDays = days
 		}
 	}
 	// Bug-report delivery is fixed to the bug tracker intake. Retain legacy

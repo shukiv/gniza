@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"github.com/shukiv/gniza/internal/staging"
 	"time"
 
 	"github.com/shukiv/gniza/internal/nodestore"
@@ -59,3 +60,21 @@ func (e *Engine) SweepLocksForTest(ctx context.Context) { e.sweepLocksOnce(ctx) 
 
 // SetCheckingForTest says a check is, or is no longer, running.
 func (e *Engine) SetCheckingForTest(running bool) { e.checking.Store(running) }
+
+// RehearseOnceForTest queues the rehearsal that is due at this moment, if
+// one is, without waiting for the sweep to come round.
+func (e *Engine) RehearseOnceForTest(ctx context.Context, now time.Time) (string, error) {
+	return e.rehearseOnce(ctx, now)
+}
+
+// RehearsalDueForTest exposes the rule that picks the next account.
+func RehearsalDueForTest(accounts []string, jobs []nodestore.Job, restores []nodestore.Restore,
+	now time.Time, every time.Duration) (string, bool) {
+	return rehearsalDue(accounts, jobs, restores, now, every)
+}
+
+// RoomToRehearseForTest exposes the rule that holds a scheduled rehearsal
+// to part of the disk.
+func RoomToRehearseForTest(account string, need uint64, root string) error {
+	return roomToRehearse(account, need, &staging.Manager{Root: root})
+}

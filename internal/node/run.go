@@ -842,7 +842,7 @@ func (e *Engine) runDrill(ctx context.Context, stored nodestore.Restore) error {
 		return err
 	}
 
-	checks, skipped, err := e.Drill(ctx, stored.RepositoryID, stored.Account)
+	checks, skipped, err := e.drill(ctx, stored.RepositoryID, stored.Account, stored.Scheduled)
 	finished := time.Now().UTC()
 	stored.FinishedAt = &finished
 	// A rehearsal of a backup taken without part of the account proves
@@ -858,6 +858,7 @@ func (e *Engine) runDrill(ctx context.Context, stored nodestore.Restore) error {
 		}
 		e.log.Error("restore rehearsal failed",
 			"account", stored.Account, "error", err, "checks", checks)
+		e.tellOfFailedRehearsal(ctx, stored, err)
 	} else {
 		stored.Status = job.StatusSuccess
 		stored.Detail = strings.Join(checks, "; ")
@@ -898,6 +899,7 @@ func (e *Engine) Schedule(ctx context.Context, now time.Time) (int, error) {
 	e.sweepLocks(ctx, now)
 	e.sweepRetention(ctx, now)
 	e.checkRepositories(ctx, now)
+	e.rehearseAccounts(ctx, now)
 	e.sweepDeletedAccounts(ctx, now)
 	e.checkForUpdate(ctx, now)
 	e.sweepPreparedKeys(now)
@@ -1279,6 +1281,13 @@ func (e *Engine) Check(ctx context.Context, repositoryID string, readDataSubsetP
 // volume would be worse than no rehearsal.
 func (e *Engine) Drill(ctx context.Context, repositoryID, account string) (
 	checks []string, skipped []string, err error) {
+	return e.drill(ctx, repositoryID, account, false)
+}
+
+// drill is Drill, for a rehearsal somebody asked for or one the schedule
+// did. The second is held to less of the disk.
+func (e *Engine) drill(ctx context.Context, repositoryID, account string, scheduled bool) (
+	checks []string, skipped []string, err error) {
 	repo, err := e.OpenRepository(repositoryID, false)
 	if err != nil {
 		return nil, nil, err
@@ -1314,8 +1323,13 @@ func (e *Engine) Drill(ctx context.Context, repositoryID, account string) (
 	// whose rehearsal has to build the archive to check it, two is the
 	// honest figure and the layout says so.
 	restores := e.restores()
-	dir, err := restores.Allocate("drill-"+account,
-		reassemble.RehearsalBytes(sourceBytes, e.provider.Layout()))
+	need := reassemble.RehearsalBytes(sourceBytes, e.provider.Layout())
+	if scheduled {
+		if err := roomToRehearse(account, need, restores); err != nil {
+			return nil, nil, err
+		}
+	}
+	dir, err := restores.Allocate("drill-"+account, need)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1348,39 +1362,7 @@ func (e *Engine) Drill(ctx context.Context, repositoryID, account string) (
 // alongside a backup or restore of the same account and shows up in
 // history with what it checked.
 func (e *Engine) QueueDrill(ctx context.Context, account string) (nodestore.Restore, error) {
-	repositories, err := e.store.Repositories()
-	if err != nil {
-		return nodestore.Restore{}, err
-	}
-
-	var (
-		newest     resticrun.Snapshot
-		newestRepo string
-	)
-	for _, repository := range repositories {
-		if repository.InitialisedAt == nil {
-			continue
-		}
-		snapshots, err := e.Snapshots(ctx, repository.ID, account)
-		if err != nil {
-			continue
-		}
-		for _, snapshot := range snapshots {
-			if snapshot.Time.After(newest.Time) {
-				newest, newestRepo = snapshot, repository.ID
-			}
-		}
-	}
-	if newestRepo == "" {
-		return nodestore.Restore{}, fmt.Errorf("node: %s has no backup to rehearse", account)
-	}
-
-	return e.QueueRestore(nodestore.Restore{
-		Account:      account,
-		RepositoryID: newestRepo,
-		SnapshotID:   newest.ID,
-		Kind:         KindVerify,
-	})
+	return e.queueDrill(ctx, account, false)
 }
 
 // AddDestination stores a destination and the repository that will live in

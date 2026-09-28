@@ -505,6 +505,10 @@ type Restore struct {
 	PartialSource bool `json:"partial_source,omitempty"`
 	// SkippedParts names what that snapshot was taken without.
 	SkippedParts []string `json:"skipped_parts,omitempty"`
+	// Scheduled says a rehearsal was queued by the server rather than
+	// asked for. Nobody is watching one of those, so it is held to less
+	// of the disk, and somebody is told when it fails.
+	Scheduled bool `json:"scheduled,omitempty"`
 	// Hint is what the person who asked for this restore can do about a
 	// failure. Error is written for whoever runs the server and names
 	// repositories, paths and commands; this is what a customer is shown
@@ -617,6 +621,11 @@ type Settings struct {
 	// of every customer who has ever left, forever. Zero means the
 	// default; a negative number keeps them until somebody says otherwise.
 	DeletedAccountDays int `json:"deleted_account_days,omitempty"`
+	// RehearseDays is how often each account's newest backup is rebuilt
+	// in scratch space and thrown away, which is the only thing that
+	// says it can be. Zero means the default; a negative number leaves
+	// rehearsals to whoever presses the button.
+	RehearseDays int `json:"rehearse_days,omitempty"`
 	// BugEmail is retained for settings-file compatibility only. Reports now
 	// go to the fixed bug tracker intake, never to the old email destination.
 	BugEmail string `json:"bug_email,omitempty"`
@@ -701,6 +710,23 @@ const DefaultKeepOutputDays = 7
 // enough that a destination is not paid for forever to hold the backups of
 // people who are gone.
 const DefaultDeletedAccountDays = 90
+
+// DefaultRehearseDays is thirty: every account has been rebuilt within
+// the month, and a server of a hundred and fifty accounts reads three or
+// four of them back a night.
+const DefaultRehearseDays = 30
+
+// RehearseEvery is how often an account is rehearsed. Zero means never.
+func (s Settings) RehearseEvery() time.Duration {
+	switch {
+	case s.RehearseDays < 0:
+		return 0
+	case s.RehearseDays == 0:
+		return DefaultRehearseDays * 24 * time.Hour
+	default:
+		return time.Duration(s.RehearseDays) * 24 * time.Hour
+	}
+}
 
 // KeepDeletedAccountsFor is how long a deleted account's backups survive.
 // Zero means they are kept until somebody removes them by hand.

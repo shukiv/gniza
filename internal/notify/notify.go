@@ -62,6 +62,9 @@ const (
 	// the one event here about backups already taken rather than the one
 	// being taken.
 	EventCheckFailed Event = "check_failed"
+	// EventRehearsalFailed is a backup the server tried to rebuild on its
+	// own schedule, and could not.
+	EventRehearsalFailed Event = "rehearsal_failed"
 	// EventRestore is a restore finishing, either way.
 	EventRestore Event = "restore"
 	// EventStarted is a backup or a restore beginning. Off unless
@@ -75,7 +78,8 @@ const (
 // Events is every event, in the order the interface offers them.
 var Events = []Event{
 	EventBackupFailed, EventBackupPartial, EventOverdue, EventStuck,
-	EventDestinationDown, EventCheckFailed, EventRestore, EventBackupSucceeded,
+	EventDestinationDown, EventCheckFailed, EventRehearsalFailed, EventRestore,
+	EventBackupSucceeded,
 	EventStarted,
 }
 
@@ -96,6 +100,8 @@ func (e Event) Title() string {
 		return "A destination could not be reached"
 	case EventCheckFailed:
 		return "A repository failed its integrity check"
+	case EventRehearsalFailed:
+		return "A scheduled rehearsal found a backup that does not rebuild"
 	case EventRestore:
 		return "A restore finished"
 	case EventStarted:
@@ -117,7 +123,7 @@ const (
 func (e Event) Severity() Severity {
 	switch e {
 	case EventBackupFailed, EventStuck, EventDestinationDown, EventOverdue,
-		EventCheckFailed:
+		EventCheckFailed, EventRehearsalFailed:
 		return SeverityError
 	case EventBackupPartial:
 		return SeverityWarning

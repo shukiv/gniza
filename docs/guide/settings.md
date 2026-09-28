@@ -18,6 +18,35 @@
   writes down every command the service runs. Read the result under
   [Logs → Service log](logs.md#the-service-log).
 
+## Rehearsals
+
+A backup that has never been rebuilt is one nobody knows can be. A rehearsal
+reads an account's newest backup back from the destination, rebuilds it in
+scratch space, checks it and throws it away. The account itself is not
+touched.
+
+**Rehearse every account's restore** says how often: every 30 days unless you
+choose otherwise, or only when you ask. The server picks the account that has
+waited longest and rehearses it:
+
+- between 22:00 and 06:00 by the server's own clock,
+- when no backup, restore or integrity check is running or waiting,
+- not within two hours of a schedule that is about to start,
+- one account at a time.
+
+A scheduled rehearsal takes no more than half of the free space where
+restores are rebuilt. One that would take more is not started, and the
+history says what it needed: rehearse that account from **Accounts** when the
+server can spare the room, or [move where restores are
+rebuilt](#where-restores-are-rebuilt). An account whose rehearsal failed or
+did not fit is tried again after a week, not the next night.
+
+When a scheduled rehearsal finds a backup that does not rebuild, the
+notification channels are told — **A scheduled rehearsal found a backup that
+does not rebuild** is one of the events a channel can ask for, and is on for a
+channel that did not choose. Not having had the room is not reported that
+way; it says nothing about the backup.
+
 ## Safety switches
 
 - **Block account removal without recent complete copies.** See

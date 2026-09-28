@@ -85,6 +85,9 @@ type Engine struct {
 	// started.
 	sweepingLocks atomic.Bool
 	lastLockSweep time.Time
+	// lastRehearsalSweep is when the server last looked for an account
+	// that is due a rehearsal.
+	lastRehearsalSweep time.Time
 	// lastKeySweep is when prepared SFTP keys nobody used were last
 	// looked for.
 	lastKeySweep time.Time

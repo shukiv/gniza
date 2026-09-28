@@ -51,6 +51,23 @@
         and is worth turning back down afterwards.</small>
       </div>
       <div>
+        <label class="cpr:field-label" for="rehearse_days">Rehearse every account's restore</label>
+        <select class="cpr:select cpr:select-sm cpr:w-full" id="rehearse_days" name="rehearse_days">
+          <option value="7" {{if eq $data.RehearseDays 7}}selected{{end}}>Every week</option>
+          <option value="14" {{if eq $data.RehearseDays 14}}selected{{end}}>Every two weeks</option>
+          <option value="30" {{if eq $data.RehearseDays 30}}selected{{end}}>Every 30 days</option>
+          <option value="60" {{if eq $data.RehearseDays 60}}selected{{end}}>Every 60 days</option>
+          <option value="90" {{if eq $data.RehearseDays 90}}selected{{end}}>Every 90 days</option>
+          {{if $data.RehearseCustom}}<option value="{{$data.RehearseCustom}}" selected>Every {{$data.RehearseCustom}} days</option>{{end}}
+          <option value="-1" {{if eq $data.RehearseDays -1}}selected{{end}}>Only when I ask</option>
+        </select>
+        <small class="cpr:help">A rehearsal rebuilds an account's newest backup in scratch space,
+        checks it and throws it away; the account is not touched. One runs at a time, between
+        22:00 and 06:00 by this server's clock, when nothing else is running and no schedule is
+        about to start. One that would take more than half of the free space is not started,
+        and says so in the history: rehearse that account by hand.</small>
+      </div>
+      <div>
         <label class="cpr:field-label" for="deleted_account_days">Keep a deleted account's backups for</label>
         <select class="cpr:select cpr:select-sm cpr:w-full" id="deleted_account_days" name="deleted_account_days">
           <option value="-1" {{if eq $data.DeletedPreset "-1"}}selected{{end}}>Until I remove them</option>

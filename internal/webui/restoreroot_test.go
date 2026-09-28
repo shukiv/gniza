@@ -108,3 +108,52 @@ func TestTheRestoreDirectoryIsNotMovedWithoutTheSessionsToken(t *testing.T) {
 		t.Errorf("a request without a token moved the restores to %s", engine.RestoreRoot())
 	}
 }
+
+// How often accounts are rehearsed is chosen on the page, and a page that
+// is saved without having chosen leaves it where it was.
+func TestSettingsSaysHowOftenAccountsAreRehearsed(t *testing.T) {
+	client, _, engine := newUI(t)
+	_, page := get(t, client, "/settings")
+	for _, want := range []string{`name="rehearse_days"`, `<option value="30" selected>`,
+		"Only when I ask"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page does not say %q", want)
+		}
+	}
+	save := func(chosen string) int {
+		t.Helper()
+		values := url.Values{"csrf": {csrfToken(t, page)}, "max_concurrent": {"1"}}
+		if chosen != "" {
+			values.Set("rehearse_days", chosen)
+		}
+		resp, err := client.PostForm("http://ui/settings/save", values)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		settings, err := engine.Store().Settings()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return settings.RehearseDays
+	}
+	if got := save("-1"); got != -1 {
+		t.Errorf("never was saved as %d", got)
+	}
+	_, page = get(t, client, "/settings")
+	if !strings.Contains(page, `<option value="-1" selected>`) {
+		t.Error("the page does not show that rehearsals are left to the operator")
+	}
+	for _, refused := range []string{"", "0", "-7", "9999", "soon"} {
+		if got := save(refused); got != -1 {
+			t.Errorf("%q changed the setting to %d", refused, got)
+		}
+	}
+	if got := save("45"); got != 45 {
+		t.Errorf("45 days was saved as %d", got)
+	}
+	_, page = get(t, client, "/settings")
+	if !strings.Contains(page, `<option value="45" selected>Every 45 days</option>`) {
+		t.Error("a period the form does not offer is not shown as the one in force")
+	}
+}

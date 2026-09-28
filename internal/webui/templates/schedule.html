@@ -179,9 +179,11 @@
       package list. A replacement server needs these before the sources restored onto it mean
       anything. It is small and changes rarely.
       <br>It is not a copy of the machine: the packages themselves and the sources' own data are not
-      in here — the sources travel in their own backups, and{{else}}EasyApache's profile, the tweak settings, packages, feature lists,
+      in here — the sources travel in their own backups, and{{else}}{{if eq $.Panel "DirectAdmin"}}DirectAdmin's own configuration and the administrator's packages and limits,
+      what CustomBuild was told to build, the mail, DNS, web server, PHP, MySQL and FTP
+      configuration, DNSSEC signing keys, the system users and root's cron.{{else}}EasyApache's profile, the tweak settings, packages, feature lists,
       resellers, the mail and DNS configuration, DNSSEC signing keys, the system users and
-      root's cron. A replacement server needs these before the accounts restored onto it mean
+      root's cron.{{end}} A replacement server needs these before the accounts restored onto it mean
       anything. It is small and changes rarely.
       <br>It is not a copy of the machine: {{$.Panel}} itself, anything installed outside it, and
       each account's own data are not in here — the accounts travel in their own backups, and{{end}}

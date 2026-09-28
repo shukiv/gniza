@@ -93,8 +93,39 @@ Gniza refuses these rather than guessing, and says so by name:
   logins and one domain's mail configuration cannot be asked for at all --
   see question 9 in ADR 0019;
 - restricted restore, new-account disaster recovery, account renaming,
-  certificate-isolated certification, or applying archives as admin/reseller accounts;
-- backing up **the server's own configuration**.
+  certificate-isolated certification, or applying archives as admin/reseller accounts.
+
+## The server's own configuration
+
+**Also back up the server's own settings** on a schedule stores, under the
+name `@system`, what a replacement server has to be given before the accounts
+restored onto it mean anything:
+
+- DirectAdmin's own `conf/` — `directadmin.conf`, the licence, the panel's
+  certificate — and `data/admin`: packages, the server's addresses, reseller
+  limits, login keys;
+- custom templates, the hooks in `scripts/custom`, and the tickets;
+- CustomBuild's `options.conf`, `custom/` and `versions.txt`, from which it
+  builds the same web server, PHP versions and mail stack again;
+- `/etc/virtual`, exim's and dovecot's configuration;
+- `named.conf`, `rndc.key` and `/var/named`, which holds the DNSSEC signing
+  keys — the one thing here that cannot be made again;
+- the web server's configuration (Apache, nginx or OpenLiteSpeed), each PHP
+  version's `php.ini` and `php.conf.d`, `my.cnf`, ProFTPD's or Pure-FTPd's
+  configuration, CSF's, `/etc/hosts`;
+- `/etc/passwd`, `group` and `shadow`, root's cron, `/etc/crontab` and
+  `/etc/cron.d`.
+
+A path this server does not have is skipped and named in `manifest.txt`
+beside the ones that were copied and the DirectAdmin version. It is a copy of
+files, so restic stores only what changed.
+
+It is not a copy of the machine. DirectAdmin's installed files, its skins and
+plugins, what CustomBuild compiled, and each account's own data are not in it,
+and neither is Gniza's key. And nothing puts it back: the files are browsed and
+downloaded from **Restore**, and a replacement server is set up by an
+administrator reading them. Which of them may be written over a running
+DirectAdmin is a question a host has yet to answer.
 
 Native backups on the tested host were compressed archives. Split mode
 takes one apart, and a backup that reads the home directory in place

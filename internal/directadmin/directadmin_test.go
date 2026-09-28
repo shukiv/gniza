@@ -91,12 +91,10 @@ func TestWhatIsNotEstablishedIsRefusedRatherThanGuessed(t *testing.T) {
 		Mode:        pkgacct.ModeSplit,
 		SkipHomedir: true,
 	})
-	_, systemErr := provider.StageSystem(ctx, t.TempDir())
 	_, applyErr := provider.Apply(ctx, "/staging/user.admin.studio.tar", panel.ApplyOptions{})
 
 	for what, err := range map[string]error{
 		"staging part of one":   partialErr,
-		"staging the server":    systemErr,
 		"applying an archive":   applyErr,
 		"putting files back":    provider.PutHomeDir(ctx, "studio", "/staging/tree"),
 		"creating a database":   provider.CreateDatabase(ctx, "studio", "studio_wp"),

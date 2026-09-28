@@ -651,3 +651,31 @@ every one of the account's own files — which is what
 What stays refused is a schedule that excludes the databases or the
 mail. That is now a gap in Gniza rather than a thing DirectAdmin cannot
 do.
+
+## The server's own configuration is copied, and nothing puts it back — 2026-09-28
+
+`StageSystem` was a refusal: what a replacement DirectAdmin server has to be
+told was not something documentation settled. The refusal was honest and its
+cost was not seen. A schedule over every account asks for the system backup
+by default, so on three servers `@system` failed every night from the day
+Gniza was installed, the overview said "ok" because it counts accounts, and
+no server's configuration was stored anywhere.
+
+The question was two questions. What to *carry* is answered by looking at a
+server, and `182.54.236.10` (DirectAdmin 1.711, 144 accounts) was looked at
+on 2026-09-28: the list in `internal/directadmin/system.go` is what exists
+there, plus what the other web and FTP servers DirectAdmin can run would
+have in its place. It comes to about 170 MiB, most of it `/var/named` and
+`data/admin`. What may be *written back* over a running DirectAdmin, and in
+what order, is still not settled, and is still not guessed at.
+
+So the backup is taken and the restore is not offered. `@system` is browsed
+and downloaded like any account's files, and an administrator sets the
+replacement up from them. `data/users` is left out because each account's
+record travels in that account's backup; skins and plugins because they are
+installed, not configured; what CustomBuild compiled because `options.conf`
+and `custom/` are what it is compiled from.
+
+A server where none of the listed paths is found fails rather than storing
+an empty backup, and a file that vanishes between being listed and being
+opened is skipped: this copies a server that is running.

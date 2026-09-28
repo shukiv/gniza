@@ -94,7 +94,10 @@ type Real struct {
 	// out of a manifest, and a server should not be moved onto that shape
 	// until a restore drill on it has proved the rebuild.
 	ReadHomeInPlace bool
-	lookupUser      func(string) (*user.User, error)
+	// SystemRoot is where the server's own configuration is looked for.
+	// Empty means "/"; a test points it at a tree of its own.
+	SystemRoot string
+	lookupUser func(string) (*user.User, error)
 	// leanBackups is what this server was found to do with a backup that
 	// asks for less than the whole account: 0 not yet known, 1 honoured,
 	// -1 ignored. Learned from a real run rather than from a version
@@ -886,12 +889,6 @@ func clearParts(staging string) error {
 		}
 	}
 	return nil
-}
-
-// StageSystem materialises the server's own configuration.
-func (r *Real) StageSystem(ctx context.Context, stagingDir string) (pkgacct.Payload, error) {
-	return pkgacct.Payload{}, unverified(
-		"what a replacement DirectAdmin server has to be told before accounts mean anything")
 }
 
 // Apply hands a rebuilt archive to DirectAdmin's own restore.

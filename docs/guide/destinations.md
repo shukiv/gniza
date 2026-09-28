@@ -82,6 +82,19 @@ inventing one.
 **Edit** sits on the row. Everything else — test the connection, browse what it
 holds, remove it — is under the row menu.
 
+## A locked repository
+
+restic locks a repository while it works in it, and a backup that is killed
+leaves its lock behind. Backups are not stopped by such a lock; retention and
+checking are, and the card under the list says so: *repository is already
+locked by PID …*, with the date the lock was made.
+
+Gniza removes a lock by itself when retention is refused by one and nothing
+holds it: it has not been refreshed for half an hour, or it was taken on this
+server by a process that no longer exists. **Remove stale locks** does the
+same at once. Neither touches a lock a running backup is using, and neither
+runs while this server has a backup or a restore in progress.
+
 ## Credentials
 
 Stored encrypted with the key in `/etc/gniza/master.key`. **Back that file up

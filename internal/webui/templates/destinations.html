@@ -153,7 +153,10 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
 {{/* Retention and the SSH key, per destination, below the cards: each is a
      record of its own, and a card that carried it would be a page. */}}
 {{range $data.Destinations}}
-  {{if .PublicKey}}
+  {{/* A destination with no key of its own -- a disk, a bucket, a login by
+       password -- has a repository all the same, and what is kept in it
+       is decided here. */}}
+  {{if or .PublicKey .Repository.ID}}
   <div class="cpr:panel">
     <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
       <h2 class="cpr:section-title">{{.Name}}</h2>
@@ -216,8 +219,20 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
         </div>
       </div>
 
-      {{with $r.LastError}}
-      <div class="cpr:lead cpr:lead-warn cpr:my-3 cpr:text-xs">{{.}}</div>
+      {{if $r.LastError}}
+      <div class="cpr:lead cpr:lead-warn cpr:my-3 cpr:text-xs">{{$r.LastError}}</div>
+      {{if .Locked}}
+      <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:justify-between cpr:gap-3 cpr:mb-3">
+        <p class="cpr:hint">A backup that is stopped part-way leaves its lock on the repository, and
+        nothing removes it afterwards. Backups carry on past it; retention and checking cannot.
+        Only locks that nothing holds are removed: one a running backup is using stays.</p>
+        <form method="post" action="?p=destinations/unlock" class="cpr:inline-block cpr:align-middle">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <input type="hidden" name="repository" value="{{.Repository.ID}}">
+          <button class="cpr:btn cpr:btn-xs">Remove stale locks</button>
+        </form>
+      </div>
+      {{end}}
       {{end}}
 
       {{if $r.PlannedAt}}

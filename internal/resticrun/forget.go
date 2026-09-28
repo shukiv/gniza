@@ -66,6 +66,9 @@ func ParseForgetPlan(stdout []byte) (ForgetPlan, error) {
 			Message     string `json:"message"`
 		}
 		if err := json.Unmarshal(trimmed, &failure); err == nil && failure.Message != "" {
+			if failure.Code == exitLocked {
+				return ForgetPlan{}, fmt.Errorf("%w: forget: %s", ErrLocked, failure.Message)
+			}
 			return ForgetPlan{}, fmt.Errorf("resticrun: forget: %s", failure.Message)
 		}
 		return ForgetPlan{}, fmt.Errorf("resticrun: forget said something unreadable")

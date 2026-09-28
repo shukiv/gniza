@@ -80,6 +80,9 @@ func classifyExit(code int, stderr []byte, incompleteOK bool) error {
 	if code == exitOK || (incompleteOK && code == exitIncompleteRead) {
 		return nil
 	}
+	if code == exitLocked {
+		return fmt.Errorf("%w: restic exited %d: %s", ErrLocked, code, explain(stderr, 5))
+	}
 	return fmt.Errorf("resticrun: restic exited %d: %s", code, explain(stderr, 5))
 }
 

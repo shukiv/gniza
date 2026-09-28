@@ -107,6 +107,9 @@ func (e *Engine) PlanRetention(ctx context.Context, repositoryID string) (nodest
 		return nodestore.RetentionState{}, e.retentionFailed(repositoryID, err)
 	}
 	plan, err := e.runner.ForgetPlanned(ctx, repo, spec)
+	if e.clearedLockAfter(ctx, repositoryID, err) {
+		plan, err = e.runner.ForgetPlanned(ctx, repo, spec)
+	}
 	if err != nil {
 		return nodestore.RetentionState{}, e.retentionFailed(repositoryID, err)
 	}
@@ -173,6 +176,9 @@ func (e *Engine) ApplyRetention(ctx context.Context, repositoryID string) (int, 
 		return 0, e.retentionFailed(repositoryID, err)
 	}
 	plan, err := e.runner.ForgetPlanned(ctx, repo, spec)
+	if e.clearedLockAfter(ctx, repositoryID, err) {
+		plan, err = e.runner.ForgetPlanned(ctx, repo, spec)
+	}
 	if err != nil {
 		return 0, e.retentionFailed(repositoryID, err)
 	}
@@ -282,8 +288,19 @@ func describeKeeps(keeps nodestore.Retention) string {
 // given for. A plan taken under a different policy -- or one taken
 // before the policy was recorded alongside it -- is refused by
 // ApproveRetention, so the page must not offer to approve it.
+//
+// Neither is a plan that an attempt has failed since. It says what the
+// repository held when it was taken, and a repository that could not be
+// read last night has had every backup since added to it unseen: on one
+// server the plan on offer was three weeks and two thousand copies old.
 func (e *Engine) PlanApprovable(repo nodestore.Repository, keeps nodestore.Retention) bool {
-	return repo.Retention.PlannedAt != nil && repo.Retention.PlannedKeeps == keeps
+	state := repo.Retention
+	if state.PlannedAt == nil || state.PlannedKeeps != keeps {
+		return false
+	}
+	failedSince := state.LastError != "" && state.AttemptedAt != nil &&
+		state.AttemptedAt.After(*state.PlannedAt)
+	return !failedSince
 }
 
 // RetentionApprovalCovers says whether what would be deleted from a

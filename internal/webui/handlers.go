@@ -376,6 +376,9 @@ type destinationView struct {
 	// in force now. Approving any other plan is refused, so the button
 	// is not offered for one.
 	PlanApprovable bool
+	// Locked says the last attempt at retention here stopped at the
+	// repository's lock, which is when removing stale locks is offered.
+	Locked bool
 }
 
 // TypeName is the destination's type in the words the form used to offer
@@ -445,6 +448,7 @@ func (s *Server) destinationViews() ([]destinationView, error) {
 			view.KeepsChanged = view.Repository.RetentionApprovedAt != nil &&
 				!s.engine.RetentionApprovalCovers(view.Repository, view.Keeps)
 			view.PlanApprovable = s.engine.PlanApprovable(view.Repository, view.Keeps)
+			view.Locked = strings.Contains(view.Repository.Retention.LastError, "locked")
 		}
 		views = append(views, view)
 	}
@@ -4872,6 +4876,29 @@ func (s *Server) handlePlanRetention(w http.ResponseWriter, r *http.Request) {
 	s.redirect(w, r, "/destinations", "warn", fmt.Sprintf(
 		"%d of %d backups would be removed. Read what is below before approving it.",
 		state.WouldDrop, state.WouldDrop+state.WouldKeep))
+}
+
+// handleClearLocks removes the locks nothing holds from a repository,
+// and takes the plan the lock was keeping from being read.
+func (s *Server) handleClearLocks(w http.ResponseWriter, r *http.Request) {
+	id := r.PostFormValue("repository")
+	removed, err := s.engine.ClearStaleLocks(r.Context(), id)
+	if err != nil {
+		s.redirect(w, r, "/destinations", "error", err.Error())
+		return
+	}
+	if removed == 0 {
+		s.redirect(w, r, "/destinations", "warn",
+			"No lock there is stale: whatever holds the repository is still running, "+
+				"or took its lock less than half an hour ago.")
+		return
+	}
+	said := counted(removed, "stale lock") + " removed."
+	if _, err := s.engine.PlanRetention(r.Context(), id); err != nil {
+		s.redirect(w, r, "/destinations", "warn", said+" The plan still could not be taken: "+err.Error())
+		return
+	}
+	s.redirect(w, r, "/destinations", "ok", said+" The plan below is a fresh one.")
 }
 
 // handleApproveRetention records that an operator has read a plan and

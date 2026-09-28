@@ -35,11 +35,14 @@ waited longest and rehearses it:
 - one account at a time.
 
 A scheduled rehearsal takes no more than half of the free space where
-restores are rebuilt. One that would take more is not started, and the
-history says what it needed: rehearse that account from **Accounts** when the
-server can spare the room, or [move where restores are
-rebuilt](#where-restores-are-rebuilt). An account whose rehearsal failed or
-did not fit is tried again after a week, not the next night.
+restores are rebuilt, and is stopped ten minutes before the next schedule
+starts, so that tonight's backups never wait for it. An account there was
+not the room or the time for is written down as **Not rehearsed**, with what
+it needed — not as a rehearsal that failed, because nothing was found wrong
+with its backup. Rehearse that account from **Accounts** when the server can
+spare the room, or [move where restores are
+rebuilt](#where-restores-are-rebuilt). An account that was not rehearsed, or
+whose rehearsal failed, is tried again after a week, not the next night.
 
 When a scheduled rehearsal finds a backup that does not rebuild, the
 notification channels are told — **A scheduled rehearsal found a backup that
@@ -113,9 +116,11 @@ top of the filesystem down to it must belong to root and be writable by
 nobody else, and Gniza makes the last one itself, closed to everybody but
 root. `/home/gniza-restores` is a good choice on a panel server;
 `/home/alice/restores` is refused, because alice could swap what is being
-restored for something of her own. A directory that anybody may write to is
-accepted only when it is sticky, the way `/tmp` is. One that is there already
-has to be empty or hold only Gniza's own work: `/home` itself is refused.
+restored for something of her own. A directory above it that anybody may
+write to is accepted only when it is sticky. `/tmp` passes that rule and is
+still the wrong place: on many servers it is memory, and it is emptied at
+every restart. One that is there already has to be empty or hold only Gniza's
+own work: `/home` itself is refused.
 
 It cannot be changed while a backup or a restore is running, or while
 restored files are still waiting to be collected in the directory being left

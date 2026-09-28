@@ -252,7 +252,7 @@ func askedFor(run nodestore.Restore) string {
 	switch run.Kind {
 	case protocol.RestoreFiles:
 		return "files out of the backup"
-	case node.KindVerify:
+	case node.KindVerify, node.KindNotRehearsed:
 		return "a rehearsal, which touches nothing live"
 	default:
 		return "the whole account"

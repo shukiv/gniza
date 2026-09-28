@@ -51,6 +51,15 @@ func feedOf(
 	}
 
 	for _, restore := range restores {
+		if restore.Kind == node.KindNotRehearsed && restore.FinishedAt != nil {
+			// Said, and not as a failure: nothing was found wrong with
+			// the backup, because nothing looked.
+			events = append(events, feedEvent{
+				When: *restore.FinishedAt, Head: "Not rehearsed",
+				Tag: restore.Account, Tone: "warn", Note: restore.Error,
+			})
+			continue
+		}
 		if restore.Kind != node.KindVerify || restore.FinishedAt == nil {
 			continue
 		}

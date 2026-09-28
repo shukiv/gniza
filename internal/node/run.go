@@ -850,7 +850,16 @@ func (e *Engine) runDrill(ctx context.Context, stored nodestore.Restore) error {
 	// page can say so rather than show the same tick a whole account gets.
 	stored.SkippedParts = skipped
 	stored.PartialSource = len(skipped) > 0
-	if err != nil {
+	if err != nil && stored.Scheduled && notRehearsed(err) {
+		// The server asked for it and the server could not spare what it
+		// takes. That is written down as what it is: the backup was not
+		// found wanting, it was not looked at.
+		stored.Kind = KindNotRehearsed
+		stored.Status = job.StatusCancelled
+		stored.Error = err.Error()
+		e.log.Warn("a scheduled rehearsal was not run",
+			"account", stored.Account, "reason", err)
+	} else if err != nil {
 		stored.Status = job.StatusFailed
 		stored.Error = err.Error()
 		if len(checks) > 0 {
@@ -1324,9 +1333,18 @@ func (e *Engine) drill(ctx context.Context, repositoryID, account string, schedu
 	// honest figure and the layout says so.
 	restores := e.restores()
 	need := reassemble.RehearsalBytes(sourceBytes, e.provider.Layout())
+	var until time.Time
 	if scheduled {
 		if err := roomToRehearse(account, need, restores); err != nil {
 			return nil, nil, err
+		}
+		// Nobody is waiting for this one, and the backups are. It is
+		// given until shortly before the next of them and no longer.
+		if fires, found := e.nextScheduleFire(time.Now()); found {
+			until = fires.Add(-rehearseClearBefore)
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithDeadline(ctx, until)
+			defer cancel()
 		}
 	}
 	dir, err := restores.Allocate("drill-"+account, need)
@@ -1350,10 +1368,20 @@ func (e *Engine) drill(ctx context.Context, repositoryID, account string, schedu
 		TreeOnly: true,
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, e.outOfTime(ctx, account, until, err)
 	}
 	checks, err = reassemble.Verify(ctx, rebuilt)
-	return checks, rebuilt.Skipped, err
+	return checks, rebuilt.Skipped, e.outOfTime(ctx, account, until, err)
+}
+
+// outOfTime says a rehearsal was stopped by its own deadline when that
+// is why it ended, rather than whatever the command that was stopped
+// said on its way out.
+func (e *Engine) outOfTime(ctx context.Context, account string, until time.Time, err error) error {
+	if err == nil || until.IsZero() || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return err
+	}
+	return &OutOfTimeToRehearse{Account: account, Until: until}
 }
 
 // QueueDrill asks for a rehearsal of an account's newest backup.

@@ -159,3 +159,30 @@ func TestNothingIsCalledWeakWhenNothingHasEverFailed(t *testing.T) {
 		t.Fatalf("weakest = %+v, want nothing on a server where nothing has failed", weak)
 	}
 }
+
+// An account the schedule had no room to rehearse is on the feed as what
+// it is. Shown as a rehearsal that failed, it says a backup is broken
+// that nobody looked at.
+func TestTheFeedTellsNotRehearsedFromFailed(t *testing.T) {
+	at := time.Date(2026, 9, 29, 4, 0, 0, 0, time.UTC)
+	events := feedOf(nil, []nodestore.Restore{
+		{Kind: node.KindNotRehearsed, Account: "pager", Status: job.StatusCancelled,
+			Scheduled: true, FinishedAt: &at, Error: "rehearsing pager takes 15.4 GiB"},
+		{Kind: node.KindVerify, Account: "arkady", Status: job.StatusFailed,
+			Scheduled: true, FinishedAt: &at, Error: "the archive is empty"},
+	}, nil, 8)
+	if len(events) != 2 {
+		t.Fatalf("events = %+v", events)
+	}
+	said := map[string]feedEvent{}
+	for _, event := range events {
+		said[event.Tag] = event
+	}
+	if got := said["pager"]; got.Head != "Not rehearsed" || got.Tone != "warn" ||
+		got.Note != "rehearsing pager takes 15.4 GiB" {
+		t.Errorf("the account there was no room for: %+v", got)
+	}
+	if got := said["arkady"]; got.Head != "Rehearsal failed" || got.Tone != "bad" {
+		t.Errorf("the rehearsal that failed: %+v", got)
+	}
+}

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/robfig/cron/v3"
+
 	"github.com/shukiv/gniza/internal/human"
 	"github.com/shukiv/gniza/internal/job"
 	"github.com/shukiv/gniza/internal/nodestore"
@@ -33,6 +35,11 @@ const (
 	// by the server's own clock, in which one may start.
 	rehearseFromHour  = 22
 	rehearseUntilHour = 6
+	// rehearseClearBefore is how long before a schedule fires a rehearsal
+	// the server started is stopped. The scheduler and the worker take
+	// turns, so one still running when the backups are due would hold
+	// them up until it had finished.
+	rehearseClearBefore = 10 * time.Minute
 	// rehearseShare is how much of the free space a rehearsal nobody
 	// asked for may take: one part in this many. Somebody who asks for
 	// one has looked at the disk. Nobody has looked when the schedule
@@ -54,6 +61,62 @@ func (e *NoRoomToRehearse) Error() string {
 			"than one part in %d of the %s free in %s. Rehearse it by hand when the "+
 			"server can spare the room, or name a larger directory under Settings, Storage",
 		e.Account, human.Bytes(e.Need), rehearseShare, human.Bytes(e.Free), e.Root)
+}
+
+// OutOfTimeToRehearse is a scheduled rehearsal that was stopped because
+// the backups were about to start.
+type OutOfTimeToRehearse struct {
+	Account string
+	Until   time.Time
+}
+
+func (e *OutOfTimeToRehearse) Error() string {
+	return fmt.Sprintf(
+		"node: the rehearsal of %s was not finished by %s, when it was stopped to "+
+			"leave the server to its backups. Rehearse it by hand at a time of "+
+			"day that has room for it",
+		e.Account, e.Until.Local().Format("15:04"))
+}
+
+// KindNotRehearsed is what a rehearsal the server asked for becomes when
+// it was not run to the end for a reason that is the server's and not
+// the backup's: there was not the room, or not the time. It is not a
+// rehearsal that failed, and nothing that reads rehearsals reads it as
+// one.
+const KindNotRehearsed = "not-rehearsed"
+
+// notRehearsed reports whether a scheduled rehearsal ended for a reason
+// that says nothing about the backup.
+func notRehearsed(err error) bool {
+	var noRoom *NoRoomToRehearse
+	var full *staging.ErrInsufficientSpace
+	var late *OutOfTimeToRehearse
+	return errors.As(err, &noRoom) || errors.As(err, &full) || errors.As(err, &late)
+}
+
+// nextScheduleFire is when the next enabled schedule starts.
+func (e *Engine) nextScheduleFire(now time.Time) (time.Time, bool) {
+	policies, err := e.store.Policies()
+	if err != nil {
+		return time.Time{}, false
+	}
+	var (
+		next  time.Time
+		found bool
+	)
+	for _, policy := range policies {
+		if !policy.Enabled || len(policy.RepositoryIDs) == 0 {
+			continue
+		}
+		schedule, err := cron.ParseStandard(policy.ScheduleCron)
+		if err != nil {
+			continue
+		}
+		if fires := schedule.Next(now); !found || fires.Before(next) {
+			next, found = fires, true
+		}
+	}
+	return next, found
 }
 
 // rehearseAccounts queues a rehearsal of the account that has waited
@@ -150,7 +213,7 @@ func rehearsalDue(accounts []string, jobs []nodestore.Job, restores []nodestore.
 	}
 	last := map[string]rehearsal{}
 	for _, stored := range restores {
-		if stored.Kind != KindVerify {
+		if stored.Kind != KindVerify && stored.Kind != KindNotRehearsed {
 			continue
 		}
 		at := stored.QueuedAt
@@ -160,7 +223,8 @@ func rehearsalDue(accounts []string, jobs []nodestore.Job, restores []nodestore.
 		if previous, seen := last[stored.Account]; seen && !at.After(previous.at) {
 			continue
 		}
-		last[stored.Account] = rehearsal{at: at, passed: stored.Status == job.StatusSuccess}
+		last[stored.Account] = rehearsal{at: at,
+			passed: stored.Kind == KindVerify && stored.Status == job.StatusSuccess}
 	}
 
 	var (
@@ -247,9 +311,7 @@ func roomToRehearse(account string, need uint64, restores *staging.Manager) erro
 // tellOfFailedRehearsal says that a backup did not rebuild, when the
 // schedule found it and nobody was looking at the page.
 func (e *Engine) tellOfFailedRehearsal(ctx context.Context, stored nodestore.Restore, err error) {
-	var noRoom *NoRoomToRehearse
-	var full *staging.ErrInsufficientSpace
-	if !stored.Scheduled || errors.As(err, &noRoom) || errors.As(err, &full) {
+	if !stored.Scheduled || notRehearsed(err) {
 		// Not having the room says nothing about the backup, and is on
 		// the page for whoever wants to know why it was not rehearsed.
 		return

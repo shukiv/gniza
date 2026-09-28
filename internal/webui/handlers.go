@@ -2735,6 +2735,8 @@ func (s *Server) handleAccount(w http.ResponseWriter, r *http.Request) {
 			if view.LastDrill == nil && restore.Status.Terminal() {
 				view.LastDrill = &restores[i]
 			}
+		case node.KindNotRehearsed:
+			row.What = "Not rehearsed"
 		case protocol.RestoreFiles:
 			row.What = "Files recovered"
 			if restore.RestoredTo != "" {

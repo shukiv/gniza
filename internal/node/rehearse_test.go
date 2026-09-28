@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -94,9 +95,21 @@ func TestTheAccountThatHasWaitedLongestIsRehearsedNext(t *testing.T) {
 	}
 }
 
-// snapshotsOf answers restic's snapshots with one backup of each account.
+// accountBytes is what the fake repository says a backup restores to.
+// A variable so that a test can make the account larger than the disk.
+var accountBytes = uint64(1 << 20)
+
+// snapshotsOf answers restic's snapshots with one backup of each account,
+// and says how large it is when asked.
 func snapshotsOf(accounts ...string) resticrun.ExecFunc {
-	return func(_ context.Context, cmd resticrun.Command) (resticrun.CommandResult, error) {
+	return func(ctx context.Context, cmd resticrun.Command) (resticrun.CommandResult, error) {
+		if err := ctx.Err(); err != nil {
+			return resticrun.CommandResult{}, err
+		}
+		if len(cmd.Args) > 0 && cmd.Args[0] == "stats" {
+			return resticrun.CommandResult{Stdout: []byte(
+				`{"total_size":` + strconv.FormatUint(accountBytes, 10) + `}`)}, nil
+		}
 		if len(cmd.Args) == 0 || cmd.Args[0] != "snapshots" {
 			return resticrun.CommandResult{}, nil
 		}
@@ -287,5 +300,102 @@ func TestRehearsalsAreMonthlyUnlessToldOtherwise(t *testing.T) {
 		if got := (nodestore.Settings{RehearseDays: days}).RehearseEvery(); got != want {
 			t.Errorf("%d days: every %v, want %v", days, got, want)
 		}
+	}
+}
+
+// queuedBySchedule puts a rehearsal in the queue the way the schedule
+// does, and runs it.
+func queuedBySchedule(t *testing.T, engine *node.Engine, store *nodestore.Store,
+	repo nodestore.Repository, account string) nodestore.Restore {
+	t.Helper()
+	made := time.Now().Add(-10 * day).UTC()
+	repo.InitialisedAt = &made
+	if _, err := store.PutRepository(repo); err != nil {
+		t.Fatal(err)
+	}
+	queued, err := engine.QueueRestore(nodestore.Restore{
+		Account: account, RepositoryID: repo.ID, SnapshotID: "aaaaaaaaaaaaaaaa",
+		Kind: node.KindVerify, Scheduled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.RunOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	after, err := store.Restore(queued.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return after
+}
+
+// An account the schedule could not spare the room for has not failed a
+// rehearsal. On three of the five servers that would have been the only
+// thing the schedule ever wrote: a row in red that means nobody looked.
+func TestAnAccountThereWasNoRoomForIsNotARehearsalThatFailed(t *testing.T) {
+	accountBytes = 1 << 62
+	t.Cleanup(func() { accountBytes = 1 << 20 })
+	engine, store, repo := rehearsingEngine(t, "customer1")
+
+	after := queuedBySchedule(t, engine, store, repo, "customer1")
+	if after.Kind != node.KindNotRehearsed || after.Status != job.StatusCancelled {
+		t.Fatalf("recorded as %s, %s", after.Kind, after.Status)
+	}
+	if after.FinishedAt == nil || !strings.Contains(after.Error, "takes no more than") {
+		t.Errorf("the record does not say why: %+v", after)
+	}
+	if found := rehearsals(t, store); len(found) != 0 {
+		t.Errorf("it is still read as a rehearsal: %+v", found)
+	}
+
+	// It is tried again in a week, not tomorrow and not never.
+	restores, err := store.Restores(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if chosen, due := node.RehearsalDueForTest([]string{"customer1"}, backedUp("customer1"),
+		restores, now.Add(day), 30*day); due {
+		t.Errorf("%s is tried again the next night", chosen)
+	}
+	if _, due := node.RehearsalDueForTest([]string{"customer1"}, backedUp("customer1"),
+		restores, now.Add(8*day), 30*day); !due {
+		t.Error("it is not tried again after a week")
+	}
+
+	// The same account asked for by hand is refused as anything else
+	// that does not fit is refused: it was asked for, and it failed.
+	if _, _, err := engine.Drill(t.Context(), repo.ID, "customer1"); err == nil ||
+		strings.Contains(err.Error(), "nobody asked for") {
+		t.Errorf("a rehearsal asked for by hand was held to the schedule's share: %v", err)
+	}
+}
+
+// The scheduler and the worker take turns, so a rehearsal still running
+// when the backups are due holds them up. One the server started is
+// stopped before that, and is not a rehearsal that failed either.
+func TestAScheduledRehearsalIsStoppedBeforeTheBackupsStart(t *testing.T) {
+	engine, store, repo := rehearsingEngine(t, "customer1")
+	if _, err := store.PutPolicy(nodestore.Policy{
+		Name: "All the time", ScheduleCron: "* * * * *", Enabled: true,
+		RepositoryIDs: []string{repo.ID},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	after := queuedBySchedule(t, engine, store, repo, "customer1")
+	if after.Kind != node.KindNotRehearsed || after.Status != job.StatusCancelled {
+		t.Fatalf("recorded as %s, %s: %s", after.Kind, after.Status, after.Error)
+	}
+	if !strings.Contains(after.Error, "leave the server to its backups") {
+		t.Errorf("the record does not say why it was stopped: %q", after.Error)
+	}
+	entries, err := os.ReadDir(engine.RestoreRoot())
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("what it had written was left behind: %v", entries)
 	}
 }

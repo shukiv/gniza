@@ -2,11 +2,14 @@ package directadmin
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/shukiv/gniza/internal/destination"
 	"github.com/shukiv/gniza/internal/pkgacct"
+	"github.com/shukiv/gniza/internal/resticrun"
 )
 
 // systemHost is a DirectAdmin server's configuration as a tree of its
@@ -125,5 +128,53 @@ func TestWhatTheSystemBackupLeavesOutIsSaid(t *testing.T) {
 		if !strings.Contains(said, want) {
 			t.Errorf("what is left out does not mention %q", want)
 		}
+	}
+}
+
+// What happened on 182.54.236.143 the evening this was installed: the
+// backup of the server's configuration succeeded and held no file. The
+// server's settings are not an account and have no home, and the list of
+// what an account's backup leaves out was built under that empty home:
+// "etc", "var", "usr". restic matches a bare name wherever it finds one,
+// and those are the names the configuration is staged under.
+func TestTheAccountsExcludeListIsNotAppliedToTheServersOwnFiles(t *testing.T) {
+	for _, home := range []string{"", ".", "home/alice"} {
+		if excludes := (&Real{}).NativeExcludes(home); len(excludes) != 0 {
+			t.Errorf("a home of %q leaves out %v", home, excludes)
+		}
+	}
+	if excludes := (&Real{}).NativeExcludes("/home/alice"); len(excludes) == 0 {
+		t.Error("an account's own list is empty")
+	}
+
+	binary, err := exec.LookPath("restic")
+	if err != nil {
+		t.Skip("restic is not installed")
+	}
+	provider := systemHost(t)
+	payload, err := provider.StageSystem(t.Context(), privateStaging(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := resticrun.New(resticrun.Config{Binary: binary, RuntimeDir: privateStaging(t),
+		CacheDir: privateStaging(t)}, nil)
+	repo := resticrun.Repository{Dest: &destination.Local{Root: privateStaging(t)},
+		Path: "system", Password: "local-test-only-password"}
+	if err := runner.Init(t.Context(), repo, nil); err != nil {
+		t.Fatal(err)
+	}
+	// As the node hands it over: the provider's list for the home of the
+	// account being backed up, which for the server's settings is none.
+	stored, err := runner.Backup(t.Context(), repo, resticrun.BackupSpec{
+		Paths:   payload.Paths(),
+		Tags:    []string{"account:@system", "mode:system"},
+		Exclude: provider.NativeExcludes(""),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Summary.TotalFilesProcessed < 10 {
+		t.Errorf("the backup of the server's configuration holds %d files",
+			stored.Summary.TotalFilesProcessed)
 	}
 }

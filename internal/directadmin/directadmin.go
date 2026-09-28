@@ -205,6 +205,14 @@ func (r *Real) Layout() panel.Layout { return dabackup.Layout{} }
 // customer's data or are copies of backups, and a backup of a backup is
 // how a home directory doubles every night.
 func (r *Real) NativeExcludes(home string) []string {
+	// No home, no list. The names below mean something only under one:
+	// on their own they are "etc", "var" and "usr", which restic matches
+	// wherever it finds them, and the server's own configuration is
+	// staged under exactly those names. A backup of it taken with this
+	// list stored no file at all, and said it had succeeded.
+	if !filepath.IsAbs(home) {
+		return nil
+	}
 	excludes := make([]string, 0, len(directadminSkips)+len(gnizaSkips)+len(gnizaPatterns))
 	for _, name := range append(append([]string{}, directadminSkips...), gnizaSkips...) {
 		excludes = append(excludes, filepath.Join(home, name))

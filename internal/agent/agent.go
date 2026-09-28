@@ -744,6 +744,20 @@ func (a *Agent) backupTarget(ctx context.Context, log *slog.Logger,
 		return result
 	}
 
+	if payload.Mode == pkgacct.ModeSystem && backup.Summary.TotalFilesProcessed == 0 {
+		// What was staged was there to be read: the provider refuses to
+		// stage nothing. A snapshot with no file in it is one that was
+		// taken past every one of them, and it is not a backup of
+		// anything.
+		result.Status = string(job.TargetFailed)
+		result.Error = "the backup of the server's configuration holds no files: " +
+			"everything that was staged was left out of it"
+		log.Error("a system backup stored nothing",
+			"repository_id", target.RepositoryID, "snapshot_id", result.SnapshotID,
+			"excludes", len(assignment.Excludes))
+		return result
+	}
+
 	result.Status = string(job.TargetSuccess)
 	if backup.Incomplete {
 		result.Status = string(job.TargetFailed)

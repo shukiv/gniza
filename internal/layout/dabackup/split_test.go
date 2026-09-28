@@ -876,3 +876,55 @@ func TestTheHomeMembersReportWhoOwnsThem(t *testing.T) {
 		t.Error("a member of the outer archive was reported as one of the account's own files")
 	}
 }
+
+// The finding from the fleet check of 2026-09-22: on one server 66 of
+// 144 accounts had a file in the home that belonged to somebody else,
+// and DirectAdmin's restore stops at the first one. The archive rebuilt
+// for a restore names the account as its owner, and changes nothing
+// about a file that was the account's already.
+func TestTheRebuiltArchiveGivesAStrangersFileToTheAccount(t *testing.T) {
+	const account = "gzv0908a"
+	archive := buildSplitFixture(t, account,
+		fixtureExtra{nested: true, name: "public_html/wp-config.php", body: "<?php\n", uid: uidPtr(0)},
+		fixtureExtra{nested: true, name: "public_html/index.php", body: "<?php\n"},
+	)
+	dir := t.TempDir()
+	if err := (Layout{}).UnpackArchive(t.Context(), archive, account, dir); err != nil {
+		t.Fatal(err)
+	}
+	rebuilt, err := (Layout{}).PackArchive(t.Context(), dir, account, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	outer, home := headersOf(t, decompressedCopy(t, rebuilt))
+	stranger := home["public_html/wp-config.php"]
+	if stranger == nil {
+		t.Fatal("the file that belonged to somebody else is not in the archive")
+	}
+	if stranger.Uid != 1005 || stranger.Uname != account || stranger.Gname != account {
+		t.Errorf("it is still %d (%s:%s), and the restore would stop at it",
+			stranger.Uid, stranger.Uname, stranger.Gname)
+	}
+	if own := home[".php"]; own == nil || own.Uid != 1005 || own.Gname != "apache" {
+		t.Errorf("a directory that was the account's came back changed: %+v", own)
+	}
+	if record := outer[path.Join(BackupDir, UserConf)]; record == nil || record.Uname != "root" {
+		t.Errorf("DirectAdmin's own record was given away: %+v", record)
+	}
+}
+
+// decompressedCopy writes an archive out as a plain tar, which is what
+// headersOf reads.
+func decompressedCopy(t *testing.T, archive string) string {
+	t.Helper()
+	body, err := os.ReadFile(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain := filepath.Join(t.TempDir(), "plain.tar")
+	if err := os.WriteFile(plain, decompress(t, archive, body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return plain
+}

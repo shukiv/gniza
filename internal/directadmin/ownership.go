@@ -15,10 +15,10 @@ import (
 //
 // DirectAdmin's restore extracts the nested home archive as the account,
 // so tar cannot chown, and the first member it cannot chown ends the
-// restore -- with everything after it left out. Six accounts on the
-// validation host are in that state today. The backup still holds every
-// byte and is still worth having; what it is not is a backup somebody
-// can restore, and the night it is taken is when to say so.
+// restore -- with everything after it left out. The archive Gniza
+// rebuilds for a restore therefore names the account as the owner of
+// every one of them (dabackup.giveToAccount), which changes who owns
+// those files, and the night the backup is taken is when to say so.
 type foreignOwners struct {
 	// First is one of the paths that will stop the restore: an operator
 	// given a name can go and look, where a count alone leaves them
@@ -46,15 +46,16 @@ func (f foreignOwners) warning() string {
 		return ""
 	case 1:
 		return fmt.Sprintf(
-			"%s is owned by another account, so a restore of this backup stops there. "+
-				"Everything is in the backup; DirectAdmin's restore unpacks the home as "+
-				"the account and cannot give a file back to somebody else.", f.First)
+			"%s is owned by another account, and a restore gives it to this one. "+
+				"DirectAdmin's restore unpacks the home as the account and cannot give "+
+				"a file back to somebody else, so it comes back as the account's own.",
+			f.First)
 	default:
 		return fmt.Sprintf(
-			"%d files are owned by another account, the first of them %s, so a restore "+
-				"of this backup stops there. Everything is in the backup; DirectAdmin's "+
-				"restore unpacks the home as the account and cannot give a file back to "+
-				"somebody else.", f.Count, f.First)
+			"%d files are owned by another account, the first of them %s, and a restore "+
+				"gives them to this one. DirectAdmin's restore unpacks the home as the "+
+				"account and cannot give a file back to somebody else, so they come back "+
+				"as the account's own.", f.Count, f.First)
 	}
 }
 

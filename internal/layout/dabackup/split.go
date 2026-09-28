@@ -519,6 +519,11 @@ func (Layout) PackArchive(ctx context.Context, dir, account, outDir string) (str
 		}
 	}
 
+	// What the account's files say about who owns them is what stops
+	// DirectAdmin's restore, so it is put right before anything is
+	// written.
+	giveToAccount(&manifest)
+
 	// The nested archive is built first, into a file beside the one being
 	// written, because its length is a header in the outer archive and is
 	// not known until it is finished.

@@ -570,3 +570,69 @@ func memberBody(t *testing.T, archive, name string) ([]byte, *tar.Header) {
 		}
 	}
 }
+
+// An account read where it lies is rebuilt from the tree restic
+// restored, and that tree carries the owners the files had on the night
+// of the backup: root's, for a site root unpacked, or whoever this
+// server calls that number. user.conf says who the account is, and the
+// rebuilt archive gives the account every one of its own files.
+func TestARebuiltLeanArchiveGivesEveryFileToTheAccount(t *testing.T) {
+	const account = "gzv0908a"
+	file := filepath.Join(t.TempDir(), "user.admin."+account+".tar")
+	f, err := os.OpenFile(file, os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tw := tar.NewWriter(f)
+	for name, body := range map[string]string{
+		path.Join(BackupDir, UserConf):              "username=" + account + "\n",
+		path.Join(BackupDir, "backup_options.list"): "email\nsubdomain\n",
+	} {
+		if err := tw.WriteHeader(&tar.Header{
+			Name: name, Mode: 0o600, Size: int64(len(body)), Typeflag: tar.TypeReg,
+			Uid: 1168, Gid: 1170, Uname: account, Gname: account,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write([]byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	dir := t.TempDir()
+	if err := (Layout{}).UnpackLeanArchive(t.Context(), file, account, dir); err != nil {
+		t.Fatal(err)
+	}
+	homeTree(t, dir)
+	rebuilt, err := (Layout{}).PackArchive(t.Context(), dir, account, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	outer, home := headersOf(t, rebuilt)
+	checked := 0
+	for name, header := range home {
+		checked++
+		if header.Uid != 1168 || header.Uname != account {
+			t.Errorf("%s in the home archive is %d (%s), and the restore would stop at it",
+				name, header.Uid, header.Uname)
+		}
+	}
+	for name, header := range outer {
+		first, _, _ := strings.Cut(name, "/")
+		if first != DomainsDir && first != MailDir {
+			continue
+		}
+		checked++
+		if header.Uid != 1168 || header.Uname != account {
+			t.Errorf("%s is %d (%s), and the restore would stop at it", name, header.Uid, header.Uname)
+		}
+	}
+	if checked == 0 {
+		t.Fatal("the rebuilt archive carries none of the account's files")
+	}
+}

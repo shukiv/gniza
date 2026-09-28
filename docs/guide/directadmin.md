@@ -95,6 +95,24 @@ Gniza refuses these rather than guessing, and says so by name:
 - restricted restore, new-account disaster recovery, account renaming,
   certificate-isolated certification, or applying archives as admin/reseller accounts.
 
+## Files in a home that belong to somebody else
+
+DirectAdmin's restore unpacks an account's files as the account, and tar
+cannot then give a file to anybody else: the first one it meets ends the
+restore, with everything after it left out. Such files are common — a
+directory JetBackup left, a site root unpacked, a backup an administrator made
+inside the home.
+
+The archive Gniza rebuilds for a restore names the account as the owner of
+every one of its own files, so the restore finishes and those files come back
+as the account's. A backup of an account that has any says so the night it is
+taken, with a count and the first of them: *N files are owned by another
+account … and a restore gives them to this one*. The files are in a directory
+the account owns, so it could rename or remove them already; what it gains is
+the right to read one that was closed to it. If that matters for a file, move
+it out of the home. DirectAdmin's own records under `backup/` are left as they
+are.
+
 ## The server's own configuration
 
 **Also back up the server's own settings** on a schedule stores, under the

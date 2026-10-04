@@ -167,3 +167,29 @@ func readArgs(t *testing.T, record string) map[string]bool {
 	}
 	return args
 }
+
+// TestApplyHandsOverAnExtractedAccount covers the form the agent actually
+// uses. A backup stored as a tree is rebuilt as a directory and handed to
+// restorepkg as one -- its usage takes "/path/to/extracted-cpuser-file" --
+// and a refusal here failed every whole-account restore on a live server
+// with "restore archive ... is a directory".
+func TestApplyHandsOverAnExtractedAccount(t *testing.T) {
+	script, record := fakeRestorepkg(t)
+	tree := filepath.Join(t.TempDir(), "cpmove-customer1")
+	if err := os.MkdirAll(filepath.Join(tree, "homedir"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	host := &Real{RestorepkgPath: script}
+
+	if _, err := host.Apply(context.Background(), tree,
+		panel.ApplyOptions{Overwrite: true, Unrestricted: true}); err != nil {
+		t.Fatalf("Apply refused the extracted account: %v", err)
+	}
+	if args := readArgs(t, record); !args[tree] {
+		t.Errorf("the account directory was not passed to restorepkg: %v", args)
+	}
+	if _, err := host.Apply(context.Background(), filepath.Join(t.TempDir(), "gone"),
+		panel.ApplyOptions{}); err == nil {
+		t.Error("an archive that is not there was handed to restorepkg")
+	}
+}

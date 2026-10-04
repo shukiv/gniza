@@ -83,6 +83,10 @@ type Real struct {
 	// ReplacedDir is where a copy of what a restore wrote over is kept.
 	// Empty means the standard location under /var/lib/gniza.
 	ReplacedDir string
+
+	// SandboxRoot is where the option file of an isolated database import
+	// is written. Empty means the system's temporary directory.
+	SandboxRoot string
 }
 
 var _ panel.Provider = (*Real)(nil)
@@ -904,12 +908,13 @@ func (r *Real) removeacct() string {
 // cPanel's answer to exactly that, and an operator who needs the archive
 // restored whole can say so.
 func (r *Real) Apply(ctx context.Context, archivePath string, options panel.ApplyOptions) (string, error) {
-	info, err := os.Stat(archivePath)
-	if err != nil {
+	// A directory is as good as a file here. restorepkg's usage lists
+	// "/path/to/extracted-cpuser-file" beside the archive forms, and the
+	// agent hands over the extracted account rather than pack a second
+	// copy of it. Refusing one stopped every whole-account restore of a
+	// backup stored as a tree.
+	if _, err := os.Stat(archivePath); err != nil {
 		return "", fmt.Errorf("cpanel: restore archive: %w", err)
-	}
-	if info.IsDir() {
-		return "", fmt.Errorf("cpanel: restore archive %s is a directory", archivePath)
 	}
 	if options.NewUser != "" {
 		if err := validateUser(options.NewUser); err != nil {

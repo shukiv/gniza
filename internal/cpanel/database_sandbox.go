@@ -11,7 +11,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -36,9 +38,9 @@ func (r *Real) loadIsolatedDatabase(ctx context.Context, database string, dump i
 	if _, err := rand.Read(entropy[:]); err != nil {
 		return err
 	}
-	login := "cpr_restore_" + hex.EncodeToString(entropy[:8])
+	login := restoreLoginPrefix + hex.EncodeToString(entropy[:8])
 	password := hex.EncodeToString(entropy[8:])
-	dir, err := os.MkdirTemp("", "gniza-mysql-")
+	dir, err := os.MkdirTemp(r.SandboxRoot, sandboxPrefix)
 	if err != nil {
 		return err
 	}
@@ -79,6 +81,76 @@ func (r *Real) loadIsolatedDatabase(ctx context.Context, database string, dump i
 		return fmt.Errorf("cpanel: isolated database import failed (server-wide SQL and definer objects are not allowed): %s: %w", lastLine(stderr.Bytes()), err)
 	}
 	return nil
+}
+
+const (
+	// sandboxPrefix names the directory that holds the option file of one
+	// isolated import, password and all.
+	sandboxPrefix = "gniza-mysql-"
+	// restoreLoginPrefix names the login that import runs as.
+	restoreLoginPrefix = "cpr_restore_"
+)
+
+// restoreLogin is a login this program made, and nothing else: the prefix
+// and the sixteen hex digits it was given, at whatever host.
+var restoreLogin = regexp.MustCompile(`^cpr_restore_[0-9a-f]{16}@[^\s]+$`)
+
+// ClearInterrupted removes what an import that was killed left behind,
+// and names what it does not remove.
+//
+// Each import takes its own option file and its own login away when it
+// returns. A process that is killed never returns: the file stays, with a
+// database password in it, and so does the login. The files are removed
+// here. The logins are only named -- dropping one changes the live
+// database server, which is the operator's to decide -- and with the file
+// gone nothing on this server knows their passwords any more.
+//
+// It is called once at startup, where no import of this process is
+// running yet. The temporary directory is shared with everything else on
+// the server, so only a real directory this user owns is touched: a link
+// by that name, or somebody else's directory, is left where it is.
+func (r *Real) ClearInterrupted(ctx context.Context) (cleared int, logins []string, err error) {
+	root := r.SandboxRoot
+	if root == "" {
+		root = os.TempDir()
+	}
+	var failures []error
+	entries, err := os.ReadDir(root)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		failures = append(failures, fmt.Errorf("cpanel: read %s: %w", root, err))
+	}
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), sandboxPrefix) {
+			continue
+		}
+		path := filepath.Join(root, entry.Name())
+		info, err := os.Lstat(path)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		owner, ok := info.Sys().(*syscall.Stat_t)
+		if !ok || int(owner.Uid) != os.Geteuid() {
+			continue
+		}
+		if err := os.RemoveAll(path); err != nil {
+			failures = append(failures, err)
+			continue
+		}
+		cleared++
+	}
+
+	list := exec.CommandContext(ctx, r.mysql(), "--batch", "--skip-column-names",
+		`--execute=SELECT CONCAT(User, '@', Host) FROM mysql.user WHERE User LIKE 'cpr\_restore\_%'`)
+	out, err := list.Output()
+	if err != nil {
+		failures = append(failures, fmt.Errorf("cpanel: look for restore logins left behind: %w", err))
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if line = strings.TrimSpace(line); restoreLogin.MatchString(line) {
+			logins = append(logins, line)
+		}
+	}
+	return cleared, logins, errors.Join(failures...)
 }
 
 func (r *Real) databaseAdminSQL(ctx context.Context, statement string) error {

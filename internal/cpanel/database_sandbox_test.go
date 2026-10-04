@@ -47,3 +47,63 @@ if [ "$scope" = isolated ]; then exit 1; fi
 		t.Errorf("temporary login was not removed after failure: %s", got)
 	}
 }
+
+// A killed import never runs its own cleanup: the option file stays, with
+// a database password in it, and so does the login it was written for.
+func TestStartupClearsWhatAKilledImportLeft(t *testing.T) {
+	root := t.TempDir()
+	left := filepath.Join(root, "gniza-mysql-123456")
+	if err := os.Mkdir(left, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(left, "client.cnf"), []byte("[client]\npassword=left-behind\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The temporary directory is everybody's. A link by the right name is
+	// not this program's directory, and neither is what it points at.
+	elsewhere := filepath.Join(t.TempDir(), "not-ours")
+	if err := os.Mkdir(elsewhere, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	kept := filepath.Join(elsewhere, "kept")
+	if err := os.WriteFile(kept, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(elsewhere, filepath.Join(root, "gniza-mysql-link")); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(root, "somebody-elses")
+	if err := os.Mkdir(other, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	client := filepath.Join(t.TempDir(), "mysql")
+	script := "#!/bin/sh\nprintf 'cpr_restore_0123456789abcdef@localhost\\nroot@localhost\\ncpr_restore_mine@%%\\n'\n"
+	if err := os.WriteFile(client, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	r := &Real{MysqlPath: client, SandboxRoot: root}
+
+	cleared, logins, err := r.ClearInterrupted(t.Context())
+	if err != nil {
+		t.Fatalf("ClearInterrupted: %v", err)
+	}
+	if cleared != 1 {
+		t.Errorf("cleared = %d, want the one directory left behind", cleared)
+	}
+	if _, err := os.Lstat(left); !os.IsNotExist(err) {
+		t.Error("the password file of a killed import is still on disk")
+	}
+	if _, err := os.Stat(kept); err != nil {
+		t.Errorf("a link in the temporary directory was followed: %v", err)
+	}
+	if _, err := os.Stat(other); err != nil {
+		t.Errorf("a directory that is not a sandbox was removed: %v", err)
+	}
+	// Named, not dropped: dropping a login changes the live server. And
+	// only a login this program made is named -- not an operator's own
+	// that happens to share the prefix.
+	if len(logins) != 1 || logins[0] != "cpr_restore_0123456789abcdef@localhost" {
+		t.Errorf("logins = %v, want only the one a restore made", logins)
+	}
+}

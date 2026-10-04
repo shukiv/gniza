@@ -26,6 +26,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"github.com/shukiv/gniza/internal/sqldump"
 	"io"
 	"os"
 	"path"
@@ -198,6 +199,9 @@ func (Layout) DrillArchive(ctx context.Context, filename, account string) ([]str
 			noun = "database dump parses"
 		}
 		passed = append(passed, fmt.Sprintf("%d %s", len(names), noun))
+		if empty := slices.Compact(slices.Sorted(slices.Values(found.emptyDatabases))); len(empty) > 0 {
+			passed = append(passed, "with nothing in it, as on the server: "+strings.Join(empty, ", "))
+		}
 	}
 	return passed, nil
 }
@@ -206,6 +210,8 @@ func (Layout) DrillArchive(ctx context.Context, filename, account string) ([]str
 type archiveContents struct {
 	// databases are the account's dumps, by name, in the order met.
 	databases []string
+	// emptyDatabases are those whose dump is whole and creates nothing.
+	emptyDatabases []string
 	// accountFiles is how many of the account's own files the archive
 	// carries loose -- its websites under domains/ and its messages
 	// under imap/ -- as opposed to DirectAdmin's records of it.
@@ -325,14 +331,20 @@ func inspect(ctx context.Context, filename, account string, readDumps bool) (arc
 		if database, ok := databaseIn(name, account, h.Typeflag); ok {
 			found.databases = append(found.databases, database)
 			if readDumps {
-				restores, err := dumpRestoresSomething(tr)
+				state, err := sqldump.Scan(tr)
 				if err != nil {
 					return archiveContents{}, fmt.Errorf("dabackup: read dump %s: %w", name, err)
 				}
-				if !restores {
+				switch state {
+				case sqldump.Cut:
 					return archiveContents{}, fmt.Errorf(
-						"dabackup: the dump %s carries nothing to restore -- a database "+
-							"put back from it would come back empty", name)
+						"dabackup: the dump %s carries nothing to restore and does not say "+
+							"it was finished -- a database put back from it would come back empty",
+						name)
+				case sqldump.Empty:
+					// A whole dump of a database with nothing in it, which
+					// is what the account has.
+					found.emptyDatabases = append(found.emptyDatabases, database)
 				}
 			}
 		}
@@ -454,47 +466,6 @@ func ArchiveAccount(base string) (string, error) {
 		return fields[2], nil
 	}
 	return "", fmt.Errorf("dabackup: unsupported account archive filename %q", base)
-}
-
-// dumpRestoresSomething says whether a database dump would put anything
-// back, reading it as a stream.
-//
-// A dump is the largest member of the archive after the home directory,
-// and a rehearsal that read one into memory would fail on exactly the
-// accounts most worth rehearsing. So it is scanned in fixed-size pieces,
-// carrying the tail of each one forward so a CREATE split across two of
-// them is still found.
-//
-// Empty is the case that matters most: an empty dump restores an empty
-// database, which is worse than an obvious failure. A dump with a header
-// and no CREATE in it is the truncated version of the same thing. This
-// is the check the cpmove path makes against the rebuilt tree, made
-// against the archive instead.
-func dumpRestoresSomething(r io.Reader) (bool, error) {
-	const want = "CREATE"
-	buf := make([]byte, 64<<10)
-	carry := ""
-	for {
-		n, err := r.Read(buf)
-		if n > 0 {
-			chunk := carry + strings.ToUpper(string(buf[:n]))
-			if strings.Contains(chunk, want) {
-				return true, nil
-			}
-			if len(chunk) > len(want)-1 {
-				chunk = chunk[len(chunk)-(len(want)-1):]
-			}
-			carry = chunk
-		}
-		if err == io.EOF {
-			// An empty dump reaches here having found nothing, which is
-			// the answer it should give.
-			return false, nil
-		}
-		if err != nil {
-			return false, err
-		}
-	}
 }
 
 // isAccountType is the first field of a DirectAdmin backup filename,

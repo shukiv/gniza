@@ -24,6 +24,7 @@ func TestRestoreArgs(t *testing.T) {
 	assertArgs(t, subpath, []string{
 		"restore", snapshotID + ":/home/customer1",
 		"--target", "/restore/work/homedir", "--json",
+		"--exclude-xattr", "security.selinux",
 	})
 
 	include, err := RestoreArgs(RestoreSpec{
@@ -36,6 +37,7 @@ func TestRestoreArgs(t *testing.T) {
 	}
 	assertArgs(t, include, []string{
 		"restore", snapshotID, "--target", "/root/recovered", "--json",
+		"--exclude-xattr", "security.selinux",
 		"--include", "/home/customer1/public_html/index.php",
 	})
 }

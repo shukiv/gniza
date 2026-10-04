@@ -1,11 +1,9 @@
 package reassemble
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"io"
+	"github.com/shukiv/gniza/internal/sqldump"
 	"os"
 	"path/filepath"
 	"strings"
@@ -152,6 +150,7 @@ func Verify(ctx context.Context, rebuilt Result) ([]string, error) {
 		return passed, fmt.Errorf("reassemble: database directory: %w", err)
 	}
 	var checked int
+	var empty []string
 	for _, dump := range dumps {
 		if dump.IsDir() || !strings.HasSuffix(dump.Name(), ".sql") {
 			continue
@@ -166,17 +165,27 @@ func Verify(ctx context.Context, rebuilt Result) ([]string, error) {
 		if info.Size() == 0 {
 			return passed, fmt.Errorf("reassemble: dump %s is empty", dump.Name())
 		}
-		found, err := namesACreate(path)
+		state, err := scanDump(path)
 		if err != nil {
 			return passed, fmt.Errorf("reassemble: read dump %s: %w", dump.Name(), err)
 		}
-		if !found {
-			return passed, fmt.Errorf("reassemble: dump %s has no CREATE statement", dump.Name())
+		switch state {
+		case sqldump.Cut:
+			return passed, fmt.Errorf(
+				"reassemble: dump %s has no CREATE statement and does not say it was finished",
+				dump.Name())
+		case sqldump.Empty:
+			// A whole dump of a database with nothing in it, which is
+			// what the account has.
+			empty = append(empty, strings.TrimSuffix(dump.Name(), ".sql"))
 		}
 		checked++
 	}
 	if checked > 0 {
 		passed = append(passed, fmt.Sprintf("%d database dumps parse", checked))
+		if len(empty) > 0 {
+			passed = append(passed, "with nothing in it, as on the server: "+strings.Join(empty, ", "))
+		}
 	}
 	if checked == 0 && skipped["databases"] {
 		passed = append(passed, "no database dumps, which is what this backup was taken as")
@@ -184,53 +193,14 @@ func Verify(ctx context.Context, rebuilt Result) ([]string, error) {
 	return passed, nil
 }
 
-// namesACreate says whether the dump holds a CREATE statement.
-//
-// Read in blocks rather than whole. A dump is the largest file an
-// account has, and this runs on the server that account lives on: the
-// file, a copy of it as a string and an uppercased copy of that is three
-// times the dump resident at once, so a nightly rehearsal of an account
-// with a 4 GiB dump asks for something like 12 GiB on a live hosting
-// node and is killed for it.
-func namesACreate(path string) (bool, error) {
+// scanDump says what the dump at path would put back.
+func scanDump(path string) (sqldump.State, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return false, err
+		return sqldump.Cut, err
 	}
 	defer file.Close()
-
-	word := []byte("CREATE")
-	// The last few bytes of each block start the next one, so a CREATE
-	// lying across a block boundary is still one word.
-	overlap := len(word) - 1
-	buf := make([]byte, overlap+64*1024)
-	carried := 0
-	for {
-		read, err := file.Read(buf[carried:])
-		if read > 0 {
-			block := buf[:carried+read]
-			// Uppercased where it lies: a copy per block is no larger
-			// than a block, but it is another allocation for every 64 KiB
-			// of every dump on the server, and the block is not wanted
-			// afterwards in the case it arrived in.
-			for i, b := range block {
-				if 'a' <= b && b <= 'z' {
-					block[i] = b - ('a' - 'A')
-				}
-			}
-			if bytes.Contains(block, word) {
-				return true, nil
-			}
-			carried = min(len(block), overlap)
-			copy(buf, block[len(block)-carried:])
-		}
-		if errors.Is(err, io.EOF) {
-			return false, nil
-		}
-		if err != nil {
-			return false, err
-		}
-	}
+	return sqldump.Scan(file)
 }
 
 func countFiles(root string) (int, error) {

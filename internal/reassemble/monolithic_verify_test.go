@@ -132,3 +132,38 @@ func TestACpanelArchiveIsNotClaimedToHaveBeenReadInside(t *testing.T) {
 		t.Errorf("the rehearsal claims to have read inside cPanel's format: %v", passed)
 	}
 }
+
+// A database with no table in it is dumped as a header, a footer and
+// nothing between them. That is a faithful backup of what the account
+// has. On 2026-10-02 it failed the rehearsal of six accounts on one
+// server and one on another, each of which had such a database, and
+// told the operator their backups did not rebuild.
+func TestARehearsalPassesAWholeDumpOfADatabaseWithNothingInIt(t *testing.T) {
+	const emptyDump = "-- MariaDB dump 10.19  Distrib 10.6.20-MariaDB, for Linux (x86_64)\n" +
+		"-- Host: localhost    Database: webshop_new\n" +
+		"/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;\n" +
+		"/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;\n\n" +
+		"-- Dump completed on 2026-10-04  3:33:03\n"
+	rebuilt := buildDirectAdminArchive(t, "webshop", map[string]string{
+		"webshop_shop.sql": "CREATE TABLE orders (id int);\n",
+		"webshop_new.sql":  emptyDump,
+	})
+	passed, err := reassemble.Verify(context.Background(), rebuilt)
+	if err != nil {
+		t.Fatalf("an account with an empty database failed its rehearsal: %v", err)
+	}
+	said := strings.Join(passed, "; ")
+	if !strings.Contains(said, "2 database dumps parse") ||
+		!strings.Contains(said, "with nothing in it, as on the server: webshop_new") {
+		t.Errorf("the rehearsal does not say which database is empty: %v", passed)
+	}
+
+	// The same dump stopped before its end is still refused.
+	cut := buildDirectAdminArchive(t, "webshop", map[string]string{
+		"webshop_new.sql": emptyDump[:strings.Index(emptyDump, "/*!40111 SET SQL_NOTES=@OLD")],
+	})
+	if _, err := reassemble.Verify(context.Background(), cut); err == nil ||
+		!strings.Contains(err.Error(), "does not say it was finished") {
+		t.Errorf("a dump that was cut short rehearsed clean: %v", err)
+	}
+}

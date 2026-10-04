@@ -252,7 +252,15 @@ func RestoreArgs(spec RestoreSpec) ([]string, error) {
 		target += ":" + spec.Subpath
 	}
 
-	args := []string{"restore", target, "--target", spec.Target, "--json"}
+	// The SELinux label is left behind. It says what a file was on the
+	// server it was backed up from, in a directory it is not being put
+	// back into, and where SELinux is on restic may not set it: one file
+	// it could not relabel fails the whole restore. On 182.54.236.163
+	// that was 24 accounts in 54. A file restored without one takes the
+	// label of where it lands, and the panel's own restore labels what
+	// it puts into a home.
+	args := []string{"restore", target, "--target", spec.Target, "--json",
+		"--exclude-xattr", "security.selinux"}
 	for _, pattern := range spec.Include {
 		args = append(args, "--include", pattern)
 	}

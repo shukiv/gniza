@@ -151,7 +151,7 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
         </form>
         {{end}}
         <form method="post" action="?p=destinations/delete" class="cpr:contents"
-              data-confirm="Remove this destination from Gniza? The backups already stored there are left alone.">
+              data-confirm="Remove this destination from Gniza? The backups already stored there are left alone, but Gniza forgets their recovery key: after this they can be read only with the copy you saved.">
           <input type="hidden" name="csrf" value="{{$.CSRF}}">
           <input type="hidden" name="id" value="{{.ID}}">
           <button class="cpr:btn cpr:btn-xs cpr:btn-ghost cpr:text-error">Remove</button>

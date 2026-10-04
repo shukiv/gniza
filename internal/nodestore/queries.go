@@ -181,6 +181,12 @@ func (s *Store) Destinations() ([]Destination, error) {
 	return destinations, err
 }
 
+// ErrRecoveryKeyNotSaved refuses the removal of a destination whose
+// repository password exists nowhere but on this server.
+var ErrRecoveryKeyNotSaved = errors.New(
+	"nodestore: the recovery key of this destination has never been saved off this server, " +
+		"and removing the destination destroys the only copy; save the key first")
+
 // DeleteDestination removes a destination and the repository record that
 // belongs to it.
 //
@@ -188,6 +194,13 @@ func (s *Store) Destinations() ([]Destination, error) {
 // to reach them. It is refused while a schedule still points at the
 // repository, because that schedule would then silently stop making one of
 // the copies it promises.
+//
+// It is refused, too, while the repository holds backups and its recovery
+// key has never been noted as saved: the password revoked here would be
+// the only copy, and the backups would be left where they are with
+// nothing able to open them. A repository that was never created has
+// nothing to lose, so a destination typed in wrongly stays removable.
+//
 // All of it in one transaction: a failure partway through a record at a
 // time leaves a destination whose repository records are already gone,
 // and with them the only pointers to their restic passwords.
@@ -213,6 +226,9 @@ func (s *Store) DeleteDestination(id string) error {
 			}
 			if repo.DestinationID != id {
 				return nil
+			}
+			if repo.InitialisedAt != nil && repo.RecoveryNotedAt == nil {
+				return ErrRecoveryKeyNotSaved
 			}
 			owned[repo.ID] = true
 			revoke = append(revoke, repo.PasswordSecretID)

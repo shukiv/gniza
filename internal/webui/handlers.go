@@ -1435,13 +1435,25 @@ func (s *Server) handleTestDestination(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDeleteDestination(w http.ResponseWriter, r *http.Request) {
 	id := r.PostFormValue("id")
-	if err := s.engine.Store().DeleteDestination(id); err != nil {
+	err := s.engine.Store().DeleteDestination(id)
+	if errors.Is(err, nodestore.ErrRecoveryKeyNotSaved) {
+		// The sentence that used to follow a removal did not say that the
+		// key went with it, and twelve nights of nineteen accounts went
+		// unreadable that way.
+		s.redirect(w, r, "/destinations", "error",
+			"Not removed. The recovery key of this destination exists only on this server, "+
+				"and removing the destination destroys it: every backup stored there would "+
+				"become unreadable for good. Press Recovery key, save it somewhere else, "+
+				"confirm that you have, and then remove the destination.")
+		return
+	}
+	if err != nil {
 		s.redirect(w, r, "/destinations", "error", "Could not remove it: "+err.Error())
 		return
 	}
 	s.redirect(w, r, "/destinations", "ok",
-		"Destination removed. Anything already stored there is untouched, "+
-			"but Gniza no longer knows how to read it.")
+		"Destination removed, and its recovery key with it. Anything already stored there "+
+			"is untouched, and can be read only with the copy of the key you saved.")
 }
 
 // --- schedules ---

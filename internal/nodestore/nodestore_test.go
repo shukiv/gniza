@@ -765,3 +765,40 @@ func TestRemovingAChannelRevokesItsCredentials(t *testing.T) {
 		t.Errorf("the channel's credentials are still in the state file: %v", err)
 	}
 }
+
+func TestDeleteDestinationRefusesWhileItsRecoveryKeyIsOnlyHere(t *testing.T) {
+	store := newStore(t)
+
+	dest, err := store.PutDestination(nodestore.Destination{Name: "Old host", Type: "sftp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := time.Now().UTC()
+	repo, err := store.PutRepository(nodestore.Repository{
+		DestinationID: dest.ID, Path: "cp01", PasswordSecretID: "secret", InitialisedAt: &created,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The password revoked by a removal is the only thing that opens the
+	// backups stored there. Nobody has said it is written down anywhere.
+	err = store.DeleteDestination(dest.ID)
+	if !errors.Is(err, nodestore.ErrRecoveryKeyNotSaved) {
+		t.Fatalf("err = %v, want the removal refused for the unsaved key", err)
+	}
+	if _, err := store.Repository(repo.ID); err != nil {
+		t.Fatalf("the refused removal took the repository record anyway: %v", err)
+	}
+	if _, err := store.Destination(dest.ID); err != nil {
+		t.Fatalf("the refused removal took the destination anyway: %v", err)
+	}
+
+	repo.RecoveryNotedAt = &created
+	if _, err := store.PutRepository(repo); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DeleteDestination(dest.ID); err != nil {
+		t.Fatalf("with the key saved the destination should be removable: %v", err)
+	}
+}

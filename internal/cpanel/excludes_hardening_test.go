@@ -52,7 +52,9 @@ func TestExcludesDoNotBlockOnAFIFO(t *testing.T) {
 	go func() { done <- real.NativeExcludes(home) }()
 	select {
 	case excludes := <-done:
-		if len(excludes) != 0 {
+		// The built-in list is there whatever the file is; nothing
+		// beyond it may come from a pipe.
+		if len(excludes) != len(gnizaSkips) {
 			t.Errorf("a pipe was read as a list of exclusions: %v", excludes)
 		}
 	case <-time.After(5 * time.Second):

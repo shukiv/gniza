@@ -24,8 +24,20 @@ const ExcludeConfName = "cpbackup-exclude.conf"
 // serverExcludeConf is where the server-wide list lives.
 var serverExcludeConf = "/etc/cpbackup-exclude.conf"
 
+// gnizaSkips is what Gniza leaves out of every account's home on top of
+// cPanel's lists, whether or not anybody wrote an exclusion file: the
+// archives Installatron, Softaculous and WP Toolkit write under the home
+// on every automatic update. Each is a fresh compression of a site and a
+// dump of its database, which shares almost no chunk with the night
+// before, so it is gigabytes of ingest every night for a backup of what
+// the snapshot already holds directly. On one DirectAdmin server one
+// site's tool wrote 27 GiB of them in two weeks. The DirectAdmin provider
+// has carried the same three names since ADR 0021; the operator asked
+// for application_backups to be left out everywhere, by default.
+var gnizaSkips = []string{"application_backups", "softaculous_backups", "wordpress-backups"}
+
 // NativeExcludes is what cPanel would leave out of a backup of this
-// account: the server-wide list, plus the account's own.
+// account: the server-wide list, plus the account's own, plus gnizaSkips.
 //
 // The patterns are returned as restic exclude patterns anchored under the
 // account's home directory. cPanel matches them anywhere below the home,
@@ -45,6 +57,11 @@ func (r *Real) NativeExcludes(home string) []string {
 
 	seen := map[string]bool{}
 	var excludes []string
+	for _, name := range gnizaSkips {
+		mapped := filepath.Join(home, name)
+		seen[mapped] = true
+		excludes = append(excludes, mapped)
+	}
 	for _, source := range []excludeFile{
 		{path: r.serverExcludes()},
 		{path: filepath.Join(home, ExcludeConfName), owner: owner, ownerKnown: ownerKnown},

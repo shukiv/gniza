@@ -65,13 +65,23 @@ func TestCPanelsOwnExclusionsAreObeyed(t *testing.T) {
 	}
 }
 
-// TestAnAccountWithNoExclusionsExcludesNothing covers the ordinary case:
-// most accounts have never written the file, and a missing file is not a
-// failure.
-func TestAnAccountWithNoExclusionsExcludesNothing(t *testing.T) {
+// TestAnAccountWithNoExclusionsLeavesOutOnlyTheInstallersArchives covers
+// the ordinary case: most accounts have never written the file, and a
+// missing file is not a failure. What is left out all the same is the
+// archives the one-click installers write under the home, anchored under
+// this home and nowhere else -- the operator asked for
+// application_backups to be left out everywhere, by default.
+func TestAnAccountWithNoExclusionsLeavesOutOnlyTheInstallersArchives(t *testing.T) {
 	host := &Real{ServerExcludeConf: filepath.Join(t.TempDir(), "absent")}
-	if got := host.NativeExcludes(filepath.Join(t.TempDir(), "home")); len(got) != 0 {
-		t.Errorf("excludes = %v, want none", got)
+	home := filepath.Join(t.TempDir(), "home")
+	want := []string{
+		filepath.Join(home, "application_backups"),
+		filepath.Join(home, "softaculous_backups"),
+		filepath.Join(home, "wordpress-backups"),
+	}
+	got := host.NativeExcludes(home)
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("excludes = %v, want exactly %v", got, want)
 	}
 	if got := host.NativeExcludes(""); got != nil {
 		t.Errorf("excludes = %v for an account with no home, want none", got)

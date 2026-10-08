@@ -175,13 +175,12 @@ func New(cfg Config) (*Engine, error) {
 		log.Info("cleared password files left by an interrupted run", "count", swept)
 	}
 
-	// The same for the panel's own leavings. What it clears is cleared;
-	// what it only finds is said, because nothing else will say it.
+	// The same for the panel's own leavings.
 	if clearer, ok := cfg.Provider.(interface {
 		ClearInterrupted(context.Context) (int, []string, error)
 	}); ok {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		cleared, logins, err := clearer.ClearInterrupted(ctx)
+		cleared, dropped, err := clearer.ClearInterrupted(ctx)
 		cancel()
 		if err != nil {
 			log.Warn("clear what an interrupted restore left behind", "error", err)
@@ -189,10 +188,9 @@ func New(cfg Config) (*Engine, error) {
 		if cleared > 0 {
 			log.Info("cleared database password files left by an interrupted restore", "count", cleared)
 		}
-		if len(logins) > 0 {
-			log.Warn("an interrupted restore left database logins behind; "+
-				"nothing knows their passwords any more, and they can be dropped",
-				"logins", strings.Join(logins, ", "))
+		if len(dropped) > 0 {
+			log.Warn("dropped database logins left behind by an interrupted restore",
+				"logins", strings.Join(dropped, ", "))
 		}
 	}
 

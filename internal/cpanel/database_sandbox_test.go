@@ -78,13 +78,14 @@ func TestStartupClearsWhatAKilledImportLeft(t *testing.T) {
 	}
 
 	client := filepath.Join(t.TempDir(), "mysql")
-	script := "#!/bin/sh\nprintf 'cpr_restore_0123456789abcdef@localhost\\nroot@localhost\\ncpr_restore_mine@%%\\n'\n"
+	sql := filepath.Join(t.TempDir(), "sql")
+	script := "#!/bin/sh\nfor a in \"$@\"; do case \"$a\" in --execute=*) printf 'cpr_restore_0123456789abcdef@localhost\\nroot@localhost\\ncpr_restore_mine@%%\\ncpr_restore_fedcba9876543210@bad`host\\n'; exit 0;; esac; done\ncat >> " + shellQuoteForTest(sql) + "\n"
 	if err := os.WriteFile(client, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	r := &Real{MysqlPath: client, SandboxRoot: root}
 
-	cleared, logins, err := r.ClearInterrupted(t.Context())
+	cleared, dropped, err := r.ClearInterrupted(t.Context())
 	if err != nil {
 		t.Fatalf("ClearInterrupted: %v", err)
 	}
@@ -100,10 +101,15 @@ func TestStartupClearsWhatAKilledImportLeft(t *testing.T) {
 	if _, err := os.Stat(other); err != nil {
 		t.Errorf("a directory that is not a sandbox was removed: %v", err)
 	}
-	// Named, not dropped: dropping a login changes the live server. And
-	// only a login this program made is named -- not an operator's own
-	// that happens to share the prefix.
-	if len(logins) != 1 || logins[0] != "cpr_restore_0123456789abcdef@localhost" {
-		t.Errorf("logins = %v, want only the one a restore made", logins)
+	// Dropped, at the operator's word -- and only a login of exactly the
+	// shape this program makes: not root, not an operator's own that
+	// shares the prefix, and not one at a host that could not be quoted
+	// into a statement.
+	if len(dropped) != 1 || dropped[0] != "cpr_restore_0123456789abcdef@localhost" {
+		t.Errorf("dropped = %v, want only the one a restore made", dropped)
+	}
+	ran, _ := os.ReadFile(sql)
+	if string(ran) != "DROP USER `cpr_restore_0123456789abcdef`@`localhost`;\n" {
+		t.Errorf("SQL sent to the server:\n%s", ran)
 	}
 }

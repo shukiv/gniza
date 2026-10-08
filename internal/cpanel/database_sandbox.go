@@ -92,24 +92,27 @@ const (
 )
 
 // restoreLogin is a login this program made, and nothing else: the prefix
-// and the sixteen hex digits it was given, at whatever host.
-var restoreLogin = regexp.MustCompile(`^cpr_restore_[0-9a-f]{16}@[^\s]+$`)
+// and the sixteen hex digits it was given, at a host made of the
+// characters a host in mysql.user is made of. The host is quoted into a
+// DROP USER, so nothing outside that set is accepted.
+var restoreLogin = regexp.MustCompile(`^(cpr_restore_[0-9a-f]{16})@([A-Za-z0-9._%:-]+)$`)
 
-// ClearInterrupted removes what an import that was killed left behind,
-// and names what it does not remove.
+// ClearInterrupted removes what an import that was killed left behind:
+// its option file and its login.
 //
-// Each import takes its own option file and its own login away when it
-// returns. A process that is killed never returns: the file stays, with a
-// database password in it, and so does the login. The files are removed
-// here. The logins are only named -- dropping one changes the live
-// database server, which is the operator's to decide -- and with the file
-// gone nothing on this server knows their passwords any more.
+// Each import takes both away when it returns. A process that is killed
+// never returns: the file stays, with a database password in it, and so
+// does the login, a grant on a customer's database that nothing can use
+// once the file is gone. Both are removed here. Dropping a login changes
+// the live database server, and the operator said to (2026-10-08): only
+// a login of exactly the shape this program makes is touched, so an
+// operator's own that happens to share the prefix is left alone.
 //
 // It is called once at startup, where no import of this process is
 // running yet. The temporary directory is shared with everything else on
 // the server, so only a real directory this user owns is touched: a link
 // by that name, or somebody else's directory, is left where it is.
-func (r *Real) ClearInterrupted(ctx context.Context) (cleared int, logins []string, err error) {
+func (r *Real) ClearInterrupted(ctx context.Context) (cleared int, dropped []string, err error) {
 	root := r.SandboxRoot
 	if root == "" {
 		root = os.TempDir()
@@ -146,11 +149,18 @@ func (r *Real) ClearInterrupted(ctx context.Context) (cleared int, logins []stri
 		failures = append(failures, fmt.Errorf("cpanel: look for restore logins left behind: %w", err))
 	}
 	for _, line := range strings.Split(string(out), "\n") {
-		if line = strings.TrimSpace(line); restoreLogin.MatchString(line) {
-			logins = append(logins, line)
+		parts := restoreLogin.FindStringSubmatch(strings.TrimSpace(line))
+		if parts == nil {
+			continue
 		}
+		principal := "`" + parts[1] + "`@`" + parts[2] + "`"
+		if err := r.databaseAdminSQL(ctx, "DROP USER "+principal+";\n"); err != nil {
+			failures = append(failures, fmt.Errorf("cpanel: drop restore login %s left behind: %w", parts[0], err))
+			continue
+		}
+		dropped = append(dropped, parts[0])
 	}
-	return cleared, logins, errors.Join(failures...)
+	return cleared, dropped, errors.Join(failures...)
 }
 
 func (r *Real) databaseAdminSQL(ctx context.Context, statement string) error {

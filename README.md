@@ -1,3 +1,15 @@
+<p align="center">
+  <img src="packaging/branding/gniza-logo.svg" alt="Gniza — Backup. Restore. Repeat." width="348" height="96">
+</p>
+
+<p align="center">
+  <a href="https://github.com/shukiv/gniza/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/shukiv/gniza?label=release&color=F47216"></a>
+  <a href="https://github.com/shukiv/gniza/actions/workflows/release.yml"><img alt="Release build" src="https://img.shields.io/github/actions/workflow/status/shukiv/gniza/release.yml?label=build"></a>
+  <a href="go.mod"><img alt="Go version" src="https://img.shields.io/github/go-mod/go-version/shukiv/gniza"></a>
+  <a href="https://restic.net/"><img alt="Built on restic" src="https://img.shields.io/badge/built%20on-restic-0c6cd9"></a>
+  <a href="docs/README.md"><img alt="Runs on cPanel/WHM, DirectAdmin and plain servers" src="https://img.shields.io/badge/runs%20on-cPanel%20%7C%20DirectAdmin%20%7C%20plain%20server-555"></a>
+</p>
+
 # Gniza
 
 **Backup. Restore. Repeat.**

@@ -172,6 +172,35 @@ refused only when what you picked includes a folder, whose size the
 backup cannot state — a mailbox is a folder of messages, so it counts as
 one.
 
+## Removing a destination says "Not removed"
+
+The recovery key of that destination was never noted as saved off this
+server, and removing it would revoke the only copy of the repository
+password, leaving every backup there unreadable. Press **Recovery key** on
+the destination, keep the key somewhere that survives this server, press
+**I have written it down**, and remove it then. It is a refusal rather than
+a stronger confirmation because a one-sentence confirmation already lost
+twelve nights of nineteen accounts once.
+
+## A restore of a whole account failed with "restore archive … is a directory"
+
+Fixed in v0.3.14. The agent rebuilds the account as a directory and hands
+that to cPanel's `restorepkg`, which takes one; a check in front of it still
+refused anything but a file, so every whole-account restore of a backup
+stored as a tree failed before cPanel was asked anything. Rehearsals,
+restores left to collect and single-item restores were not affected, which
+is how it went unseen. Upgrade and restore again.
+
+## The service log says it cleared or dropped something at startup
+
+`cleared database password files left by an interrupted restore` and
+`dropped database logins left behind by an interrupted restore`: a database
+restore runs through a login made for that one import, with its password in
+a file under the temporary directory, and takes both away when it ends. A
+process killed mid-import takes away neither. At startup Gniza removes those
+files and drops those logins — only a login of exactly the shape it makes,
+`cpr_restore_` and sixteen hex digits. Nothing to do.
+
 ## A destination stops answering
 
 The destination row says when it was last reachable. Test it from the row menu

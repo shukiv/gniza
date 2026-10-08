@@ -139,6 +139,19 @@ so this is where you clear them out when you are done.
 The global payload: home directory, databases, email. A schedule can exclude
 more on top of this, never less.
 
+Some things are left out of every home directory without being asked, because
+they are copies of what the backup already holds: the archives the one-click
+installers write on every automatic update — `application_backups`,
+`softaculous_backups`, `wordpress-backups` — on cPanel and DirectAdmin alike.
+Each is a fresh compression of a site and a dump of its database that shares
+almost nothing with the night before, so it was gigabytes of upload a night
+for nothing. On DirectAdmin the list also covers what DirectAdmin's own backup
+skips (`backups`, `user_backups`, `admin_backups` and the system-named
+directories), `.cagefs`, `lscache`, `.jb-roundcube` and the file manager's
+`.trash`. On cPanel, `/etc/cpbackup-exclude.conf` and each account's own
+`cpbackup-exclude.conf` are obeyed as well: a path written there does not
+leave the server.
+
 Changing it changes what future backups hold. It does not change what existing
 backups hold, and — with termination safety on — enabling that safety again
 requires a fresh backup, because an old job record does not prove which

@@ -26,6 +26,16 @@ Then it shows the **recovery key** once. Keep it with your other break-glass
 material. A destination whose key is lost is a destination whose backups are
 noise.
 
+Until you press **I have written it down** under the key, the destinations
+page keeps saying that the key exists only on this server — and the
+destination **cannot be removed**. Removing a destination revokes the
+repository password held here; if that was the only copy, every backup
+stored there becomes unreadable for good. So a destination whose key was
+never noted as saved is refused removal, with a message saying to press
+**Recovery key**, keep it somewhere else and confirm first. A destination
+whose repository was never created has nothing to lose and is removed as
+before.
+
 ## Logging in to another Linux server
 
 The form asks how the backups log in, under *Log in with*:
@@ -80,7 +90,9 @@ for SFTP. Object stores do not report a size, so they say so rather than
 inventing one.
 
 **Edit** sits on the row. Everything else — test the connection, browse what it
-holds, remove it — is under the row menu.
+holds, remove it — is under the row menu. Removing one leaves what is stored
+there untouched but takes this server's copy of the recovery key with it;
+after that the backups can be read only with the copy you saved.
 
 ## Reading it back
 

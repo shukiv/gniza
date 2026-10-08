@@ -2,12 +2,15 @@
 
 Hosting-panel backup orchestration on top of [restic](https://restic.net/).
 
-cPanel/WHM is the panel Gniza runs on today, and everything below describes
-it. DirectAdmin is partly implemented and refuses what it cannot yet do —
-see [DirectAdmin](guide/directadmin.md) for exactly how far it goes; Plesk
-is planned. Where a page says cPanel it means the panel this server runs,
-and the parts that are genuinely cPanel's own — `pkgacct`, `restorepkg`,
-Feature Manager — say so by name.
+cPanel/WHM and DirectAdmin are the panels Gniza runs on, and a plain Linux
+server without a panel is supported too — see [DirectAdmin](guide/directadmin.md)
+for what is still refused there and [Plain server](guide/plain-server.md)
+for the other. Plesk is planned. Where a page says cPanel it means the panel
+this server runs, and the parts that are genuinely cPanel's own — `pkgacct`,
+`restorepkg`, Feature Manager — say so by name.
+
+The state of the fleet, what shipped last, and what to pick up next are in
+the latest handoff: [handoff-2026-10-08.md](handoff-2026-10-08.md).
 
 ## For operators
 

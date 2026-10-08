@@ -68,7 +68,12 @@ Choose an account and a destination. The page then shows:
 - **Available backups** of the chosen account — pick one, or press *Pick files
   from it* to browse what is actually inside and tick the paths you want.
   Folders come back whole, and what you pick stays picked as you move between
-  folders.
+  folders. **Check the date of the backup that is ticked before you
+  overwrite a live account**: the first row is ticked for you, and the
+  first row is not always the newest night — on one server it was the
+  backup taken the moment the account first appeared, and a restore of it
+  put the account back to its first night without a word. This is tracked
+  as `cprest-88j`.
 - **Restore one thing** — a single mailbox, database, DNS zone, cron job, SSL
   item or FTP setting, taken out of a backup without rebuilding the account.
   What comes back is left on this server to collect.

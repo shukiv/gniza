@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="packaging/branding/gniza-logo.svg" alt="Gniza — Backup. Restore. Repeat." width="348" height="96">
+  <img src="packaging/branding/gniza-logo.svg" alt="Gniza — Backup. Restore. Repeat." width="400" height="96">
 </p>
 
 <p align="center">

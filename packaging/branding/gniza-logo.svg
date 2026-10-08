@@ -6,9 +6,11 @@
   a page heading. The mark is an outline and needs nothing. The words are
   set as text, and an <img> inherits neither font nor colour from the page
   around it, so the face is pinned with textLength and the ink follows the
-  reader's theme.
+  reader's theme. The canvas is wider than the ink: GitHub's image proxy
+  rasterises the text in whatever face it has, and at 348 wide the end of
+  "Backup" was cut off.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 348 96" width="348" height="96"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 96" width="400" height="96" overflow="visible"
      role="img" aria-label="Gniza Backup — Backup. Restore. Repeat.">
   <style>
     .gz-ink    { fill:#0F172A; }

@@ -94,6 +94,10 @@ type Server struct {
 	// authorization on that socket. Nil on a cPanel server, where no
 	// DirectAdmin socket is opened.
 	daSessions daVerifier
+	// daRefusals remembers which accounts DirectAdmin has lately refused
+	// a session for, so a process guessing sessions is answered here
+	// rather than by DirectAdmin every time.
+	daRefusals refusalLog
 	// browser is the door on the TCP listener, for a server with no
 	// panel: a password, sessions and a lockout. Nil where nothing
 	// listens on a port. See browser.go.

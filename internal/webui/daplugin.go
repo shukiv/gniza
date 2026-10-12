@@ -10,8 +10,87 @@ import (
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 )
+
+const (
+	// daRefusalsAllowed is how many sessions DirectAdmin may refuse for
+	// one account within daRefusalWindow before the account socket stops
+	// asking and refuses on its own for the rest of the window. A person
+	// whose session expired is refused once and signs in again; a
+	// process guessing sessions is refused thousands of times, and every
+	// one of those was a call from root to DirectAdmin's own API -- and,
+	// if DirectAdmin's brute-force monitor counts them, a step toward the
+	// server locking out its own address.
+	daRefusalsAllowed = 5
+	daRefusalWindow   = time.Minute
+)
+
+// refusalLog counts recent refusals per account.
+type refusalLog struct {
+	mu    sync.Mutex
+	since map[string]refusalCount
+	now   func() time.Time
+}
+
+type refusalCount struct {
+	count int
+	from  time.Time
+}
+
+// blocked says whether an account has been refused too often lately to
+// be worth asking DirectAdmin about again yet.
+func (l *refusalLog) blocked(account string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	entry, found := l.since[account]
+	if !found || l.clock().Sub(entry.from) >= daRefusalWindow {
+		return false
+	}
+	return entry.count >= daRefusalsAllowed
+}
+
+// refused records one refusal.
+func (l *refusalLog) refused(account string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.since == nil {
+		l.since = map[string]refusalCount{}
+	}
+	now := l.clock()
+	entry, found := l.since[account]
+	if !found || now.Sub(entry.from) >= daRefusalWindow {
+		entry = refusalCount{from: now}
+	}
+	entry.count++
+	l.since[account] = entry
+	// A map that only grows is a map a process could grow: one entry
+	// per account name is the most it can hold, but the entries of
+	// accounts long quiet are not kept for nothing.
+	if len(l.since) > 1024 {
+		for name, stale := range l.since {
+			if now.Sub(stale.from) >= daRefusalWindow {
+				delete(l.since, name)
+			}
+		}
+	}
+}
+
+// accepted forgets an account's refusals: the session it carries is
+// real, so what came before was not a guess that is still going on.
+func (l *refusalLog) accepted(account string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.since, account)
+}
+
+func (l *refusalLog) clock() time.Time {
+	if l.now != nil {
+		return l.now()
+	}
+	return time.Now()
+}
 
 const (
 	// daSessionHeader and daKeyHeader carry the session DirectAdmin put
@@ -135,16 +214,27 @@ func (s *Server) requireDirectAdminAccount(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "Open Gniza from inside DirectAdmin.", http.StatusForbidden)
 		return nil, false
 	}
+	// Refused too often lately: not asked about again until the window
+	// passes. The count is per account because the uid is what a
+	// guessing process has, and the refusal costs DirectAdmin nothing.
+	if s.daRefusals.blocked(account) {
+		http.Error(w, "DirectAdmin has refused too many sessions for this account. "+
+			"Wait a minute, then open Gniza from inside DirectAdmin.", http.StatusTooManyRequests)
+		return nil, false
+	}
 	who, err := s.daSessions.verify(r.Context(), sessionID, sessionKey)
 	if err != nil {
 		// The error can name the session it was asked about, so it
 		// goes to the log and not to the page.
 		s.log.Warn("account interface: DirectAdmin session refused", "account", account, "error", err)
 		if errors.Is(err, errDASessionUnavailable) {
+			// Not counted: DirectAdmin did not answer, and that is not
+			// the account's doing.
 			http.Error(w, "Gniza could not verify your DirectAdmin session. "+
 				"Ask your host to check the service.", http.StatusServiceUnavailable)
 			return nil, false
 		}
+		s.daRefusals.refused(account)
 		http.Error(w, "DirectAdmin did not accept this session. Sign in again.", http.StatusForbidden)
 		return nil, false
 	}
@@ -154,9 +244,11 @@ func (s *Server) requireDirectAdminAccount(w http.ResponseWriter, r *http.Reques
 		// other, and the page is not served.
 		s.log.Warn("account interface: DirectAdmin session is another account's",
 			"account", account, "session", who.Username, "type", who.UserType)
+		s.daRefusals.refused(account)
 		http.Error(w, "Open Gniza from inside DirectAdmin.", http.StatusForbidden)
 		return nil, false
 	}
+	s.daRefusals.accepted(account)
 	return r.WithContext(context.WithValue(r.Context(), daPrincipalKey{}, who)), true
 }
 

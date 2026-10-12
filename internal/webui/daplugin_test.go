@@ -370,16 +370,106 @@ func TestTheAccountSocketOnDirectAdminTakesTheAccountsOwnSession(t *testing.T) {
 // and asking for one is asking the account socket for a page it does not
 // have.
 func TestTheAccountSocketOnDirectAdminIssuesNoCapability(t *testing.T) {
-	server := &Server{daSessions: &stubDASessions{who: daPrincipal{Username: "studio", UserType: "user"}},
-		log: slog.New(slog.DiscardHandler)}
+	sessions := &stubDASessions{who: daPrincipal{Username: "studio", UserType: "user"}}
+	server := &Server{daSessions: sessions, log: slog.New(slog.DiscardHandler)}
 	request := httptest.NewRequest(http.MethodPost, capabilityEndpoint, nil)
 	request = request.WithContext(context.WithValue(request.Context(), accountKey{}, "studio"))
 	request.Header.Set(daSessionHeader, testDASession)
 	request.Header.Set(daKeyHeader, testDAKey)
 	response := httptest.NewRecorder()
 	server.UserHandler().ServeHTTP(response, request)
-	if response.Code == http.StatusOK {
-		t.Fatalf("a capability was issued on DirectAdmin: %s", response.Body.String())
+	// The session is checked, the page is then not one the socket has:
+	// an answer other than 404 would mean the request reached the
+	// cPanel endpoint, which has no business on DirectAdmin.
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404: %s", response.Code, response.Body.String())
+	}
+}
+
+// The page is named in the query and reaches the real routes behind the
+// real check. A form posted to p=restore lands on the restore route and
+// not on the overview, which answers GET only; the route itself then
+// refuses for a reason of its own (no engine here), which is further
+// than a wrong route gets.
+func TestDirectAdminQueryRoutingReachesTheRealRoutes(t *testing.T) {
+	server, err := New(nil, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.daSessions = &stubDASessions{who: daPrincipal{Username: "studio", UserType: "user"}}
+	handler := server.UserHandler()
+	send := func(method, target string) int {
+		request := httptest.NewRequest(method, target, strings.NewReader("csrf=x"))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		request = request.WithContext(context.WithValue(request.Context(), accountKey{}, "studio"))
+		request.Header.Set(daSessionHeader, testDASession)
+		request.Header.Set(daKeyHeader, testDAKey)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		return response.Code
+	}
+	if code := send(http.MethodPost, "/?p=restore"); code == http.StatusNotFound || code == http.StatusMethodNotAllowed {
+		t.Errorf("POST ?p=restore did not reach the restore route: %d", code)
+	}
+	if code := send(http.MethodGet, "/?p=restore"); code != http.StatusMethodNotAllowed {
+		t.Errorf("GET ?p=restore = %d, want 405", code)
+	}
+	if code := send(http.MethodGet, "/?p=nowhere"); code != http.StatusNotFound {
+		t.Errorf("GET ?p=nowhere = %d, want 404", code)
+	}
+	if code := send(http.MethodGet, "/?p=browse&repository=r"); code == http.StatusNotFound || code == http.StatusMethodNotAllowed {
+		t.Errorf("GET ?p=browse did not reach the browse route: %d", code)
+	}
+}
+
+// A process guessing sessions is refused by DirectAdmin a few times and
+// then by this socket alone: DirectAdmin is not asked again for the
+// rest of the minute. A session DirectAdmin did accept clears the count,
+// and a panel that did not answer counts against nobody.
+func TestRepeatedlyRefusedSessionsAreNotPutToDirectAdminAgain(t *testing.T) {
+	sessions := &stubDASessions{err: fmt.Errorf("%w: no", errDASessionDenied)}
+	now := time.Unix(1_800_000_000, 0)
+	server := &Server{daSessions: sessions, log: slog.New(slog.DiscardHandler)}
+	server.daRefusals.now = func() time.Time { return now }
+	guarded := server.requireUserCapability(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	ask := func() int {
+		response := httptest.NewRecorder()
+		guarded.ServeHTTP(response, accountRequest("studio", true))
+		return response.Code
+	}
+	for i := 0; i < daRefusalsAllowed; i++ {
+		if code := ask(); code != http.StatusForbidden {
+			t.Fatalf("refusal %d = %d, want 403", i+1, code)
+		}
+	}
+	if code := ask(); code != http.StatusTooManyRequests {
+		t.Fatalf("after %d refusals = %d, want 429", daRefusalsAllowed, code)
+	}
+	if sessions.asked != daRefusalsAllowed {
+		t.Fatalf("DirectAdmin was asked %d times, want %d", sessions.asked, daRefusalsAllowed)
+	}
+	// Another account is not held to this one's count.
+	response := httptest.NewRecorder()
+	guarded.ServeHTTP(response, accountRequest("other", true))
+	if response.Code != http.StatusForbidden || sessions.asked != daRefusalsAllowed+1 {
+		t.Errorf("another account: %d after %d asks", response.Code, sessions.asked)
+	}
+	// The window passes and DirectAdmin is asked again.
+	now = now.Add(daRefusalWindow)
+	if code := ask(); code != http.StatusForbidden {
+		t.Errorf("after the window = %d, want 403", code)
+	}
+	// A real session clears the count; a panel that does not answer
+	// adds nothing to it.
+	sessions.err, sessions.who = nil, daPrincipal{Username: "studio", UserType: "user"}
+	if code := ask(); code != http.StatusOK {
+		t.Fatalf("real session = %d", code)
+	}
+	sessions.err = fmt.Errorf("%w: timeout", errDASessionUnavailable)
+	for i := 0; i < daRefusalsAllowed+2; i++ {
+		if code := ask(); code != http.StatusServiceUnavailable {
+			t.Fatalf("unavailable %d = %d, want 503", i+1, code)
+		}
 	}
 }
 

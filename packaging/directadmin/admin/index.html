@@ -67,8 +67,17 @@ command -v curl >/dev/null 2>&1 ||
 # are a configuration file of their own, made with the private mode
 # this script's umask gives everything, and standard input is the form.
 CFG=$(mktemp) || fail 'This page could not make a private file to work in.'
+# Removed on the way out, a signal included: the shell runs the EXIT
+# trap on exit, and a signal is turned into one so that it does.
 trap 'rm -f -- "$CFG"' EXIT
-set -- \
+trap 'exit 1' HUP INT TERM
+# -q first, before anything else: curl otherwise reads ~/.curlrc, and
+# the account this runs as owns that file. A line in it such as
+# trace-ascii would write every header -- the session with them -- to
+# a file of the account's choosing on every page load. --globoff, so
+# that brackets and braces in the query are characters and not a
+# request per combination.
+set -- -q --globoff \
 	--silent --max-time 300 \
 	--location --max-redirs 5 --proto '=http' \
 	--unix-socket "$SOCKET" \

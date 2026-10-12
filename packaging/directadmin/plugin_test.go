@@ -129,7 +129,8 @@ func theAdminPageNeverPrintsTheSession(t *testing.T, page string) {
 	if strings.Contains(stripComments(page), "--header \"X-Gniza-DA") {
 		t.Error("the session is on curl's command line, where every local user can read it")
 	}
-	for _, want := range []string{`--config "$CFG"`, "CFG=$(mktemp)", `trap 'rm -f -- "$CFG"' EXIT`, "umask 077",
+	for _, want := range []string{`--config "$CFG"`, "CFG=$(mktemp)", `trap 'rm -f -- "$CFG"' EXIT`, `trap 'exit 1' HUP INT TERM`,
+		"umask 077", "set -- -q --globoff",
 		`header = "X-Gniza-DA-Session: %s"`, `header = "X-Gniza-DA-Key: %s"`,
 		`session_config >"$CFG"`, `*[!A-Za-z0-9:_.-]*) fail`} {
 		if !strings.Contains(page, want) {
@@ -597,5 +598,21 @@ func TestTheAccountPageReachesTheAccountSocketWithTheSession(t *testing.T) {
 	}
 	if _, found := setting(t, "user_run_as"); found {
 		t.Error("plugin.conf names a user_run_as, so the account socket would see that account instead of the customer")
+	}
+}
+
+// curl reads ~/.curlrc unless -q is its first argument, and the account
+// the page runs as owns that file: a trace-ascii line in it would write
+// the session to a file on every page load. So -q is first, and a glob
+// in the query is a character rather than a request per combination.
+func TestCurlIsToldToIgnoreTheAccountsOwnConfiguration(t *testing.T) {
+	for _, name := range []string{"admin/index.html", "user/index.html"} {
+		page := stripComments(read(t, name))
+		if !strings.Contains(page, "set -- -q --globoff") {
+			t.Errorf("%s does not put -q first and --globoff beside it", name)
+		}
+		if !strings.Contains(page, `| curl "$@"`) || !strings.Contains(page, "\n\tcurl \"$@\"") {
+			t.Errorf("%s calls curl with something before \"$@\", so -q is not first", name)
+		}
 	}
 }

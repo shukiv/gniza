@@ -5,6 +5,7 @@ import (
 
 	"context"
 	"errors"
+	"fmt"
 	"github.com/shukiv/gniza/internal/job"
 	"io"
 	"log/slog"
@@ -254,6 +255,7 @@ func TestAccountRecoveryPagesRenderTheGuidedFlow(t *testing.T) {
 	request = request.WithContext(context.WithValue(request.Context(), accountKey{}, "studio"))
 	response := httptest.NewRecorder()
 	server.renderUser(response, request, "user_browse.html", userView{
+		Downloads: true, Links: userLinks{cpanel: true},
 		Account: "studio", Kinds: userKinds, Repository: "repo", Snapshot: "abcdef",
 		SnapshotAt: now, Snapshots: []resticrun.Snapshot{{ID: "abcdef", Time: now}},
 	})
@@ -301,6 +303,7 @@ func TestTheRecoveryPageOffersPuttingBackOnlyWhereItIsPossible(t *testing.T) {
 	}
 
 	databases := render(granular.KindDatabase, userView{
+		Downloads: true, Links: userLinks{cpanel: true},
 		Root: "/var/lib/gniza/staging/stage-studio/databases",
 		Path: "/var/lib/gniza/staging/stage-studio/databases",
 		Entries: []browseEntry{{
@@ -332,7 +335,7 @@ func TestTheRecoveryPageOffersPuttingBackOnlyWhereItIsPossible(t *testing.T) {
 	// go through the other form on the same page. That form has to offer
 	// the same two choices, and a database restored without the user that
 	// reads it is the reason it matters.
-	users := render(granular.KindDBUsers, userView{})
+	users := render(granular.KindDBUsers, userView{Downloads: true, Links: userLinks{cpanel: true}})
 	for _, want := range []string{
 		`name="action" value="restore"`,
 		`name="action" value="download"`,
@@ -345,7 +348,7 @@ func TestTheRecoveryPageOffersPuttingBackOnlyWhereItIsPossible(t *testing.T) {
 	}
 
 	// DNS is put back by the host, so the page offers only the copy.
-	dns := render(granular.KindDNS, userView{})
+	dns := render(granular.KindDNS, userView{Downloads: true, Links: userLinks{cpanel: true}})
 	if strings.Contains(dns, `value="restore"`) || strings.Contains(dns, `name="confirm"`) {
 		t.Error("DNS records were offered for writing into the live account")
 	}
@@ -356,7 +359,7 @@ func TestTheRecoveryPageOffersPuttingBackOnlyWhereItIsPossible(t *testing.T) {
 
 func TestAccountRedirectUsesTheCPanelLivePHPEntryPoint(t *testing.T) {
 	response := httptest.NewRecorder()
-	redirectUser(response, "/browse?repository=repo&snapshot=abc&item=database",
+	redirectUser(response, userLinks{cpanel: true}, "/browse?repository=repo&snapshot=abc&item=database",
 		"error", "Choose an item")
 	if response.Code != http.StatusSeeOther {
 		t.Fatalf("redirect status = %d", response.Code)
@@ -628,5 +631,113 @@ func TestPackageNamesAreReadAsOneLine(t *testing.T) {
 		if _, err := packageNames(bad); err == nil {
 			t.Errorf("%q was accepted as a package list", bad)
 		}
+	}
+}
+
+// The same page is served on two panels whose plugins are reached
+// differently: cPanel's by a file per page, DirectAdmin's by one address
+// with the page in its query. The links and the redirects follow.
+func TestAccountLinksFollowThePanel(t *testing.T) {
+	cpanel := userLinks{cpanel: true}
+	directadmin := userLinks{}
+	cases := []struct {
+		links userLinks
+		route string
+		pairs []any
+		want  string
+	}{
+		{cpanel, "index", nil, "index.live.php"},
+		{cpanel, "browse", []any{"repository", "repo", "item", granular.KindFiles}, "browse.live.php?item=files&repository=repo"},
+		{cpanel, "download", []any{"id", "r1"}, "download.live.php?id=r1"},
+		{directadmin, "index", nil, "?p=index"},
+		{directadmin, "browse", []any{"repository", "repo", "item", granular.KindFiles}, "?item=files&p=browse&repository=repo"},
+		{directadmin, "restore", nil, "?p=restore"},
+		{directadmin, "browse", []any{"path", "/home/a b/&c"}, "?p=browse&path=%2Fhome%2Fa+b%2F%26c"},
+	}
+	for _, c := range cases {
+		if got := c.links.URL(c.route, c.pairs...); got != c.want {
+			t.Errorf("%+v.URL(%q, %v) = %q, want %q", c.links, c.route, c.pairs, got, c.want)
+		}
+	}
+
+	response := httptest.NewRecorder()
+	redirectUser(response, directadmin, "/browse?repository=repo&snapshot=abc", "error", "Choose an item")
+	if location := response.Header().Get("Location"); location != "?kind=error&msg=Choose+an+item&p=browse&repository=repo&snapshot=abc" {
+		t.Errorf("DirectAdmin redirect = %q", location)
+	}
+	response = httptest.NewRecorder()
+	redirectUser(response, directadmin, "/", "ok", "Started")
+	if location := response.Header().Get("Location"); location != "?kind=ok&msg=Started&p=index" {
+		t.Errorf("DirectAdmin redirect home = %q", location)
+	}
+}
+
+// DirectAdmin wraps everything a plugin prints in its skin, so nothing
+// can be downloaded through the account page there. What is offered is
+// what can be put back, and the controls that would hand over a file
+// are not on the page.
+func TestDirectAdminOffersOnlyWhatItCanPutBack(t *testing.T) {
+	cpanel := &Server{}
+	if got := cpanel.offeredUserKinds(); len(got) != len(userKinds) {
+		t.Errorf("cPanel offers %v, want every kind", got)
+	}
+	directadmin := &Server{daSessions: &stubDASessions{}}
+	want := []granular.Kind{granular.KindFiles, granular.KindCron, granular.KindDatabase,
+		granular.KindDBUsers, granular.KindMailbox}
+	got := directadmin.offeredUserKinds()
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("DirectAdmin offers %v, want %v", got, want)
+	}
+	for _, hidden := range []granular.Kind{userKindAccount, granular.KindDNS, granular.KindSSL,
+		granular.KindFTP, granular.KindDomains} {
+		if directadmin.offersUserKind(hidden) {
+			t.Errorf("DirectAdmin offers %s, which can only be downloaded", hidden)
+		}
+	}
+
+	server, err := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1_800_000_000, 0).UTC()
+	render := func(name string, view userView) string {
+		t.Helper()
+		view.Account = "studio"
+		view.Kinds = want
+		view.Links = userLinks{}
+		view.Panel = "DirectAdmin"
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		request = request.WithContext(context.WithValue(request.Context(), accountKey{}, "studio"))
+		response := httptest.NewRecorder()
+		server.renderUser(response, request, name, view)
+		if response.Code != http.StatusOK {
+			t.Fatalf("render %s = %d: %s", name, response.Code, response.Body.String())
+		}
+		return response.Body.String()
+	}
+	collectable := []restoreRow{{Restore: nodestore.Restore{ID: "r1", Account: "studio",
+		Status: job.StatusSuccess, ArchivePath: "/tmp/x"}, Collectable: true}}
+	pages := map[string]string{
+		"home": render("user_home.html", userView{TotalPoints: 1, Latest: now, Ready: 1, Restores: collectable}),
+		"logs": render("user_logs.html", userView{TotalPoints: 1, Restores: collectable}),
+		"browse": render("user_browse.html", userView{Repository: "repo", Snapshot: "abcdef", SnapshotAt: now,
+			Snapshots: []resticrun.Snapshot{{ID: "abcdef", Time: now}}, Kind: granular.KindDatabase}),
+	}
+	for name, page := range pages {
+		for _, absent := range []string{`value="download"`, "Download package", "Download a copy",
+			"ready to download", "live.php", "cPanel account", "cPanel login", "Full account", "DNS records", "FTP accounts"} {
+			if strings.Contains(page, absent) {
+				t.Errorf("the DirectAdmin %s page offers %q", name, absent)
+			}
+		}
+		if !strings.Contains(page, `href="?p=browse`) {
+			t.Errorf("the DirectAdmin %s page does not link the restore page by its query", name)
+		}
+	}
+	if !strings.Contains(pages["browse"], `action="?p=restore"`) {
+		t.Error("the DirectAdmin restore form does not post to the plugin's own address")
+	}
+	if !strings.Contains(pages["browse"], `value="restore"`) {
+		t.Error("the DirectAdmin restore page has no button that puts the databases back")
 	}
 }

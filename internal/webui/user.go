@@ -190,6 +190,12 @@ func (s *Server) UserHandler() http.Handler {
 	mux.HandleFunc("GET /download", s.userPage(s.handleUserDownload))
 
 	outer := http.NewServeMux()
+	if s.daSessions != nil {
+		// No capability to issue: the plugin carries the DirectAdmin
+		// session itself, and names the page in the query.
+		outer.Handle("/", s.requireUserCapability(directAdminPages(mux)))
+		return outer
+	}
 	outer.HandleFunc("POST "+capabilityEndpoint, s.issueUserCapability)
 	outer.Handle("/", s.requireUserCapability(mux))
 	return outer
@@ -272,7 +278,14 @@ func (f *inFlight) leave(key string) {
 type userView struct {
 	Account      string
 	Repositories []userRepository
-	Restores     []restoreRow
+	// Links is where this page's links point, which the panel decides.
+	Links userLinks
+	// Downloads says a restore can be handed over as a file here. Where
+	// it cannot, every control that would offer one stays off the page.
+	Downloads bool
+	// Panel names the control panel, for the copy that has to.
+	Panel    string
+	Restores []restoreRow
 	// Backups is this account's own backup history, on the logs page.
 	Backups     []userBackupRow
 	Kinds       []granular.Kind
@@ -370,7 +383,7 @@ func (v userView) KindTitle(k granular.Kind) string {
 func (v userView) KindDescription(k granular.Kind) string {
 	switch k {
 	case userKindAccount:
-		return "Everything in this backup as one cPanel account archive."
+		return "Everything in this backup as one " + v.Panel + " account archive."
 	case granular.KindFiles:
 		return "The whole home directory, or only selected files and folders."
 	case granular.KindCron:
@@ -446,7 +459,7 @@ func (v userView) PutBackNote() string {
 	case v.Kind == granular.KindDBUsers:
 		return "The users come back with the passwords they had and the access they had " +
 			"to this account's databases: a user that still exists is set back to the " +
-			"password in the backup. Your own cPanel login keeps its current password."
+			"password in the backup. Your own " + v.Panel + " login keeps its current password."
 	case v.Kind.CanApply():
 		return "This can go straight back into the account, or be downloaded as a copy."
 	}
@@ -509,8 +522,20 @@ func (v userView) RestoreTitle(row restoreRow) string {
 	return "Recovery package"
 }
 
+// userViewFor starts a page for the account behind a request, with what
+// every account page needs to know about the panel it is served on.
+func (s *Server) userViewFor(r *http.Request) userView {
+	return userView{
+		Account:   accountOf(r),
+		Kinds:     s.offeredUserKinds(),
+		Links:     s.userLinks(),
+		Downloads: s.accountDownloads(),
+		Panel:     s.panelName(),
+	}
+}
+
 func (s *Server) handleUserHome(w http.ResponseWriter, r *http.Request) {
-	view := userView{Account: accountOf(r), Kinds: userKinds}
+	view := s.userViewFor(r)
 	destinations, err := s.destinationViews()
 	if err != nil {
 		s.failUser(w, r, http.StatusInternalServerError, err)
@@ -584,15 +609,40 @@ var userKinds = []granular.Kind{
 	granular.KindFTP,
 }
 
-func (s *Server) handleUserBrowse(w http.ResponseWriter, r *http.Request) {
-	view := userView{
-		Account:    accountOf(r),
-		Kinds:      userKinds,
-		Repository: r.URL.Query().Get("repository"),
-		Snapshot:   r.URL.Query().Get("snapshot"),
-		Path:       r.URL.Query().Get("path"),
-		Kind:       granular.Kind(r.URL.Query().Get("item")),
+// offeredUserKinds is the part of that list this panel can do anything
+// with. A kind that can only be handed over as a copy -- the whole
+// account, the DNS records, the certificates, the FTP logins, the
+// domains -- is nothing to offer where nothing can be downloaded: a card
+// that leads to no button is a question with no answer.
+func (s *Server) offeredUserKinds() []granular.Kind {
+	if s.accountDownloads() {
+		return userKinds
 	}
+	var offered []granular.Kind
+	for _, kind := range userKinds {
+		if kind != userKindAccount && kind.CanApply() {
+			offered = append(offered, kind)
+		}
+	}
+	return offered
+}
+
+// offersUserKind says whether this panel's account page shows a kind.
+func (s *Server) offersUserKind(kind granular.Kind) bool {
+	for _, offered := range s.offeredUserKinds() {
+		if offered == kind {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) handleUserBrowse(w http.ResponseWriter, r *http.Request) {
+	view := s.userViewFor(r)
+	view.Repository = r.URL.Query().Get("repository")
+	view.Snapshot = r.URL.Query().Get("snapshot")
+	view.Path = r.URL.Query().Get("path")
+	view.Kind = granular.Kind(r.URL.Query().Get("item"))
 	if view.Repository == "" {
 		destinations, err := s.destinationViews()
 		if err != nil {
@@ -785,8 +835,16 @@ func (s *Server) handleUserRestore(w http.ResponseWriter, r *http.Request) {
 	// here as well means a request that reached this handler another way
 	// cannot replace an account's data without one.
 	if apply && r.PostFormValue("confirm") == "" {
-		redirectUser(w, "/", "error",
+		redirectUser(w, s.userLinks(), "/", "error",
 			"Tick the box to confirm before restoring into your account.")
+		return
+	}
+	// Where nothing can be downloaded, a copy is a file nobody can
+	// collect. The page offers no such button; a request that asks
+	// anyway is told the same thing.
+	if !apply && !s.accountDownloads() {
+		redirectUser(w, s.userLinks(), "/", "error",
+			"Downloads are not available here. Tick the box to put it back into your account instead.")
 		return
 	}
 	var (
@@ -810,10 +868,10 @@ func (s *Server) handleUserRestore(w http.ResponseWriter, r *http.Request) {
 			back := "/browse?repository=" + url.QueryEscape(r.PostFormValue("repository")) +
 				"&snapshot=" + url.QueryEscape(r.PostFormValue("snapshot")) +
 				"&item=" + url.QueryEscape(string(asked))
-			redirectUser(w, back, "error", "Choose at least one item to recover.")
+			redirectUser(w, s.userLinks(), back, "error", "Choose at least one item to recover.")
 			return
 		}
-		redirectUser(w, "/", "error", "That is not something you can restore here.")
+		redirectUser(w, s.userLinks(), "/", "error", "That is not something you can restore here.")
 		return
 	}
 
@@ -823,7 +881,7 @@ func (s *Server) handleUserRestore(w http.ResponseWriter, r *http.Request) {
 	// no protection at all.
 	if err := s.engine.OwnsSnapshot(r.Context(), restore.RepositoryID, account,
 		restore.SnapshotID); err != nil {
-		redirectUser(w, "/", "error", "That backup is not one of yours.")
+		redirectUser(w, s.userLinks(), "/", "error", "That backup is not one of yours.")
 		return
 	}
 	if _, err := s.engine.QueueRestore(restore); err != nil {
@@ -832,7 +890,7 @@ func (s *Server) handleUserRestore(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(err.Error(), "already has work in flight") {
 			message = "A backup or restore is already running for your account. Wait for it to finish."
 		}
-		redirectUser(w, "/", "error", message)
+		redirectUser(w, s.userLinks(), "/", "error", message)
 		return
 	}
 	if fromBasket {
@@ -843,12 +901,12 @@ func (s *Server) handleUserRestore(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if restore.Apply {
-		redirectUser(w, "/", "ok",
+		redirectUser(w, s.userLinks(), "/", "ok",
 			"Started. When it finishes, this part of your account will be back as it "+
 				"was in that backup.")
 		return
 	}
-	redirectUser(w, "/", "ok",
+	redirectUser(w, s.userLinks(), "/", "ok",
 		"Started. What it recovers will appear below to download; nothing on your account "+
 			"is changed.")
 }
@@ -857,7 +915,7 @@ func (s *Server) handleUserRestore(w http.ResponseWriter, r *http.Request) {
 // points. The WHM interface uses a single CGI and a ?p= route; using that
 // redirect here would send a GET to restore.live.php after a POST, which is
 // not a valid account capability and strands the user on a 403 page.
-func redirectUser(w http.ResponseWriter, route, kind, message string) {
+func redirectUser(w http.ResponseWriter, links userLinks, route, kind, message string) {
 	route = strings.TrimPrefix(route, "/")
 	query := url.Values{}
 	if base, extra, found := strings.Cut(route, "?"); found {
@@ -866,15 +924,94 @@ func redirectUser(w http.ResponseWriter, route, kind, message string) {
 			query = parsed
 		}
 	}
-	entry := "index.live.php"
-	if route == "browse" {
-		entry = "browse.live.php"
+	if route != "browse" {
+		route = "index"
 	}
 	query.Set("kind", kind)
 	query.Set("msg", message)
-	w.Header().Set("Location", entry+"?"+query.Encode())
+	w.Header().Set("Location", links.withQuery(route, query))
 	w.WriteHeader(http.StatusSeeOther)
 }
+
+// userLinks is where the account pages' links point, which the panel
+// decides. On cPanel each page is its own .live.php file and the proxy
+// behind it forwards the path. On DirectAdmin a plugin has one address
+// and only the query travels -- the admin page measured ?p=accounts
+// arriving as QUERY_STRING at /CMD_PLUGINS_ADMIN/gniza/index.html and
+// inside Evolution's /evo/plugin?src= wrapper alike -- so the page is
+// named in it as p=, which directAdminPages turns back into the route.
+type userLinks struct{ cpanel bool }
+
+func (s *Server) userLinks() userLinks { return userLinks{cpanel: s.daSessions == nil} }
+
+// URL is the address of one account page. Pairs are name, value, name,
+// value; a value that is not a string is written as text.
+func (l userLinks) URL(route string, pairs ...any) string {
+	query := url.Values{}
+	for i := 0; i+1 < len(pairs); i += 2 {
+		query.Set(fmt.Sprint(pairs[i]), fmt.Sprint(pairs[i+1]))
+	}
+	return l.withQuery(route, query)
+}
+
+func (l userLinks) withQuery(route string, query url.Values) string {
+	route = strings.Trim(route, "/")
+	if route == "" {
+		route = "index"
+	}
+	if l.cpanel {
+		if len(query) == 0 {
+			return route + ".live.php"
+		}
+		return route + ".live.php?" + query.Encode()
+	}
+	query.Set("p", route)
+	return "?" + query.Encode()
+}
+
+// userRoutes are the account pages as a DirectAdmin query names them.
+var userRoutes = map[string]string{
+	"index":    "/",
+	"browse":   "/browse",
+	"logs":     "/logs",
+	"restore":  "/restore",
+	"download": "/download",
+}
+
+// directAdminPages turns the one address a DirectAdmin plugin has into
+// the account interface's routes: p= says which page, and the rest of the
+// query is the page's own. The query is left whole, p= included, because
+// the page's live refresh is fetched from the address it arrived at
+// (liveURLFor) and has to name the same page.
+func directAdminPages(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		page := r.URL.Query().Get("p")
+		if page == "" {
+			page = "index"
+		}
+		route, known := userRoutes[page]
+		if !known {
+			http.NotFound(w, r)
+			return
+		}
+		routed := new(http.Request)
+		*routed = *r
+		address := *r.URL
+		address.Path = route
+		routed.URL = &address
+		next.ServeHTTP(w, routed)
+	})
+}
+
+// accountDownloads says whether an account can be handed a file at all.
+// DirectAdmin wraps everything a plugin prints in its skin, so a restore
+// archive cannot reach the browser as itself; there, what a customer
+// recovers is put back into the account and nothing is downloaded.
+func (s *Server) accountDownloads() bool { return s.daSessions == nil }
 
 var errUserRestoreNeedsNames = errors.New("account recovery needs at least one item")
 
@@ -976,6 +1113,12 @@ func (s *Server) handleUserDownload(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if !s.accountDownloads() {
+		// Nothing on this panel links here, and the panel would wrap
+		// the archive in its skin if something did.
+		http.NotFound(w, r)
+		return
+	}
 	s.handleDownload(w, r)
 }
 
@@ -1002,27 +1145,30 @@ func (s *Server) changeUserBasket(w http.ResponseWriter, r *http.Request,
 	if action == "empty" {
 		if err := s.engine.Store().EmptyBasket(nodestore.BasketOfAccount, account, repository, snapshot); err != nil {
 			s.log.Error("empty the recovery basket", "account", account, "error", err)
-			redirectUser(w, back, "error", "That could not be changed. Try again.")
+			redirectUser(w, s.userLinks(), back, "error", "That could not be changed. Try again.")
 			return
 		}
-		redirectUser(w, back, "ok", "Your recovery basket is empty again.")
+		redirectUser(w, s.userLinks(), back, "ok", "Your recovery basket is empty again.")
 		return
 	}
 
-	if !isUserKind(asked) || asked == userKindAccount {
+	if !s.offersUserKind(asked) || asked == userKindAccount {
 		// A whole account is not one thing among others: it is everything,
-		// and it is a download an operator decides on.
-		redirectUser(w, back, "error", "That is not something you can add to the basket.")
+		// and it is a download an operator decides on. And a kind this
+		// panel does not offer is not one to collect either: on
+		// DirectAdmin it would make the basket a download, which there
+		// is no way to hand over.
+		redirectUser(w, s.userLinks(), back, "error", "That is not something you can add to the basket.")
 		return
 	}
 	if action == "remove" {
 		if _, err := s.engine.Store().TakeFromBasket(nodestore.BasketOfAccount, account, repository, snapshot,
 			string(asked)); err != nil {
 			s.log.Error("change the recovery basket", "account", account, "error", err)
-			redirectUser(w, back, "error", "That could not be changed. Try again.")
+			redirectUser(w, s.userLinks(), back, "error", "That could not be changed. Try again.")
 			return
 		}
-		redirectUser(w, back, "ok", "Taken out of your recovery basket.")
+		redirectUser(w, s.userLinks(), back, "ok", "Taken out of your recovery basket.")
 		return
 	}
 
@@ -1039,11 +1185,11 @@ func (s *Server) changeUserBasket(w http.ResponseWriter, r *http.Request,
 		names = nil
 	}
 	if asked.NeedsNames() && len(names) == 0 {
-		redirectUser(w, back, "error", "Choose at least one item first.")
+		redirectUser(w, s.userLinks(), back, "error", "Choose at least one item first.")
 		return
 	}
 	if err := usableItemNames(asked, names); err != nil {
-		redirectUser(w, back, "error", "That is not something you can restore here.")
+		redirectUser(w, s.userLinks(), back, "error", "That is not something you can restore here.")
 		return
 	}
 
@@ -1051,10 +1197,10 @@ func (s *Server) changeUserBasket(w http.ResponseWriter, r *http.Request,
 		nodestore.RestoreSelection{Kind: string(asked), Names: names})
 	if err != nil {
 		s.log.Error("change the recovery basket", "account", account, "error", err)
-		redirectUser(w, back, "error", "That could not be added. Try again.")
+		redirectUser(w, s.userLinks(), back, "error", "That could not be added. Try again.")
 		return
 	}
-	redirectUser(w, back, "ok", fmt.Sprintf(
+	redirectUser(w, s.userLinks(), back, "ok", fmt.Sprintf(
 		"Added. Your recovery basket now holds %d.", basket.Count()))
 }
 

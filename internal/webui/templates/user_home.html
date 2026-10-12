@@ -8,13 +8,13 @@
       <p class="cpr:k">Account backup</p>
       {{if $data.TotalPoints}}
       <h1 class="cpr:page-title">Last backup {{agoTime $data.Latest}}. {{$data.TotalPoints}} restore point{{if ne $data.TotalPoints 1}}s{{end}} to choose from.</h1>
-      <p class="cpr:text-base-content/70">Browse the restore points for <b class="cpr:text-base-content">{{$data.Account}}</b>, put back what was lost, or download a copy.</p>
+      <p class="cpr:text-base-content/70">Browse the restore points for <b class="cpr:text-base-content">{{$data.Account}}</b>, put back what was lost{{if $data.Downloads}}, or download a copy{{end}}.</p>
       {{else}}
       <h1 class="cpr:page-title">No backup of your account is available yet.</h1>
       <p class="cpr:text-base-content/70">Your host sets up where and when <b class="cpr:text-base-content">{{$data.Account}}</b> is backed up. Once one has run, its restore points appear here.</p>
       {{end}}
     </div>
-    {{if $data.TotalPoints}}<a class="cpr:btn cpr:btn-sm cpr:btn-primary cpr:shrink-0" href="browse.live.php">Choose a restore point</a>{{end}}
+    {{if $data.TotalPoints}}<a class="cpr:btn cpr:btn-sm cpr:btn-primary cpr:shrink-0" href="{{$data.Links.URL "browse"}}">Choose a restore point</a>{{end}}
   </div>
 </section>
 
@@ -22,7 +22,7 @@
 <div class="cpr:alert cpr:alert-soft cpr:alert-warning"><div>{{.}}</div></div>
 {{end}}
 
-<section class="cpr:grid cpr:gap-3 cpr:sm:grid-cols-3" aria-label="Backup summary">
+<section class="cpr:grid cpr:gap-3 {{if $data.Downloads}}cpr:sm:grid-cols-3{{else}}cpr:sm:grid-cols-2{{end}}" aria-label="Backup summary">
   <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:rounded-box cpr:border cpr:border-base-300 cpr:bg-base-100 cpr:p-3">
     <svg class="cpr:size-6 cpr:text-primary cpr:shrink-0 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h2"/><path d="M20 8v11a2 2 0 0 1-2 2h-2"/><path d="m9 15 3-3 3 3"/><path d="M12 12v9"/></svg>
     <div><p class="cpr:text-lg cpr:font-semibold cpr:mono cpr:leading-tight">{{$data.TotalPoints}}</p><p class="cpr:text-xs cpr:text-base-content/60">restore points</p></div>
@@ -31,10 +31,10 @@
     <svg class="cpr:size-6 cpr:text-primary cpr:shrink-0 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
     <div><p class="cpr:text-lg cpr:font-semibold cpr:mono cpr:leading-tight">{{if $data.TotalPoints}}{{agoTime $data.Latest}}{{else}}—{{end}}</p><p class="cpr:text-xs cpr:text-base-content/60">latest backup</p></div>
   </div>
-  <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:rounded-box cpr:border cpr:border-base-300 cpr:bg-base-100 cpr:p-3">
+  {{if $data.Downloads}}<div class="cpr:flex cpr:items-center cpr:gap-3 cpr:rounded-box cpr:border cpr:border-base-300 cpr:bg-base-100 cpr:p-3">
     <svg class="cpr:size-6 cpr:text-primary cpr:shrink-0 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
     <div><p class="cpr:text-lg cpr:font-semibold cpr:mono cpr:leading-tight">{{$data.Ready}}</p><p class="cpr:text-xs cpr:text-base-content/60">ready to download</p></div>
-  </div>
+  </div>{{end}}
 </section>
 
 <section class="cpr:panel">
@@ -52,7 +52,7 @@
         <td class="cpr:mono">{{.Snapshots}}</td>
         <td class="cpr:whitespace-nowrap">{{if .Snapshots}}<span class="cpr:mono">{{stamp .Latest}}</span><div class="cpr:sublabel">{{agoTime .Latest}}</div>{{else}}<span class="cpr:text-base-content/70">Nothing yet</span>{{end}}</td>
         <td class="cpr:text-right cpr:whitespace-nowrap"><div class="cpr:join">
-          {{if .Snapshots}}<a class="cpr:btn cpr:btn-xs cpr:btn-primary cpr:join-item" href="browse.live.php?repository={{.ID}}">Browse backups</a>{{end}}
+          {{if .Snapshots}}<a class="cpr:btn cpr:btn-xs cpr:btn-primary cpr:join-item" href="{{$data.Links.URL "browse" "repository" .ID}}">Browse backups</a>{{end}}
         </div></td>
       </tr>
       {{end}}
@@ -81,7 +81,7 @@
         {{if .Collectable}}{{else if .Applied}}<span class="cpr:block cpr:text-xs cpr:text-base-content/60">Nothing to download: it is in your account.</span>
         {{else if .Error}}<span class="cpr:block cpr:text-xs cpr:text-error">{{.Error}}</span>{{end}}
       </span>
-      {{if .Collectable}}<a class="cpr:btn cpr:btn-xs cpr:btn-primary cpr:shrink-0 cpr:self-center" href="download.live.php?id={{.ID}}">Download package</a>{{end}}
+      {{if and .Collectable $data.Downloads}}<a class="cpr:btn cpr:btn-xs cpr:btn-primary cpr:shrink-0 cpr:self-center" href="{{$data.Links.URL "download" "id" .ID}}">Download package</a>{{end}}
     </li>
     {{end}}
   </ul>
@@ -91,8 +91,8 @@
   <div class="cpr:flex cpr:items-start cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-t cpr:border-base-300 cpr:bg-base-200 cpr:text-xs cpr:text-base-content/70 cpr:rounded-b-box">
     <svg class="cpr:size-5 cpr:shrink-0 cpr:fill-none cpr:stroke-success cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
     <p><b class="cpr:text-base-content">You choose what happens.</b> Files, mail, databases and their users can be put straight
-    back into the account, replacing what is there now. Everything else is prepared as a copy to
-    download, and nothing is changed until you ask for it.</p>
+    back into the account, replacing what is there now. {{if $data.Downloads}}Everything else is prepared as a copy to
+    download, and nothing{{else}}Nothing{{end}} is changed until you ask for it.</p>
   </div>
 </section>
 {{end}}

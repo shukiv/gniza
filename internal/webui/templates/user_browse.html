@@ -2,9 +2,9 @@
 {{$data := .Data}}
 <section class="cpr:flex cpr:flex-wrap cpr:items-end cpr:gap-3" data-user-heading>
   <div class="cpr:mr-auto">
-    <div class="cpr:text-xs cpr:text-base-content/70 cpr:mb-1 cpr:flex cpr:items-center cpr:gap-1.5"><a class="cpr:link cpr:link-primary cpr:link-hover" href="index.live.php">Overview</a><span aria-hidden="true">›</span><span>Restore &amp; download</span></div>
-    <h1 class="cpr:page-title">Restore &amp; download</h1>
-    <p class="cpr:page-sub">Choose a restore point, then choose what to put back or download.</p>
+    <div class="cpr:text-xs cpr:text-base-content/70 cpr:mb-1 cpr:flex cpr:items-center cpr:gap-1.5"><a class="cpr:link cpr:link-primary cpr:link-hover" href="{{$data.Links.URL "index"}}">Overview</a><span aria-hidden="true">›</span><span>{{if $data.Downloads}}Restore &amp; download{{else}}Restore{{end}}</span></div>
+    <h1 class="cpr:page-title">{{if $data.Downloads}}Restore &amp; download{{else}}Restore{{end}}</h1>
+    <p class="cpr:page-sub">Choose a restore point, then choose what to put back{{if $data.Downloads}} or download{{end}}.</p>
   </div>
 </section>
 
@@ -51,7 +51,7 @@
         <td class="cpr:font-semibold">{{.Title}}{{if not .Applies}} <span class="cpr:pill cpr:badge-warning">download only</span>{{end}}</td>
         <td>{{if .Names}}{{range $i, $name := .Names}}{{if $i}}, {{end}}{{$name}}{{end}}{{else}}<span class="cpr:text-base-content/70">All of them</span>{{end}}</td>
         <td class="cpr:text-right cpr:whitespace-nowrap">
-          <form method="post" action="restore.live.php" class="cpr:inline-block cpr:align-middle">
+          <form method="post" action="{{$data.Links.URL "restore"}}" class="cpr:inline-block cpr:align-middle">
             <input type="hidden" name="csrf" value="{{$.CSRF}}">
             <input type="hidden" name="repository" value="{{$data.Repository}}">
             <input type="hidden" name="snapshot" value="{{$data.Snapshot}}">
@@ -63,7 +63,7 @@
       {{end}}
     </tbody>
   </table></div>
-  <form method="post" action="restore.live.php">
+  <form method="post" action="{{$data.Links.URL "restore"}}">
     <input type="hidden" name="csrf" value="{{$.CSRF}}">
     <input type="hidden" name="repository" value="{{$data.Repository}}">
     <input type="hidden" name="snapshot" value="{{$data.Snapshot}}">
@@ -73,8 +73,8 @@
       <label class="cpr:flex cpr:items-start cpr:gap-3 cpr:flex-[1_1_34ch] cpr:min-w-0 cpr:me-auto cpr:text-xs cpr:leading-normal cpr:cursor-pointer cpr:max-md:me-0">
         <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5 cpr:shrink-0" name="confirm" value="1" required>
         <span><b>Put all of this back into my account.</b> What is there now is replaced by what
-        was in the backup, and anything added since is lost. Leave it unticked to download one
-        package with everything in it instead.</span>
+        was in the backup, and anything added since is lost.{{if $data.Downloads}} Leave it unticked to download one
+        package with everything in it instead.{{end}}</span>
       </label>
       {{else}}
       <div class="cpr:me-auto cpr:max-md:me-0"><b>This basket is a download</b><p class="cpr:hint">{{$data.BasketBlocker}} cannot be
@@ -83,7 +83,7 @@
       {{end}}
       <div class="cpr:flex cpr:gap-3 cpr:shrink-0 cpr:max-md:flex-col">
         <button class="cpr:btn cpr:btn-sm cpr:max-md:w-full" type="submit" name="action" value="empty" formnovalidate>Empty the basket</button>
-        <button class="cpr:btn cpr:btn-sm cpr:max-md:w-full" type="submit" name="action" value="download" formnovalidate>Download as one package</button>
+        {{if $data.Downloads}}<button class="cpr:btn cpr:btn-sm cpr:max-md:w-full" type="submit" name="action" value="download" formnovalidate>Download as one package</button>{{end}}
         {{if $data.BasketCanApply}}<button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline cpr:max-md:w-full" type="submit" name="action" value="restore">{{$data.BasketLabel}}</button>{{end}}
       </div>
     </div>
@@ -99,7 +99,7 @@
   <div class="cpr:grid cpr:gap-3 cpr:mt-3 cpr:grid-cols-3 cpr:max-md:grid-cols-2 cpr:max-sm:grid-cols-1">
     {{range $data.Kinds}}
     <a class="cpr:grid cpr:grid-cols-[42px_minmax(0,1fr)_18px] cpr:min-h-22 cpr:items-center cpr:gap-3 cpr:p-3.5 cpr:rounded-box cpr:border cpr:cursor-pointer cpr:transition-colors cpr:hover:border-primary cpr:max-sm:min-h-20 {{if $data.Selected .}}cpr:border-primary cpr:bg-primary/5{{else}}cpr:border-base-300 cpr:bg-base-100 cpr:hover:bg-base-200{{end}}"
-       href="browse.live.php?repository={{$data.Repository}}&amp;snapshot={{$data.Snapshot}}&amp;item={{.}}"
+       href="{{$data.Links.URL "browse" "repository" $data.Repository "snapshot" $data.Snapshot "item" .}}"
        {{if $data.Selected .}}aria-current="step"{{end}}>
       <span class="cpr:grid cpr:size-10 cpr:place-items-center cpr:rounded-field cpr:text-primary {{if $data.Selected .}}cpr:bg-base-100{{else}}cpr:bg-base-200{{end}}">
         <svg class="cpr:size-5 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true">
@@ -131,7 +131,7 @@
   </div>
 
   {{if $data.NeedsNames}}
-  <form method="post" action="restore.live.php">
+  <form method="post" action="{{$data.Links.URL "restore"}}">
     <input type="hidden" name="csrf" value="{{$.CSRF}}">
     <input type="hidden" name="repository" value="{{$data.Repository}}">
     <input type="hidden" name="snapshot" value="{{$data.Snapshot}}">
@@ -143,7 +143,7 @@
         <span class="cpr:k">Browsing</span>
         <span class="cpr:mono cpr:block cpr:overflow-hidden cpr:text-ellipsis cpr:whitespace-nowrap cpr:text-base-content/70">{{$data.Here}}</span>
       </div>
-      {{if $data.Up}}<a class="cpr:btn cpr:btn-xs" href="browse.live.php?repository={{$data.Repository}}&amp;snapshot={{$data.Snapshot}}&amp;item={{$data.Kind}}&amp;path={{$data.Up}}">Up one level</a>{{end}}
+      {{if $data.Up}}<a class="cpr:btn cpr:btn-xs" href="{{$data.Links.URL "browse" "repository" $data.Repository "snapshot" $data.Snapshot "item" $data.Kind "path" $data.Up}}">Up one level</a>{{end}}
     </div>
     {{end}}
 
@@ -162,7 +162,7 @@
         <tr>
           <td class="cpr:w-10 cpr:text-center">{{if .Item}}<input type="checkbox" class="cpr:checkbox cpr:checkbox-xs" name="name" value="{{.Item}}" aria-label="Select {{.Name}}">{{end}}</td>
           <td class="cpr:font-semibold">
-            {{if .Dir}}<a class="cpr:link cpr:link-primary cpr:link-hover" href="browse.live.php?repository={{$data.Repository}}&amp;snapshot={{$data.Snapshot}}&amp;item={{$data.Kind}}&amp;path={{.Path}}">{{.Name}}/</a>{{else}}{{.Name}}{{end}}
+            {{if .Dir}}<a class="cpr:link cpr:link-primary cpr:link-hover" href="{{$data.Links.URL "browse" "repository" $data.Repository "snapshot" $data.Snapshot "item" $data.Kind "path" .Path}}">{{.Name}}/</a>{{else}}{{.Name}}{{end}}
           </td>
           <td>{{if .Dir}}Folder{{else}}Item{{end}}</td>
           <td class="cpr:text-right cpr:mono">{{if .Size}}{{bytes .Size}}{{else}}<span class="cpr:text-base-content/70">—</span>{{end}}</td>
@@ -177,7 +177,7 @@
     {{template "recoveryactions" $data}}
   </form>
   {{else}}
-  <form method="post" action="restore.live.php">
+  <form method="post" action="{{$data.Links.URL "restore"}}">
     <input type="hidden" name="csrf" value="{{$.CSRF}}">
     <input type="hidden" name="repository" value="{{$data.Repository}}">
     <input type="hidden" name="snapshot" value="{{$data.Snapshot}}">
@@ -217,7 +217,7 @@
 {{else}}
 <div class="cpr:flex cpr:items-start cpr:gap-3 cpr:px-4 cpr:py-3 cpr:rounded-box cpr:border cpr:border-base-300 cpr:bg-base-200 cpr:text-xs cpr:text-base-content/70">
   <svg class="cpr:size-5 cpr:shrink-0 cpr:fill-none cpr:stroke-success cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
-  <p><b class="cpr:text-base-content">Select a category to continue.</b> Everything here is yours alone. Files, mail, databases and their users can be put straight back into the account; anything else is a private copy to download.</p>
+  <p><b class="cpr:text-base-content">Select a category to continue.</b> Everything here is yours alone. Files, mail, databases and their users can be put straight back into the account{{if $data.Downloads}}; anything else is a private copy to download{{end}}.</p>
 </div>
 {{end}}
 {{end}}
@@ -229,11 +229,11 @@
   <label class="cpr:flex cpr:items-start cpr:gap-3 cpr:flex-[1_1_34ch] cpr:min-w-0 cpr:me-auto cpr:text-xs cpr:leading-normal cpr:cursor-pointer cpr:max-md:me-0">
     <input type="checkbox" class="cpr:checkbox cpr:checkbox-sm cpr:mt-0.5 cpr:shrink-0" name="confirm" value="1" required>
     <span><b>Put this back into my account.</b> What is there now is replaced by what was in
-    the backup, and anything added since is lost. Leave it unticked to download a copy instead.</span>
+    the backup, and anything added since is lost.{{if .Downloads}} Leave it unticked to download a copy instead.{{end}}</span>
   </label>
   <div class="cpr:flex cpr:gap-3 cpr:shrink-0 cpr:max-md:flex-col">
     <button class="cpr:btn cpr:btn-sm cpr:max-md:w-full" type="submit" name="action" value="add" formnovalidate>{{if .InBasket .Kind}}Update my basket{{else}}Add to my basket{{end}}</button>
-    <button class="cpr:btn cpr:btn-sm cpr:max-md:w-full" type="submit" name="action" value="download" formnovalidate>Download a copy</button>
+    {{if .Downloads}}<button class="cpr:btn cpr:btn-sm cpr:max-md:w-full" type="submit" name="action" value="download" formnovalidate>Download a copy</button>{{end}}
     <button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline cpr:max-md:w-full" type="submit" name="action" value="restore">{{.PutBackLabel}}</button>
   </div>
   {{else}}

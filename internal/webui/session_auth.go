@@ -681,6 +681,18 @@ func (s *Server) requireUserCapability(next http.Handler) http.Handler {
 			accountAttributionError(w)
 			return
 		}
+		// On DirectAdmin the plugin carries the session itself, and
+		// there is no capability to consume: the check is the session,
+		// put to DirectAdmin on every request. See
+		// requireDirectAdminAccount.
+		if s.daSessions != nil {
+			proven, ok := s.requireDirectAdminAccount(w, r, account)
+			if !ok {
+				return
+			}
+			next.ServeHTTP(w, proven)
+			return
+		}
 		if s.userAuth == nil {
 			http.Error(w, "Open Gniza from your current cPanel session.", http.StatusForbidden)
 			return

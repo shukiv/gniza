@@ -112,11 +112,13 @@ account's records without its files and hands restic the home directory as
 a path, which is what makes nightly runs store only what changed; a
 restore drill proved the rebuilt archive on two servers before that became
 the default ([ADR 21](docs/adr/0021-the-account-is-read-where-it-lies.md)).
-An account the server no longer has is restored, not refused. Not yet:
-restoring one database or one mailbox out of a backup, schedule exclusions
-beyond the home directory, the server's own configuration, and the
-customer-facing pages. The plugin says so where an operator reads it rather
-than guessing. [The DirectAdmin guide](docs/guide/directadmin.md) has the
+An account the server no longer has is restored, not refused. A customer
+has their own **Backups** page, carrying their DirectAdmin session, where
+the home directory, cron jobs, databases, database users and mail go back
+from any restore point. Not yet: a download from that page (DirectAdmin
+wraps a plugin's output in its skin), schedule exclusions beyond the home
+directory, and the server's own configuration. The plugin says so where an
+operator reads it rather than guessing. [The DirectAdmin guide](docs/guide/directadmin.md) has the
 full list.
 
 **A server without a panel** since v0.3.6

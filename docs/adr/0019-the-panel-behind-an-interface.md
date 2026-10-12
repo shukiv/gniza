@@ -699,3 +699,67 @@ What it costs is that a tree can be packed once. Nothing packed one twice:
 what DirectAdmin restores, and what a rehearsal checks, is the archive, and
 the account's records — which the databases are named from afterwards —
 stay in the tree.
+
+## The account page — 2026-10-12
+
+Question 7 is answered, and the answer is the one the admin page
+already gave: the session itself is the proof. DirectAdmin hands the
+`user/` script `SESSION_ID` and `SESSION_KEY` exactly as it hands them
+to the `admin/` script, and the script replays them to Gniza over the
+account socket as the same two headers. Gniza attributes the request by
+the peer uid first (ADR 0012, now through `panel.AccountHolder` so a
+DirectAdmin account is one DirectAdmin has a `user.conf` for and has not
+suspended), then puts the session to `CMD_API_SHOW_USER_CONFIG` and
+requires its answer to name that account. A process merely running as
+the account -- a cron job, a compromised site -- has no session to
+carry and is refused with nothing issued; a session that is real but
+somebody else's is refused the same way. Under login-as DirectAdmin
+answers as the customer being impersonated, which is the account the
+socket attributed the request to, so the host reaches the customer's
+page the way the customer does. The account type is not consulted: an
+administrator opening the account-level page is looking at their own
+account.
+
+There is no capability on this socket on DirectAdmin. cPanel needed one
+because its proxy cannot reach the browser's session at all and has to
+ask cpsrvd to vouch for it (ADR 0013); DirectAdmin gives the plugin the
+session, and a one-use token derived from a session that is itself
+checked on every request would prove nothing the session does not.
+
+Two things the page does on cPanel it does not do here, and says so by
+not offering them:
+
+- **Nothing is downloaded.** DirectAdmin's skin wraps everything a
+  plugin prints, so an archive would reach the browser as HTML with a
+  tarball inside it. The home, logs and restore pages carry no download
+  control on DirectAdmin, and a request that asks for a copy anyway is
+  told to put it back instead. The way to hand a customer a file on
+  DirectAdmin is to write it into their own home directory, as the
+  account, where their file manager and FTP already are; that is the
+  next piece, not this one.
+- **Only what can be put back is offered.** With no download, a kind
+  whose only action is a copy is a card that leads to no button: the
+  whole account, the domains, the DNS records, the certificates and the
+  FTP logins are not shown. What is shown is the home directory, the
+  cron jobs, the databases, the database users and the mail, each put
+  back into the live account after the same tick box cPanel asks for.
+
+The plugin has one address, so the page is named in the query --
+`?p=browse&repository=...` -- and Gniza turns that back into the route
+on the socket. The query travels whole, `p=` included, because the live
+refresh fetches the page from the address it arrived at and has to name
+the same page.
+
+Not yet, and known:
+
+1. **Who was at the keyboard under login-as** is not recorded.
+   `IS_LOGIN_AS` and `LOGIN_AS_MASTER` reach the script as environment
+   variables, which is what the process was started with and not proof
+   of anything; the restore record names the account, as it does on
+   cPanel. Recording the master would need DirectAdmin's own word for
+   it, and `CMD_API_SHOW_USER_CONFIG` does not give one.
+2. **A copy into the customer's home** in place of a download.
+3. **Which unix user the `user/` script runs as under login-as** is
+   what the socket attributes the request by, and it has been read from
+   DirectAdmin's documentation rather than measured. The first drill on
+   a live host measures it.

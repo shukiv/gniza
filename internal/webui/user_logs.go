@@ -116,7 +116,7 @@ func accountBackupRows(jobs []nodestore.Job, account string) []userBackupRow {
 // question about one account and is asked far more often than any
 // question about the server.
 func (s *Server) handleUserLogs(w http.ResponseWriter, r *http.Request) {
-	view := userView{Account: accountOf(r), Kinds: userKinds}
+	view := s.userViewFor(r)
 
 	jobs, err := s.engine.Store().Jobs(userHistoryDepth)
 	if err != nil {

@@ -46,9 +46,10 @@ func WithDirectAdmin(panelURL string) Option {
 // daPrincipalKey carries who DirectAdmin said is asking.
 type daPrincipalKey struct{}
 
-// daPrincipalOf is the administrator behind a request on the DirectAdmin
-// socket. A zero value means the request did not come through the check,
-// which no handler behind it can see.
+// daPrincipalOf is who DirectAdmin said is behind a request: the
+// administrator on the plugin socket, the account on the account socket.
+// A zero value means the request did not come through either check,
+// which no handler behind them can see.
 func daPrincipalOf(r *http.Request) daPrincipal {
 	who, _ := r.Context().Value(daPrincipalKey{}).(daPrincipal)
 	return who
@@ -107,6 +108,56 @@ func (s *Server) requireDirectAdminAdmin(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r.WithContext(
 			context.WithValue(r.Context(), daPrincipalKey{}, who)))
 	})
+}
+
+// requireDirectAdminAccount is the account socket's half of the same
+// check: the request has to come from the account's own live DirectAdmin
+// session, and not merely from a process running as the account.
+//
+// The peer uid already names the account (peer.go). What it cannot say
+// is whether a person is at the keyboard: a cron job, a compromised site
+// and the customer's browser all run as the same uid. On cPanel the
+// plugin proves the session with a one-use capability (ADR 0013). On
+// DirectAdmin the plugin is handed the session itself and replays it,
+// and DirectAdmin's answer has to name the account the socket attributed
+// the request to. Under login-as DirectAdmin answers as the customer
+// being impersonated, which is the right answer here: what the page may
+// do is the customer's, whoever is doing it. The account type is not
+// consulted: an administrator's own account is still their own.
+//
+// It returns the request with the principal on it, so the page can say
+// where DirectAdmin serves it from (liveURLFor, fontBaseFor), or nothing
+// after having answered.
+func (s *Server) requireDirectAdminAccount(w http.ResponseWriter, r *http.Request, account string) (*http.Request, bool) {
+	sessionID := r.Header.Get(daSessionHeader)
+	sessionKey := r.Header.Get(daKeyHeader)
+	if sessionID == "" || sessionKey == "" {
+		http.Error(w, "Open Gniza from inside DirectAdmin.", http.StatusForbidden)
+		return nil, false
+	}
+	who, err := s.daSessions.verify(r.Context(), sessionID, sessionKey)
+	if err != nil {
+		// The error can name the session it was asked about, so it
+		// goes to the log and not to the page.
+		s.log.Warn("account interface: DirectAdmin session refused", "account", account, "error", err)
+		if errors.Is(err, errDASessionUnavailable) {
+			http.Error(w, "Gniza could not verify your DirectAdmin session. "+
+				"Ask your host to check the service.", http.StatusServiceUnavailable)
+			return nil, false
+		}
+		http.Error(w, "DirectAdmin did not accept this session. Sign in again.", http.StatusForbidden)
+		return nil, false
+	}
+	if who.Username != account {
+		// A real session, but somebody else's. The uid said one account
+		// and DirectAdmin said another; neither is believed over the
+		// other, and the page is not served.
+		s.log.Warn("account interface: DirectAdmin session is another account's",
+			"account", account, "session", who.Username, "type", who.UserType)
+		http.Error(w, "Open Gniza from inside DirectAdmin.", http.StatusForbidden)
+		return nil, false
+	}
+	return r.WithContext(context.WithValue(r.Context(), daPrincipalKey{}, who)), true
 }
 
 // ListenDirectAdmin serves the operator's interface to DirectAdmin's

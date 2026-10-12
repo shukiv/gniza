@@ -24,6 +24,10 @@ import (
 // keeps its own web fonts, so that is where these go.
 const daFontBase = "/CMD_PLUGINS_ADMIN/gniza/images/fonts/"
 
+// daAccountFontBase is the same directory as an account reaches it: the
+// plugin's files are served under the level the page was opened at.
+const daAccountFontBase = "/CMD_PLUGINS/gniza/images/fonts/"
+
 // fontFaces writes the five @font-face rules against a base address.
 //
 // base is joined to the file name, so it is either a directory ending in
@@ -63,11 +67,15 @@ func liveURLFor(r *http.Request) string {
 		return ""
 	}
 	base := "/CMD_PLUGINS/gniza/index.html"
-	switch who.UserType {
-	case "admin":
-		base = "/CMD_PLUGINS_ADMIN/gniza/index.html"
-	case "reseller":
-		base = "/CMD_PLUGINS_RESELLER/gniza/index.html"
+	// The account socket's pages live at the account level whoever
+	// opened them; the plugin socket's at the level of whoever did.
+	if accountOf(r) == "" {
+		switch who.UserType {
+		case "admin":
+			base = "/CMD_PLUGINS_ADMIN/gniza/index.html"
+		case "reseller":
+			base = "/CMD_PLUGINS_RESELLER/gniza/index.html"
+		}
 	}
 	if r.URL.RawQuery == "" {
 		return base
@@ -77,6 +85,13 @@ func liveURLFor(r *http.Request) string {
 
 func fontBaseFor(r *http.Request) string {
 	if daPrincipalOf(r).Username != "" {
+		// A request the account socket attributed is served at the
+		// account level whoever the session belongs to: an
+		// administrator looking at their own account opened the page
+		// there.
+		if accountOf(r) != "" {
+			return daAccountFontBase
+		}
 		return daFontBase
 	}
 	return "?p=font&name="

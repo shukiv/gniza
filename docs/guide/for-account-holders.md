@@ -1,7 +1,7 @@
 # For account holders
 
-Your customers get a tile in cPanel: their own restore points, and nothing
-else.
+Your customers get a tile in cPanel, or **Backups** in DirectAdmin: their
+own restore points, and nothing else.
 
 ## What they can do
 
@@ -36,6 +36,15 @@ account's own settings — and that is not built yet. So does the full
 account archive, whatever else is selected: that one goes to cPanel's
 `restorepkg`, which runs as root over a home directory the customer controls,
 and it remains an operator's decision.
+
+On DirectAdmin the same page offers less, and says so by what is not on
+it. Nothing is downloaded: DirectAdmin wraps everything a plugin prints in
+its own skin, so a package could not reach the browser as a file. What is
+offered is what can be put back -- the home directory, the cron jobs,
+databases, database users and mail -- and the parts that could only be
+handed over as a copy, the full account archive among them, are not shown.
+Whether the page appears at all is the self-service setting on the
+operator's Settings page ([Settings](settings.md)).
 
 Putting the home directory back is done as the account, never as root: the
 service reads the staged copy, which the customer cannot, and the customer's
@@ -177,5 +186,13 @@ A WHM root administrator arriving through cPanel's **Log in to cPanel** flow is
 accepted only when the root-owned session record carries cPanel's temporary-user
 and cPHulk markers.
 
-See [ADR 12](../adr/0012-the-account-facing-socket.md) and
-[ADR 13](../adr/0013-cpanel-session-capabilities.md).
+On DirectAdmin, the account itself, with the DirectAdmin session the
+plugin was handed replayed to DirectAdmin on every request; DirectAdmin's
+answer has to name the account the socket attributed the request to. A
+cron job or a site running as the account has no session to carry and is
+refused. A host using DirectAdmin's login-as reaches the page as the
+customer, because that is who DirectAdmin says the session is.
+
+See [ADR 12](../adr/0012-the-account-facing-socket.md),
+[ADR 13](../adr/0013-cpanel-session-capabilities.md) and, for DirectAdmin,
+the account page section of [ADR 19](../adr/0019-the-panel-behind-an-interface.md).

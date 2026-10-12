@@ -298,3 +298,119 @@ func shortTempDir(t *testing.T) string {
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
 }
+
+// accountRequest is a request the account socket attributed to one
+// account, with or without the DirectAdmin session the plugin carries.
+func accountRequest(account string, withSession bool) *http.Request {
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request = request.WithContext(context.WithValue(request.Context(), accountKey{}, account))
+	if withSession {
+		request.Header.Set(daSessionHeader, testDASession)
+		request.Header.Set(daKeyHeader, testDAKey)
+	}
+	return request
+}
+
+// On DirectAdmin the account socket has no capability to consume; it has
+// the session the plugin was handed, and DirectAdmin's answer has to
+// name the account the socket attributed the request to. Under login-as
+// DirectAdmin answers as the customer being impersonated, which is the
+// same answer. A process merely running as the account has no session
+// to carry, and is refused.
+func TestTheAccountSocketOnDirectAdminTakesTheAccountsOwnSession(t *testing.T) {
+	studio := daPrincipal{Username: "studio", UserType: "user"}
+	cases := []struct {
+		name     string
+		sessions *stubDASessions
+		session  bool
+		status   int
+		asked    int
+	}{
+		{"a process running as the account, with no session", &stubDASessions{who: studio}, false, http.StatusForbidden, 0},
+		{"the account's own session", &stubDASessions{who: studio}, true, http.StatusOK, 1},
+		{"an administrator's own account, at the account level",
+			&stubDASessions{who: daPrincipal{Username: "studio", UserType: "admin"}}, true, http.StatusOK, 1},
+		{"another account's session", &stubDASessions{who: daPrincipal{Username: "other", UserType: "user"}}, true, http.StatusForbidden, 1},
+		{"an administrator's session for somebody else",
+			&stubDASessions{who: daPrincipal{Username: "admin", UserType: "admin"}}, true, http.StatusForbidden, 1},
+		{"a session DirectAdmin refused", &stubDASessions{err: fmt.Errorf("%w: it reported no such session", errDASessionDenied)}, true, http.StatusForbidden, 1},
+		{"a panel that did not answer", &stubDASessions{err: fmt.Errorf("%w: timeout", errDASessionUnavailable)}, true, http.StatusServiceUnavailable, 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			server := &Server{daSessions: c.sessions, log: slog.New(slog.DiscardHandler)}
+			var reached bool
+			var who daPrincipal
+			guarded := server.requireUserCapability(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+				reached = true
+				who = daPrincipalOf(r)
+			}))
+			response := httptest.NewRecorder()
+			guarded.ServeHTTP(response, accountRequest("studio", c.session))
+			if response.Code != c.status {
+				t.Fatalf("status = %d, want %d: %s", response.Code, c.status, response.Body.String())
+			}
+			if reached != (c.status == http.StatusOK) {
+				t.Errorf("reached the page = %v", reached)
+			}
+			if c.sessions.asked != c.asked {
+				t.Errorf("DirectAdmin was asked %d times, want %d", c.sessions.asked, c.asked)
+			}
+			if reached && who.Username != "studio" {
+				t.Errorf("the page was not told who DirectAdmin said is asking: %+v", who)
+			}
+			if body := response.Body.String(); strings.Contains(body, testDASession) || strings.Contains(body, testDAKey) {
+				t.Errorf("the session reached the page: %q", body)
+			}
+		})
+	}
+}
+
+// The capability endpoint is cPanel's: on DirectAdmin nothing issues one,
+// and asking for one is asking the account socket for a page it does not
+// have.
+func TestTheAccountSocketOnDirectAdminIssuesNoCapability(t *testing.T) {
+	server := &Server{daSessions: &stubDASessions{who: daPrincipal{Username: "studio", UserType: "user"}},
+		log: slog.New(slog.DiscardHandler)}
+	request := httptest.NewRequest(http.MethodPost, capabilityEndpoint, nil)
+	request = request.WithContext(context.WithValue(request.Context(), accountKey{}, "studio"))
+	request.Header.Set(daSessionHeader, testDASession)
+	request.Header.Set(daKeyHeader, testDAKey)
+	response := httptest.NewRecorder()
+	server.UserHandler().ServeHTTP(response, request)
+	if response.Code == http.StatusOK {
+		t.Fatalf("a capability was issued on DirectAdmin: %s", response.Body.String())
+	}
+}
+
+// A DirectAdmin plugin has one address, and names the page in its query.
+func TestDirectAdminNamesTheAccountPageInTheQuery(t *testing.T) {
+	cases := []struct {
+		target string
+		path   string
+		query  string
+		status int
+	}{
+		{"/", "/", "", http.StatusOK},
+		{"/?p=index&kind=ok&msg=Started", "/", "p=index&kind=ok&msg=Started", http.StatusOK},
+		{"/?p=browse&repository=repo&snapshot=abc", "/browse", "p=browse&repository=repo&snapshot=abc", http.StatusOK},
+		{"/?p=logs", "/logs", "p=logs", http.StatusOK},
+		{"/?p=restore", "/restore", "p=restore", http.StatusOK},
+		{"/?p=settings", "", "", http.StatusNotFound},
+		{"/browse", "", "", http.StatusNotFound},
+	}
+	for _, c := range cases {
+		var path, query string
+		routed := directAdminPages(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			path, query = r.URL.Path, r.URL.RawQuery
+		}))
+		response := httptest.NewRecorder()
+		routed.ServeHTTP(response, httptest.NewRequest(http.MethodGet, c.target, nil))
+		if response.Code != c.status {
+			t.Errorf("%s: status = %d, want %d", c.target, response.Code, c.status)
+		}
+		if path != c.path || query != c.query {
+			t.Errorf("%s: routed to %q?%q, want %q?%q", c.target, path, query, c.path, c.query)
+		}
+	}
+}

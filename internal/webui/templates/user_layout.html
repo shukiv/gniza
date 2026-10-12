@@ -18,14 +18,14 @@
 <div class="gniza cpr:text-base-content cpr:max-w-[1320px] cpr:mx-auto cpr:px-4 cpr:pb-16 cpr:max-md:px-3" dir="ltr" data-user>
   <a class="cpr:skip" href="#gniza-user-main">Skip to content</a>
   <header class="cpr:navbar cpr:min-h-0 cpr:gap-4 cpr:mb-4 cpr:px-4 cpr:py-2.5 cpr:bg-base-100 cpr:border cpr:border-base-300 cpr:rounded-box cpr:max-md:flex-wrap cpr:max-md:gap-x-3 cpr:max-md:gap-y-2 cpr:max-md:px-3 cpr:max-md:py-2" data-userbar>
-    <a class="cpr:flex cpr:items-center cpr:gap-2.5 cpr:shrink-0 cpr:min-h-8 cpr:text-[15px] cpr:font-semibold" href="index.live.php" aria-label="Gniza overview" data-brand>
+    <a class="cpr:flex cpr:items-center cpr:gap-2.5 cpr:shrink-0 cpr:min-h-8 cpr:text-[15px] cpr:font-semibold" href="{{.Data.Links.URL "index"}}" aria-label="Gniza overview" data-brand>
       <span class="cpr:grid cpr:size-7 cpr:shrink-0 cpr:place-items-center cpr:text-primary" aria-hidden="true" data-brand-mark><svg class="cpr:h-6 cpr:w-auto cpr:fill-current cpr:[fill-rule:evenodd]" viewBox="1.25 0.14 10.22 12.48" focusable="false"><g transform="translate(-97.367 -139.17)"><path transform="matrix(.23378 0 0 -.23378 50.654 216.38)" d="m219.89 325.53h14.261v2.3h-14.261zm0-16.189h14.261v2.3h-14.261zm-14.721 4.14h43.703v-12.881h-43.703zm14.721-18.029h14.261v-2.3h-14.261zm7.13-19.157 2.663 4.609 2.024 3.507h17.165v12.881h-43.703v-12.881h17.166l2.023-3.507zm-21.851 53.375h43.703v-12.881h-43.703z"/></g></svg></span>
       <span>Gniza backups</span>
     </a>
     <nav class="cpr:tabs cpr:tabs-border cpr:tabs-sm cpr:self-stretch cpr:flex-nowrap cpr:overflow-x-auto cpr:ml-2 cpr:max-md:order-3 cpr:max-md:w-full cpr:max-md:ml-0" aria-label="Backup pages" data-usernav>
-      <a class="cpr:tab cpr:whitespace-nowrap {{if eq .Nav "overview"}}cpr:tab-active{{end}}" href="index.live.php" {{if eq .Nav "overview"}}aria-current="page"{{end}}>Overview</a>
-      <a class="cpr:tab cpr:whitespace-nowrap {{if eq .Nav "restore"}}cpr:tab-active{{end}}" href="browse.live.php" {{if eq .Nav "restore"}}aria-current="page"{{end}}>Restore &amp; download</a>
-      <a class="cpr:tab cpr:whitespace-nowrap {{if eq .Nav "logs"}}cpr:tab-active{{end}}" href="logs.live.php" {{if eq .Nav "logs"}}aria-current="page"{{end}}>Logs</a>
+      <a class="cpr:tab cpr:whitespace-nowrap {{if eq .Nav "overview"}}cpr:tab-active{{end}}" href="{{.Data.Links.URL "index"}}" {{if eq .Nav "overview"}}aria-current="page"{{end}}>Overview</a>
+      <a class="cpr:tab cpr:whitespace-nowrap {{if eq .Nav "restore"}}cpr:tab-active{{end}}" href="{{.Data.Links.URL "browse"}}" {{if eq .Nav "restore"}}aria-current="page"{{end}}>{{if .Data.Downloads}}Restore &amp; download{{else}}Restore{{end}}</a>
+      <a class="cpr:tab cpr:whitespace-nowrap {{if eq .Nav "logs"}}cpr:tab-active{{end}}" href="{{.Data.Links.URL "logs"}}" {{if eq .Nav "logs"}}aria-current="page"{{end}}>Logs</a>
     </nav>
     <span class="cpr:badge cpr:badge-ghost cpr:badge-sm cpr:mono cpr:max-w-44 cpr:ml-auto cpr:overflow-hidden cpr:text-ellipsis cpr:whitespace-nowrap cpr:block" title="Signed-in {{$.Panel}} account" data-user-account>{{.Data.Account}}</span>
     <div class="cpr:join cpr:max-md:hidden" id="theme" hidden aria-label="Colour theme">

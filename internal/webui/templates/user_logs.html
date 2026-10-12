@@ -7,7 +7,7 @@
     <p class="cpr:page-sub">Every backup taken of <b>{{$data.Account}}</b>, and every recovery asked for
     from it. This is your account's own record and nobody else can see it.</p>
   </div>
-  {{if $data.TotalPoints}}<a class="cpr:btn cpr:btn-sm" href="browse.live.php">Choose a restore point</a>{{end}}
+  {{if $data.TotalPoints}}<a class="cpr:btn cpr:btn-sm" href="{{$data.Links.URL "browse"}}">Choose a restore point</a>{{end}}
 </section>
 
 {{with $data.Err}}
@@ -45,7 +45,7 @@
 <section class="cpr:panel">
   <div class="cpr:flex cpr:items-center cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-b cpr:border-base-300">
     <h2 class="cpr:section-title">Recovery activity</h2>
-    <span class="cpr:text-xs cpr:text-base-content/60 cpr:ml-auto">What you asked to be put back or prepared for download.</span>
+    <span class="cpr:text-xs cpr:text-base-content/60 cpr:ml-auto">What you asked to be put back{{if $data.Downloads}} or prepared for download{{end}}.</span>
   </div>
   {{if $data.Restores}}
   <div class="cpr:overflow-x-auto" data-tablewrap data-live="user-restores"><table class="cpr:table cpr:table-sm">
@@ -59,7 +59,7 @@
           {{if and .Applied .Detail}}<div class="cpr:sublabel">{{.Detail}}</div>{{end}}</td>
         <td>{{template "runstate" .Status}}</td>
         <td class="cpr:text-right cpr:whitespace-nowrap">
-          {{if .Collectable}}<a class="cpr:btn cpr:btn-xs cpr:btn-primary" href="download.live.php?id={{.ID}}">Download package</a>
+          {{if and .Collectable $data.Downloads}}<a class="cpr:btn cpr:btn-xs cpr:btn-primary" href="{{$data.Links.URL "download" "id" .ID}}">Download package</a>
           {{else if .Applied}}<span class="cpr:sublabel">Nothing to download: it is in your account.</span>
           {{else if .Error}}<span class="cpr:sublabel cpr:text-error">{{.Error}}</span>{{end}}
         </td>

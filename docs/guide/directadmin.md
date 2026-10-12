@@ -63,6 +63,19 @@ their own.
   reads the selection and backs up the whole account anyway is found out
   on its first run, goes back to taking the archive apart, and says so on
   every account. See `docs/adr/0021-the-account-is-read-where-it-lies.md`.
+- **The account page.** Since this build a customer opens **Backups**
+  in their own DirectAdmin and sees their own restore points, puts the
+  home directory, the cron jobs, a database, the database users or a
+  mailbox back from one, and reads what has been backed up and restored.
+  The page runs as the account and carries the customer's own DirectAdmin
+  session, which Gniza puts to DirectAdmin on every request; a process
+  merely running as the account is refused. Nothing is downloaded there,
+  because DirectAdmin wraps a plugin's output in its skin, and the parts
+  of an account that can only be handed over as a copy are not offered.
+  Whether a host sees it at all is the self-service setting
+  ([Settings](settings.md)). Under login-as the host reaches the
+  customer's page as the customer. ADR 0019 has the reasoning and what is
+  still missing.
 - **Explicit native overwrite.** The provider can restore a whole archive
   over an existing ordinary user account, with both `Overwrite` and
   `Unrestricted` explicitly enabled. It executes one `taskq --run` task,

@@ -48,7 +48,7 @@ func TestDirectAdminHasEverythingItNeedsToServeThePlugin(t *testing.T) {
 			t.Errorf("plugin.conf says %s=%q, wanted %q", key, got, want)
 		}
 	}
-	for _, path := range []string{"hooks/admin_txt.html", "admin/index.html"} {
+	for _, path := range []string{"hooks/admin_txt.html", "admin/index.html", "user/index.html"} {
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("%s is missing, so DirectAdmin serves nothing: %v", path, err)
 		}
@@ -103,7 +103,12 @@ func TestTheAccountsPageStillRunsAsTheAccount(t *testing.T) {
 // Gniza in a header and to DirectAdmin from there, and nowhere else --
 // not into the page, not into a URL, not into an error.
 func TestTheAdminPageNeverPrintsTheSession(t *testing.T) {
-	page := read(t, "admin/index.html")
+	for _, path := range []string{"admin/index.html", "user/index.html"} {
+		t.Run(path, func(t *testing.T) { theAdminPageNeverPrintsTheSession(t, read(t, path)) })
+	}
+}
+
+func theAdminPageNeverPrintsTheSession(t *testing.T, page string) {
 	for _, line := range strings.Split(page, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "#") {
@@ -127,7 +132,12 @@ func TestTheAdminPageNeverPrintsTheSession(t *testing.T) {
 // body to every save, the browser reloads, and nothing was written --
 // which looks exactly like success. Measured on 1.709.
 func TestTheFormIsForwardedFromWhereDirectAdminPutsIt(t *testing.T) {
-	page := read(t, "admin/index.html")
+	for _, path := range []string{"admin/index.html", "user/index.html"} {
+		t.Run(path, func(t *testing.T) { theFormIsForwardedFromWhereDirectAdminPutsIt(t, read(t, path)) })
+	}
+}
+
+func theFormIsForwardedFromWhereDirectAdminPutsIt(t *testing.T, page string) {
 	if !strings.Contains(page, `--data-raw "${POST:-}"`) {
 		t.Error("the page does not forward the form DirectAdmin handed it in POST")
 	}
@@ -531,5 +541,33 @@ func TestTheInstallerSettlesTheModesItSaysItSettles(t *testing.T) {
 		if info.Mode().Perm() != 0o755 || info.Mode()&os.ModeSetgid != 0 {
 			t.Errorf("%s is %v after %s, wanted drwxr-xr-x", each, info.Mode(), line)
 		}
+	}
+}
+
+// The account page and the administrator's page are the same proxy
+// pointed at different sockets, and the difference has to be exactly
+// that: the account socket, and nothing that would run as the account
+// with more than the account has.
+func TestTheAccountPageReachesTheAccountSocketWithTheSession(t *testing.T) {
+	page := read(t, "user/index.html")
+	if !strings.Contains(page, "SOCKET=/var/run/gniza/account/user.sock") {
+		t.Error("the account page does not open the account socket")
+	}
+	if strings.Contains(stripComments(page), "/var/run/gniza/directadmin/") ||
+		strings.Contains(stripComments(page), "/var/run/gniza/admin/") {
+		t.Error("the account page reaches for a socket that is not the account's")
+	}
+	for _, want := range []string{
+		`--header "X-Gniza-DA-Session: ${SESSION_ID:-}"`,
+		`--header "X-Gniza-DA-Key: ${SESSION_KEY:-}"`,
+		`--unix-socket "$SOCKET"`, `--proto '=http'`, "--location",
+		`"http://gniza/?$QUERY"`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the account page is missing %s", want)
+		}
+	}
+	if _, found := setting(t, "user_run_as"); found {
+		t.Error("plugin.conf names a user_run_as, so the account socket would see that account instead of the customer")
 	}
 }

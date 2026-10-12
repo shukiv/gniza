@@ -1,24 +1,86 @@
 #!/bin/sh
 # Gniza's account page on DirectAdmin.
 #
-# DirectAdmin hands this script the caller's panel session as SESSION_ID
-# and SESSION_KEY in the environment, and a plugin proves who is asking
-# by replaying those to DirectAdmin's own API and letting DirectAdmin
-# answer. That is the same bar cPanel's plugin clears -- a process that
-# merely runs as the account has neither value -- and it is the half
-# that is missing here. IS_LOGIN_AS says when the host, not the
-# customer, is at the keyboard. See ADR 0019.
+# DirectAdmin runs this as the account that opened it -- there is no
+# user_run_as in plugin.conf, on purpose -- and hands it the caller's
+# panel session as SESSION_ID and SESSION_KEY. This forwards the request
+# to Gniza over the account socket with the session on it. Gniza reads
+# which account is asking from the socket itself (SO_PEERCRED), and puts
+# the session to DirectAdmin before it serves anything: a process merely
+# running as the account -- a cron job, a compromised site -- has no
+# session to carry, and is refused. Under login-as DirectAdmin answers
+# as the customer being impersonated, which is the account the socket
+# attributed the request to. See ADR 0019 and ADR 0013.
 #
-# The half that exists is the verifier the administrator's page is built
-# on: ADR 0020. What this page still needs beyond it is everything the
-# account interface reads out of cPanel -- which unix account a panel
-# name means, and whether the host has this turned on for them -- with
-# DirectAdmin's answers in place of cPanel's.
+# The output is the page body. DirectAdmin's skin supplies the document
+# around it, which is why nothing here writes CGI headers -- and why
+# nothing can be downloaded through this page: an archive would arrive
+# wrapped in the skin. Gniza offers no download here; what a customer
+# recovers is put back into the account.
 set -eu
-printf '%s' '<div class="ui-widget">
-<h1>Backups</h1>
-<p>This server'"'"'s backups are run by Gniza. Your account is included in
-them, and your host can restore it, or any part of it, for you.</p>
-<p>The self-service page is not available on DirectAdmin yet. Ask your
-host for a restore.</p>
-</div>'
+umask 077
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+SOCKET=/var/run/gniza/account/user.sock
+METHOD=${REQUEST_METHOD:-GET}
+# DirectAdmin sets QUERY_STRING from the address bar, and a relative link
+# from this page keeps the plugin's own path -- measured on 1.709 for the
+# admin page, both at /CMD_PLUGINS_ADMIN/gniza/index.html and inside
+# Evolution's wrapper at /evo/plugin?src=... The account page is the same
+# shape one level down: ?p=browse names the page, and the rest of the
+# query is the page's own.
+QUERY=${QUERY_STRING:-}
+
+fail() {
+	# The message is the whole page, so it says what to do rather than
+	# what went wrong internally. Nothing about the session appears in it.
+	printf '<div class="ui-widget"><h1>Backups</h1><p>%s</p></div>\n' "$1"
+	exit 0
+}
+
+command -v curl >/dev/null 2>&1 ||
+	fail 'This page reaches the backup service through curl, which is not installed on this server. Ask your host.'
+[ -S "$SOCKET" ] ||
+	fail 'The backup service is not running on this server. Ask your host.'
+
+# The session values travel as headers rather than cookies: nothing here
+# is a browser, and the only thing that may set them is this script.
+# Whatever arrives in them is a claim until DirectAdmin confirms it.
+#
+# What Gniza answers is passed through as it is, refusals included, so a
+# customer reads Gniza's own words about why a page did not open. Only a
+# request that never reached it falls through to the message below.
+# --location because every form in Gniza answers with a redirect: post,
+# then see the page again with a message on it. DirectAdmin gives a
+# plugin no way to emit a header, so the redirect is followed here and
+# what it lands on is the page. --proto and --unix-socket together keep
+# that following on this server: the connection is the socket whatever a
+# Location says, and no other scheme is attempted. Gniza's own redirects
+# are relative in any case.
+set -- \
+	--silent --max-time 300 \
+	--location --max-redirs 5 --proto '=http' \
+	--unix-socket "$SOCKET" \
+	--header "X-Gniza-DA-Session: ${SESSION_ID:-}" \
+	--header "X-Gniza-DA-Key: ${SESSION_KEY:-}"
+
+# A post with a form in it is a submission. A post with nothing in it is
+# Evolution opening the page through its own wrapper, which arrives as a
+# POST carrying no form at all. A real submission always carries at least
+# the token, so the form is what decides, not the method alone.
+if [ "$METHOD" = POST ] && [ -n "${POST:-}" ]; then
+	# DirectAdmin does not hand a plugin the request body. It reads the
+	# body itself and puts the whole url-encoded form in POST, leaving
+	# CONTENT_LENGTH empty and stdin at end of file -- measured on 1.709.
+	# So the form is forwarded from there, and reading stdin would forward
+	# an empty body to every restore.
+	# The method is curl's to choose: --data-raw makes this a POST, and
+	# curl turns the redirect that answers it into the GET a 303 means.
+	set -- "$@" \
+		--header "Content-Type: application/x-www-form-urlencoded" \
+		--data-raw "${POST:-}"
+fi
+curl "$@" "http://gniza/?$QUERY" 2>/dev/null && exit 0
+
+fail 'The backup service did not answer. Ask your host to check it.'

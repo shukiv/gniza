@@ -750,6 +750,18 @@ on the socket. The query travels whole, `p=` included, because the live
 refresh fetches the page from the address it arrived at and has to name
 the same page.
 
+Both plugin scripts, the administrator's included, used to hand curl
+the session as two `--header` arguments and the form as `--data-raw`.
+A process's arguments are readable by every local user through `/proc`
+for as long as it runs, and the administrator's destination form
+carries a repository password. The session is now a private
+configuration file made under the script's umask and read with
+`--config`, and the form is curl's standard input, written by the
+shell's builtin `printf`, which is never a process with arguments of
+its own. A session value outside letters, digits, colon, underscore,
+dot and dash is refused before any of that is written, because a quote
+or a line break in it would end the configuration line early.
+
 Not yet, and known:
 
 1. **Who was at the keyboard under login-as** is not recorded.

@@ -433,6 +433,21 @@ func (e *Engine) Chooser() (panel.Chooser, bool) {
 	return chooser, ok
 }
 
+// AccountHolder is the panel's word on who its accounts are, for the
+// account-facing socket. A provider without one has no such interface.
+func (e *Engine) AccountHolder() (panel.AccountHolder, bool) {
+	holder, ok := e.provider.(panel.AccountHolder)
+	return holder, ok
+}
+
+// SelfServiceGate is the panel's own switch for the account-facing pages,
+// where the panel has one; cPanel's Feature Manager. Without one the
+// decision is the self-service setting's.
+func (e *Engine) SelfServiceGate() (panel.SelfServiceGate, bool) {
+	gate, ok := e.provider.(panel.SelfServiceGate)
+	return gate, ok
+}
+
 // ProbeCapabilities reports which pkgacct flags this host supports, and
 // records them so the UI can warn about a host that cannot disable
 // compression.

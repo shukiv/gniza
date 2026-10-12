@@ -71,6 +71,37 @@ type Identifier interface {
 	AccountIdentity(user string) (int, error)
 }
 
+// AccountHolder is implemented by a panel that can say, of a unix user
+// name, whether it is one of its accounts and whether that account is
+// suspended. It is what the account-facing socket asks before it serves
+// anyone: the kernel says which uid opened the socket, and the panel says
+// whether that uid is a customer in good standing. cPanel reads its
+// account files; DirectAdmin reads user.conf. A provider without it has
+// no account-facing interface, and the socket serves nobody.
+type AccountHolder interface {
+	// HoldsAccount reports whether name is an account of this panel. A
+	// name that cannot be joined onto a path is not one.
+	HoldsAccount(name string) bool
+	// Suspended reports whether the panel has that account suspended.
+	// An account whose record cannot be read is reported suspended: it
+	// was an account a moment ago, and its standing is not known.
+	Suspended(name string) bool
+	// Package is the hosting package the account is on, or "" where the
+	// panel records none. Gniza's own self-service setting can name
+	// packages, on a panel that has no switch of its own.
+	Package(name string) string
+}
+
+// SelfServiceGate is implemented by a panel that keeps its own switch for
+// whether an account holder may use the account-facing pages -- cPanel's
+// Feature Manager. A panel without one leaves the decision to the
+// self-service setting.
+type SelfServiceGate interface {
+	// SelfServiceAllowed asks the panel. An answer it cannot get is an
+	// error, never a yes.
+	SelfServiceAllowed(ctx context.Context, name string) (bool, error)
+}
+
 // Certifier is implemented by a provider that can prove an archive is
 // accepted by the panel's own restore on an isolated certification host.
 // On cPanel that is restorepkg.

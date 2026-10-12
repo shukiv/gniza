@@ -2,29 +2,24 @@ package webui
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"os/exec"
 	"sync"
 	"time"
 )
 
-const (
-	gnizaFeature        = "gniza"
-	cpanelWHMAPI        = "/usr/local/cpanel/bin/whmapi1"
-	featureCacheTTL     = 30 * time.Second
-	featureCheckTimeout = 5 * time.Second
-	maxFeatureResponse  = 64 << 10
-)
+const featureCacheTTL = 30 * time.Second
 
 type featureDecision struct {
 	allowed bool
 	until   time.Time
 }
 
-// accountFeatureGate enforces Feature Manager behind the public Unix
-// socket. The PHP frontend also checks it for a useful page-level refusal,
-// but an account owns processes that can connect to the socket directly.
+// accountFeatureGate enforces the panel's switch -- Feature Manager on
+// cPanel, the self-service setting on DirectAdmin -- behind the public
+// Unix socket. The page in the panel also checks it for a useful
+// page-level refusal, but an account owns processes that can connect to
+// the socket directly.
 type accountFeatureGate struct {
 	mu        sync.Mutex
 	decisions map[string]featureDecision
@@ -32,10 +27,10 @@ type accountFeatureGate struct {
 	slots     chan struct{}
 }
 
-func newAccountFeatureGate() accountFeatureGate {
+func newAccountFeatureGate(check func(context.Context, string) (bool, error)) accountFeatureGate {
 	return accountFeatureGate{
 		decisions: map[string]featureDecision{},
-		check:     cpanelFeatureEnabled,
+		check:     check,
 		// Do not let many distinct local UIDs turn the root service into an
 		// unbounded whmapi1 process launcher on a large shared server.
 		slots: make(chan struct{}, 8),
@@ -68,42 +63,25 @@ func (g *accountFeatureGate) allowed(ctx context.Context, account string) (bool,
 	return allowed, nil
 }
 
-// cpanelFeatureEnabled asks cPanel itself instead of reimplementing feature
-// list inheritance and the server-wide disabled list. Arguments are passed
-// without a shell and account names have already come from cPanel's account
-// registry via SO_PEERCRED.
-func cpanelFeatureEnabled(ctx context.Context, account string) (bool, error) {
-	checkCtx, cancel := context.WithTimeout(ctx, featureCheckTimeout)
-	defer cancel()
-	output, err := exec.CommandContext(checkCtx, cpanelWHMAPI, "--output=json",
-		"verify_user_has_feature", "user="+account, "feature="+gnizaFeature).Output()
+// selfServiceCheck is the question behind the gate: the panel's own
+// switch where it has one (cPanel's Feature Manager), the self-service
+// setting where it has none (DirectAdmin), and no where there is no panel
+// to ask. The setting is read from the store, not from the copy the
+// engine loaded at startup, so a host who turns it on sees it take
+// effect without a restart.
+func (s *Server) selfServiceCheck(ctx context.Context, account string) (bool, error) {
+	if s.engine == nil {
+		return false, errors.New("webui: no panel to ask")
+	}
+	if gate, ok := s.engine.SelfServiceGate(); ok {
+		return gate.SelfServiceAllowed(ctx, account)
+	}
+	if s.holder == nil {
+		return false, nil
+	}
+	settings, err := s.engine.Store().Settings()
 	if err != nil {
-		return false, fmt.Errorf("check cPanel feature access for %s: %w", account, err)
+		return false, fmt.Errorf("webui: read the self-service setting: %w", err)
 	}
-	if len(output) > maxFeatureResponse {
-		return false, fmt.Errorf("check cPanel feature access for %s: response is too large", account)
-	}
-	return parseFeatureResponse(output)
-}
-
-func parseFeatureResponse(output []byte) (bool, error) {
-	var response struct {
-		Data struct {
-			HasFeature int `json:"has_feature"`
-		} `json:"data"`
-		Metadata struct {
-			Result int    `json:"result"`
-			Reason string `json:"reason"`
-		} `json:"metadata"`
-	}
-	if err := json.Unmarshal(output, &response); err != nil {
-		return false, fmt.Errorf("decode cPanel feature response: %w", err)
-	}
-	if response.Metadata.Result != 1 {
-		if response.Metadata.Reason == "" {
-			response.Metadata.Reason = "cPanel did not accept the feature query"
-		}
-		return false, fmt.Errorf("cPanel feature query failed: %s", response.Metadata.Reason)
-	}
-	return response.Data.HasFeature == 1, nil
+	return settings.SelfServiceAllows(s.holder.Package(account)), nil
 }

@@ -802,3 +802,26 @@ func TestDeleteDestinationRefusesWhileItsRecoveryKeyIsOnlyHere(t *testing.T) {
 		t.Fatalf("with the key saved the destination should be removable: %v", err)
 	}
 }
+
+// The self-service switch on a panel with none of its own. Off is the
+// default and the answer to a word nobody meant; packages are matched by
+// exact name.
+func TestSelfServiceIsOffUntilAHostSaysOtherwise(t *testing.T) {
+	for _, test := range []struct {
+		setting  nodestore.Settings
+		pkg      string
+		expected bool
+	}{
+		{nodestore.Settings{}, "gold", false},
+		{nodestore.Settings{SelfService: "off"}, "gold", false},
+		{nodestore.Settings{SelfService: "yes please"}, "gold", false},
+		{nodestore.Settings{SelfService: "all"}, "", true},
+		{nodestore.Settings{SelfService: "packages", SelfServicePackages: []string{"gold", "silver"}}, "silver", true},
+		{nodestore.Settings{SelfService: "packages", SelfServicePackages: []string{"gold"}}, "silver", false},
+		{nodestore.Settings{SelfService: "packages", SelfServicePackages: []string{""}}, "", false},
+	} {
+		if got := test.setting.SelfServiceAllows(test.pkg); got != test.expected {
+			t.Errorf("%q with %v allows %q = %v, want %v", test.setting.SelfService, test.setting.SelfServicePackages, test.pkg, got, test.expected)
+		}
+	}
+}

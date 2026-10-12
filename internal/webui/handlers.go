@@ -4066,13 +4066,15 @@ func (s *Server) settingsPage() (settingsView, error) {
 		Settings:    settings,
 		StagingFree: free,
 		RestoreRoot: restoreRoot, RestoreFree: restoreFree,
-		RestoreApart: restoreRoot != settings.StagingRoot,
-		PacksArchive: s.engine.PacksArchive(),
-		RehearseDays: rehearseDays(settings),
-		Outputs:      outputs,
-		OutputBytes:  held,
-		KeepDays:     keepDays(settings),
-		DeletedDays:  deletedDays(settings), DeletedPreset: deletedPreset(settings),
+		RestoreApart:        restoreRoot != settings.StagingRoot,
+		PacksArchive:        s.engine.PacksArchive(),
+		RehearseDays:        rehearseDays(settings),
+		SelfServiceSetting:  s.selfServiceIsASetting(),
+		SelfServicePackages: strings.Join(settings.SelfServicePackages, ", "),
+		Outputs:             outputs,
+		OutputBytes:         held,
+		KeepDays:            keepDays(settings),
+		DeletedDays:         deletedDays(settings), DeletedPreset: deletedPreset(settings),
 		LogLevels:   nodestore.LogLevels,
 		Version:     agent.Version,
 		LastChecked: lastChecked, CheckError: checkError,
@@ -4102,9 +4104,14 @@ type settingsView struct {
 	// RehearseDays is how often every account is rehearsed, with the
 	// default spelt out; -1 is never.
 	RehearseDays int
-	Outputs      []staging.Output
-	OutputBytes  uint64
-	KeepDays     int
+	// SelfServiceSetting says the panel has no switch of its own for the
+	// account-facing pages, so the setting here is the switch;
+	// SelfServicePackages is its package list as one line.
+	SelfServiceSetting  bool
+	SelfServicePackages string
+	Outputs             []staging.Output
+	OutputBytes         uint64
+	KeepDays            int
 	// DeletedDays is how long a deleted account's backups are kept, and
 	// DeletedPreset is which of the offered periods that is -- "custom"
 	// when it is a number somebody typed rather than one on the list.
@@ -4473,6 +4480,27 @@ func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 			settings.RehearseDays = days
 		}
 	}
+	// Whether account holders may use their own pages, on a panel with no
+	// switch of its own. A word that is not one of the three leaves the
+	// setting alone; a package name that could not be a package name
+	// refuses the whole save rather than silently dropping it.
+	if chosen := strings.TrimSpace(r.PostFormValue("self_service")); chosen != "" {
+		switch chosen {
+		case nodestore.SelfServiceOff, nodestore.SelfServiceAll, nodestore.SelfServicePackages:
+			settings.SelfService = chosen
+		}
+		packages, err := packageNames(r.PostFormValue("self_service_packages"))
+		if err != nil {
+			s.redirect(w, r, "/settings", "error", err.Error())
+			return
+		}
+		settings.SelfServicePackages = packages
+		if settings.SelfService == nodestore.SelfServicePackages && len(packages) == 0 {
+			s.redirect(w, r, "/settings", "error",
+				"Name at least one package, or choose every account or nobody.")
+			return
+		}
+	}
 	// Bug-report delivery is fixed to the bug tracker intake. Retain legacy
 	// email settings on disk for compatibility, but never send through them.
 	settings.ProtectAccountRemoval = r.PostFormValue("protect_account_removal") == "1"
@@ -4504,6 +4532,30 @@ func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.redirect(w, r, "/settings", "ok", "Saved. Account-removal protection takes effect immediately; restart the service for the other runtime changes.")
+}
+
+// selfServiceIsASetting says the panel has no switch of its own for the
+// account-facing pages, so Gniza's setting is the switch.
+func (s *Server) selfServiceIsASetting() bool {
+	if s.engine == nil || s.holder == nil {
+		return false
+	}
+	_, hasOwn := s.engine.SelfServiceGate()
+	return !hasOwn
+}
+
+// packageNames reads a list of hosting package names typed as one line,
+// separated by commas or spaces. A package name is what a panel accepts
+// as one: letters, digits, dash, underscore and dot, up to 64 of them.
+func packageNames(raw string) ([]string, error) {
+	var names []string
+	for _, name := range strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\t' }) {
+		if len(name) > 64 || strings.Trim(name, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.") != "" {
+			return nil, fmt.Errorf("%q is not a package name", name)
+		}
+		names = append(names, name)
+	}
+	return names, nil
 }
 
 func atoiOr(raw string, fallback int) int {

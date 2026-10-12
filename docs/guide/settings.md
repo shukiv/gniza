@@ -128,6 +128,19 @@ restored files are still waiting to be collected in the directory being left
 Backups are not affected: staging stays where it is, and this path is
 recorded in none of them.
 
+## Account holders may restore their own backups
+
+On DirectAdmin only. cPanel has Feature Manager, and the **gniza** feature
+there is what turns the customer's Backups page on or off; DirectAdmin has
+no switch of its own, so this one is it. **Nobody** is the default and what
+an upgrade leaves in place: customers see that their account is backed up
+and that the host can restore it. **Every account** opens the page to all
+of them; **Accounts on these packages** opens it to the accounts on the
+hosting packages named beside it, by the `package=` line of their
+`user.conf`. Whichever it is, an account sees and touches only its own
+backups: the service reads who is asking from the socket the panel opened
+as that account, never from the page.
+
 ## Restored files waiting to be collected
 
 Rebuilt archives and restored files that nobody has collected. They are not

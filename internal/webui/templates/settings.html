@@ -67,6 +67,21 @@
         about to start. One that would take more than half of the free space is not started,
         and says so in the history: rehearse that account by hand.</small>
       </div>
+      {{if $data.SelfServiceSetting}}
+      <div>
+        <label class="cpr:field-label" for="self_service">Account holders may restore their own backups</label>
+        <select class="cpr:select cpr:select-sm cpr:w-full" id="self_service" name="self_service">
+          <option value="off" {{if or (eq $data.Settings.SelfService "off") (eq $data.Settings.SelfService "")}}selected{{end}}>Nobody — the host restores for them</option>
+          <option value="all" {{if eq $data.Settings.SelfService "all"}}selected{{end}}>Every account</option>
+          <option value="packages" {{if eq $data.Settings.SelfService "packages"}}selected{{end}}>Accounts on these packages</option>
+        </select>
+        <input type="text" class="cpr:input cpr:input-sm cpr:w-full cpr:mt-2" id="self_service_packages" name="self_service_packages"
+               value="{{$data.SelfServicePackages}}" placeholder="gold, silver" aria-label="Packages">
+        <small class="cpr:help">The Backups page inside each account: its own backups, a file or folder put back,
+        a copy to download. Nothing an account sees or does there reaches another account. {{$.Panel}} has no
+        switch of its own for this, so this is it; off until you say otherwise.</small>
+      </div>
+      {{end}}
       <div>
         <label class="cpr:field-label" for="deleted_account_days">Keep a deleted account's backups for</label>
         <select class="cpr:select cpr:select-sm cpr:w-full" id="deleted_account_days" name="deleted_account_days">

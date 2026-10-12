@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/shukiv/gniza/internal/node"
+	"github.com/shukiv/gniza/internal/panel"
 )
 
 //go:embed templates/*.html
@@ -79,6 +80,10 @@ type Server struct {
 	// has been established, where an account cannot bypass it by replacing
 	// or avoiding the PHP frontend.
 	userFeatures accountFeatureGate
+	// holder is the panel's word on who its accounts are, for the
+	// account-facing socket. Nil where the panel has no such interface,
+	// and then that socket serves nobody.
+	holder panel.AccountHolder
 	// userAuth requires a live cPanel session in addition to the account's
 	// Unix uid. Team users share the owner's uid, and arbitrary website
 	// processes run under it too, so SO_PEERCRED alone is not enough.
@@ -141,9 +146,12 @@ func New(engine *node.Engine, log *slog.Logger, options ...Option) (*Server, err
 		csrfToken:        hex.EncodeToString(raw[:32]),
 		userCSRFKey:      append([]byte(nil), raw[32:64]...),
 		assets:           assets{CSS: template.CSS(css), JS: template.JS(script)},
-		userFeatures:     newAccountFeatureGate(),
 		userAuth:         newAccountSessionAuth(raw[64:96]),
 		reportPreviewKey: append([]byte(nil), raw[96:]...),
+	}
+	server.userFeatures = newAccountFeatureGate(server.selfServiceCheck)
+	if engine != nil {
+		server.holder, _ = engine.AccountHolder()
 	}
 	for _, option := range options {
 		option(server)

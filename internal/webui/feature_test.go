@@ -21,32 +21,6 @@ import (
 	"github.com/shukiv/gniza/internal/resticrun"
 )
 
-func TestFeatureResponseMustExplicitlyAllowTheAccount(t *testing.T) {
-	for name, response := range map[string]string{
-		"enabled":  `{"data":{"has_feature":1},"metadata":{"result":1,"reason":"OK"}}`,
-		"disabled": `{"data":{"has_feature":0},"metadata":{"result":1,"reason":"OK"}}`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			allowed, err := parseFeatureResponse([]byte(response))
-			if err != nil {
-				t.Fatalf("parseFeatureResponse: %v", err)
-			}
-			if allowed != (name == "enabled") {
-				t.Fatalf("allowed = %v", allowed)
-			}
-		})
-	}
-	for _, response := range []string{
-		`not json`,
-		`{"data":{"has_feature":1},"metadata":{"result":0,"reason":"bad query"}}`,
-		`{"data":{"has_feature":1}}`,
-	} {
-		if allowed, err := parseFeatureResponse([]byte(response)); err == nil || allowed {
-			t.Fatalf("unsafe feature response accepted: %s", response)
-		}
-	}
-}
-
 func TestAccountGuardRejectsTheRootTokenAndOtherAccountsTokens(t *testing.T) {
 	server := &Server{
 		log:         slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -636,5 +610,23 @@ func TestTheStripNamesTheDestinationRatherThanItsIdentifier(t *testing.T) {
 	}
 	if !strings.Contains(label, "the vault") {
 		t.Errorf("the strip does not name the destination: %q", label)
+	}
+}
+
+// A package list is typed as one line. A name that could not be a
+// package name refuses the whole list rather than being dropped on the
+// quiet, which would silently widen or narrow who is let in.
+func TestPackageNamesAreReadAsOneLine(t *testing.T) {
+	got, err := packageNames(" gold, silver\tbronze.2026 ")
+	if err != nil || strings.Join(got, "|") != "gold|silver|bronze.2026" {
+		t.Fatalf("packageNames = %v, %v", got, err)
+	}
+	if got, err := packageNames(""); err != nil || len(got) != 0 {
+		t.Fatalf("an empty line = %v, %v; want none", got, err)
+	}
+	for _, bad := range []string{"gold, ../root", "x;y", "a/b", strings.Repeat("p", 65)} {
+		if _, err := packageNames(bad); err == nil {
+			t.Errorf("%q was accepted as a package list", bad)
+		}
 	}
 }

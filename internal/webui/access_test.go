@@ -1,8 +1,8 @@
 package webui_test
 
 import (
-	"os"
-	"path/filepath"
+	"os/user"
+	"strconv"
 	"testing"
 
 	"github.com/shukiv/gniza/internal/granular"
@@ -33,36 +33,50 @@ func TestAnAccountCannotAskForTheThingsThePageDoesNotOffer(t *testing.T) {
 // TestASuspendedAccountIsNotServed covers both marks cPanel uses for a
 // suspension. A suspended account's processes can still be running, and
 // this interface talks to a service running as root.
-func TestASuspendedAccountIsNotServed(t *testing.T) {
-	root := t.TempDir()
-	usersDir := filepath.Join(root, "users")
-	suspendedDir := filepath.Join(root, "suspended")
-	for _, dir := range []string{usersDir, suspendedDir} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write := func(name, body string) {
-		if err := os.WriteFile(filepath.Join(usersDir, name), []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write("active", "USER=active\n")
-	write("byflag", "USER=byflag\nSUSPENDED=1\n")
-	write("byfile", "USER=byfile\n")
-	if err := os.WriteFile(filepath.Join(suspendedDir, "byfile"), nil, 0o600); err != nil {
+// fakeHolder is a panel's word on its accounts, for a test.
+type fakeHolder struct {
+	accounts  map[string]bool
+	suspended map[string]bool
+}
+
+func (f fakeHolder) HoldsAccount(name string) bool { return f.accounts[name] }
+func (f fakeHolder) Suspended(name string) bool    { return f.suspended[name] }
+func (f fakeHolder) Package(string) string         { return "" }
+
+// The kernel names the uid; the panel says whether it is a customer in
+// good standing. Root, a uid the panel does not hold, and a suspended
+// account are all refused, and a panel with no word at all serves nobody.
+func TestTheAccountSocketServesOnlyThePanelsAccountsInGoodStanding(t *testing.T) {
+	me, err := user.Current()
+	if err != nil {
 		t.Fatal(err)
 	}
+	uid64, err := strconv.ParseUint(me.Uid, 10, 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uid := uint32(uid64)
+	if uid == 0 {
+		t.Skip("running as root; the check under test refuses root before it asks the panel")
+	}
 
-	for name, want := range map[string]bool{
-		"active": false, "byflag": true, "byfile": true,
-		// No account file at all, and a name that tries to climb out of
-		// the directory: neither is an account in good standing.
-		"vanished": true, "../root": true,
-	} {
-		if got := webui.IsSuspendedForTest(usersDir, suspendedDir, name); got != want {
-			t.Errorf("suspended(%q) = %v, want %v", name, got, want)
-		}
+	if _, err := webui.AccountFromCredentialsForTest(fakeHolder{accounts: map[string]bool{me.Username: true}}, 0); err == nil {
+		t.Error("root was served as an account")
+	}
+	if _, err := webui.AccountFromCredentialsForTest(nil, uid); err == nil {
+		t.Error("a panel with no account-facing interface served somebody")
+	}
+	if _, err := webui.AccountFromCredentialsForTest(fakeHolder{}, uid); err == nil {
+		t.Error("a uid the panel does not hold was served")
+	}
+	if _, err := webui.AccountFromCredentialsForTest(fakeHolder{
+		accounts: map[string]bool{me.Username: true}, suspended: map[string]bool{me.Username: true},
+	}, uid); err == nil {
+		t.Error("a suspended account was served")
+	}
+	got, err := webui.AccountFromCredentialsForTest(fakeHolder{accounts: map[string]bool{me.Username: true}}, uid)
+	if err != nil || got != me.Username {
+		t.Errorf("account = %q, %v; want %q", got, err, me.Username)
 	}
 }
 

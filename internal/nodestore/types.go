@@ -62,6 +62,30 @@ func (s DestinationSpace) UsedPercent() int {
 // Known reports whether there is a measurement worth showing.
 func (s DestinationSpace) Known() bool { return s.TotalBytes > 0 && s.MeasuredAt != nil }
 
+// The values of Settings.SelfService.
+const (
+	SelfServiceOff      = "off"
+	SelfServiceAll      = "all"
+	SelfServicePackages = "packages"
+)
+
+// SelfServiceAllows reports whether an account on the given package may
+// use the account-facing pages under this setting. An unknown value is
+// off: a word nobody meant is not a yes.
+func (s Settings) SelfServiceAllows(pkg string) bool {
+	switch s.SelfService {
+	case SelfServiceAll:
+		return true
+	case SelfServicePackages:
+		for _, allowed := range s.SelfServicePackages {
+			if allowed != "" && allowed == pkg {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Repository is a restic repository inside a destination.
 type Repository struct {
 	ID               string `json:"id"`
@@ -621,6 +645,16 @@ type Settings struct {
 	// of every customer who has ever left, forever. Zero means the
 	// default; a negative number keeps them until somebody says otherwise.
 	DeletedAccountDays int `json:"deleted_account_days,omitempty"`
+	// SelfService is whether account holders may use the account-facing
+	// pages -- see their own backups, restore a file, download a copy --
+	// on a panel that has no switch of its own. cPanel's Feature Manager
+	// decides there and this is not read; on DirectAdmin it is the only
+	// switch. One of SelfServiceOff (also ""), SelfServiceAll or
+	// SelfServicePackages, in which case SelfServicePackages names the
+	// hosting packages whose accounts are allowed. Off until a host says
+	// otherwise, so an upgrade changes nothing for customers.
+	SelfService         string   `json:"self_service,omitempty"`
+	SelfServicePackages []string `json:"self_service_packages,omitempty"`
 	// RehearseDays is how often each account's newest backup is rebuilt
 	// in scratch space and thrown away, which is the only thing that
 	// says it can be. Zero means the default; a negative number leaves

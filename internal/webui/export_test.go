@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"github.com/shukiv/gniza/internal/panel"
 	"os"
 
 	"github.com/shukiv/gniza/internal/granular"
@@ -37,11 +38,8 @@ func (s *Server) UserCSRFForTest(account string) string { return s.userCSRFToken
 // IsUserKindForTest exposes what an account is allowed to ask for.
 func IsUserKindForTest(kind string) bool { return isUserKind(granular.Kind(kind)) }
 
-// IsSuspendedForTest exposes the suspension check, pointed at directories
-// the test controls.
-func IsSuspendedForTest(usersDir, suspendedDir, name string) bool {
-	previousUsers, previousSuspended := cpanelUsersDir, cpanelSuspendedDir
-	cpanelUsersDir, cpanelSuspendedDir = usersDir, suspendedDir
-	defer func() { cpanelUsersDir, cpanelSuspendedDir = previousUsers, previousSuspended }()
-	return isSuspended(name)
+// AccountFromCredentialsForTest exposes the admission check behind the
+// account-facing socket, with the panel's word supplied by the test.
+func AccountFromCredentialsForTest(holder panel.AccountHolder, uid uint32) (string, error) {
+	return accountFromCredentials(holder, uid)
 }

@@ -85,7 +85,7 @@ func (s *Server) ListenUser(ctx context.Context, socketPath string) error {
 		IdleTimeout:  60 * time.Second,
 		WriteTimeout: 5 * time.Minute,
 		ConnContext: func(ctx context.Context, conn net.Conn) context.Context {
-			account, err := peerAccount(conn)
+			account, err := s.peerAccount(conn)
 			if err != nil {
 				s.log.Warn("user interface: unattributed connection", "error", err)
 				return ctx
@@ -207,7 +207,7 @@ func (s *Server) userPage(next http.HandlerFunc) http.HandlerFunc {
 		account := accountOf(r)
 		if account == "" {
 			http.Error(w, "Gniza could not tell which account this is. "+
-				"Open it from inside cPanel.", http.StatusForbidden)
+				"Open it from inside your control panel.", http.StatusForbidden)
 			return
 		}
 		if !s.userBusy.enter(account) {
@@ -220,7 +220,7 @@ func (s *Server) userPage(next http.HandlerFunc) http.HandlerFunc {
 		if err != nil {
 			s.log.Error("account feature check failed", "account", account, "error", err)
 			http.Error(w, "Gniza could not verify that this feature is enabled. "+
-				"Ask your host to check cPanel Feature Manager.", http.StatusServiceUnavailable)
+				"Ask your host.", http.StatusServiceUnavailable)
 			return
 		}
 		if !allowed {

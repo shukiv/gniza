@@ -59,6 +59,9 @@ type Real struct {
 	// SuspendedDir holds one file per suspended account. Empty means the
 	// standard location.
 	SuspendedDir string
+	// WHMAPIPath is whmapi1, which answers whether an account has a
+	// feature. Empty means the standard location.
+	WHMAPIPath string
 	// DatabasesDir holds cPanel's own record of which databases belong to
 	// which account. Empty means the standard location.
 	DatabasesDir string

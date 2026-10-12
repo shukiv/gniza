@@ -40,7 +40,6 @@ command -v curl >/dev/null 2>&1 ||
 # The session values travel as headers rather than cookies: nothing here
 # is a browser, and the only thing that may set them is this script.
 # Whatever arrives in them is a claim until DirectAdmin confirms it.
-#
 # What Gniza answers is passed through as it is, refusals included, so an
 # operator reads Gniza's own words about why a page did not open. Only a
 # request that never reached it falls through to the message below.
@@ -55,12 +54,22 @@ command -v curl >/dev/null 2>&1 ||
 # --proto and --unix-socket together keep that following on this server:
 # the connection is the socket whatever a Location says, and no other
 # scheme is attempted. Gniza's own redirects are relative in any case.
+#
+# They do not go on curl's command line. Every argument a process was
+# started with is readable by every local user through /proc while it
+# runs, and a session is a login for as long as it lives. So the two
+# headers are written as a curl configuration on its standard input by
+# the shell's own printf, which is a builtin and so never a process with
+# arguments of its own, and curl reads them from there (--config -).
 set -- \
 	--silent --max-time 300 \
 	--location --max-redirs 5 --proto '=http' \
 	--unix-socket "$SOCKET" \
-	--header "X-Gniza-DA-Session: ${SESSION_ID:-}" \
-	--header "X-Gniza-DA-Key: ${SESSION_KEY:-}"
+	--config -
+session_config() {
+	printf 'header = "X-Gniza-DA-Session: %s"\nheader = "X-Gniza-DA-Key: %s"\n' \
+		"${SESSION_ID:-}" "${SESSION_KEY:-}"
+}
 
 # A post with a form in it is a submission. A post with nothing in it is
 # Evolution opening the page through its own wrapper,
@@ -87,6 +96,6 @@ if [ "$METHOD" = POST ] && [ -n "${POST:-}" ]; then
 		--header "Content-Type: application/x-www-form-urlencoded" \
 		--data-raw "${POST:-}"
 fi
-curl "$@" "http://gniza/?$QUERY" 2>/dev/null && exit 0
+session_config | curl "$@" "http://gniza/?$QUERY" 2>/dev/null && exit 0
 
 fail 'The backup service did not answer. Check <code>systemctl status gniza</code>.'

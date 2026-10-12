@@ -117,8 +117,20 @@ func theAdminPageNeverPrintsTheSession(t *testing.T, page string) {
 		if !strings.Contains(trimmed, "SESSION_ID") && !strings.Contains(trimmed, "SESSION_KEY") {
 			continue
 		}
-		if !strings.Contains(trimmed, "--header") {
-			t.Errorf("the session is used somewhere other than the header it travels in: %q", trimmed)
+		// The one place the session is read is the printf that writes
+		// curl's configuration; it is a builtin, so the values are never
+		// a process's arguments. --header on the command line would put
+		// them in /proc for every local user to read.
+		if !strings.Contains(trimmed, `"${SESSION_ID:-}" "${SESSION_KEY:-}"`) {
+			t.Errorf("the session is used somewhere other than the configuration printf: %q", trimmed)
+		}
+	}
+	if strings.Contains(stripComments(page), "--header \"X-Gniza-DA") {
+		t.Error("the session is on curl's command line, where every local user can read it")
+	}
+	for _, want := range []string{"--config -", `header = "X-Gniza-DA-Session: %s"`, `header = "X-Gniza-DA-Key: %s"`, "session_config | curl"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page is missing %s, so curl is not handed the session on standard input", want)
 		}
 	}
 	if strings.Contains(page, "$SESSION_ID") && !strings.Contains(page, "${SESSION_ID:-}") {
@@ -558,8 +570,8 @@ func TestTheAccountPageReachesTheAccountSocketWithTheSession(t *testing.T) {
 		t.Error("the account page reaches for a socket that is not the account's")
 	}
 	for _, want := range []string{
-		`--header "X-Gniza-DA-Session: ${SESSION_ID:-}"`,
-		`--header "X-Gniza-DA-Key: ${SESSION_KEY:-}"`,
+		`header = "X-Gniza-DA-Session: %s"`,
+		`header = "X-Gniza-DA-Key: %s"`,
 		`--unix-socket "$SOCKET"`, `--proto '=http'`, "--location",
 		`"http://gniza/?$QUERY"`,
 	} {

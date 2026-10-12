@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html/template"
 	"net"
 	"net/http"
 	"net/url"
@@ -1014,6 +1015,21 @@ func (l userLinks) URL(route string, pairs ...any) string {
 		query.Set(fmt.Sprint(pairs[i]), fmt.Sprint(pairs[i+1]))
 	}
 	return l.withQuery(route, query)
+}
+
+// PageField is what a GET form carries so that it lands on the page it
+// was shown on. A browser builds a GET form's address from the form's
+// fields alone and drops the query of whatever it submits to, so on
+// DirectAdmin, where the page is named in the query, a form that does not
+// carry p= as a field of its own arrives with no page named and is
+// answered with the overview -- which is what changing the restore point
+// did until this field was added. On cPanel the page is in the path and
+// the form needs nothing.
+func (l userLinks) PageField(route string) template.HTML {
+	if l.cpanel {
+		return ""
+	}
+	return template.HTML(`<input type="hidden" name="p" value="` + template.HTMLEscapeString(route) + `">`)
 }
 
 func (l userLinks) withQuery(route string, query url.Values) string {

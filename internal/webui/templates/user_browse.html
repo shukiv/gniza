@@ -16,6 +16,7 @@
 <section class="cpr:panel" data-restore-point>
   <div class="cpr:pad">
     <form method="get" class="cpr:grid cpr:items-end cpr:gap-4 cpr:md:grid-cols-[minmax(250px,420px)_minmax(180px,1fr)_auto]">
+      {{$data.Links.PageField "browse"}}
       <input type="hidden" name="repository" value="{{$data.Repository}}">
       {{if $data.Kind}}<input type="hidden" name="item" value="{{$data.Kind}}">{{end}}
       <div>

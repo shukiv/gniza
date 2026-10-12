@@ -660,6 +660,15 @@ func TestAccountLinksFollowThePanel(t *testing.T) {
 		}
 	}
 
+	// A GET form's fields replace the query of the address it submits to,
+	// so the DirectAdmin form names its page in a field; cPanel's needs none.
+	if got := string(directadmin.PageField("browse")); got != `<input type="hidden" name="p" value="browse">` {
+		t.Errorf("DirectAdmin page field = %q", got)
+	}
+	if got := string(cpanel.PageField("browse")); got != "" {
+		t.Errorf("cPanel page field = %q, want none", got)
+	}
+
 	response := httptest.NewRecorder()
 	redirectUser(response, directadmin, "/browse?repository=repo&snapshot=abc", "error", "Choose an item")
 	if location := response.Header().Get("Location"); location != "?kind=error&msg=Choose+an+item&p=browse&repository=repo&snapshot=abc" {
@@ -752,7 +761,8 @@ func TestDirectAdminOffersEveryKindAsACopyIntoTheHome(t *testing.T) {
 	if !strings.Contains(pages["browse"], `action="?p=restore"`) {
 		t.Error("the DirectAdmin restore form does not post to the plugin's own address")
 	}
-	for _, want := range []string{`value="download"`, "Save a copy to my home directory", "Full account", "DNS records"} {
+	for _, want := range []string{`value="download"`, "Save a copy to my home directory", "Full account", "DNS records",
+		`<input type="hidden" name="p" value="browse">`} {
 		if !strings.Contains(pages["browse"], want) {
 			t.Errorf("the DirectAdmin restore page is missing %q", want)
 		}

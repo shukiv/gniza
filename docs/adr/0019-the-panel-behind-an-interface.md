@@ -762,6 +762,20 @@ its own. A session value outside letters, digits, colon, underscore,
 dot and dash is refused before any of that is written, because a quote
 or a line break in it would end the configuration line early.
 
+Two things the scripts cannot close, and one they can. A process
+running as the account can read the plugin process's environment
+through `/proc` while the page runs, and the session is in it: that is
+DirectAdmin handing the session to a process that runs as the account,
+and no script changes it. The same process can plant `~/.curlrc`, which
+curl reads unless `-q` is its first argument; the scripts start curl
+with `-q`, which closes that one. And a process guessing sessions
+against the account socket had root put every guess to DirectAdmin's
+API; the socket now counts DirectAdmin's refusals per account and, after
+five in a minute, refuses on its own for the rest of it. Whether
+DirectAdmin's own brute-force monitor counts refused session cookies
+from the server's address is not known and was not tested on a
+production server.
+
 Not yet, and known:
 
 1. **Who was at the keyboard under login-as** is not recorded.

@@ -255,7 +255,7 @@ func TestAccountRecoveryPagesRenderTheGuidedFlow(t *testing.T) {
 	request = request.WithContext(context.WithValue(request.Context(), accountKey{}, "studio"))
 	response := httptest.NewRecorder()
 	server.renderUser(response, request, "user_browse.html", userView{
-		Downloads: true, Links: userLinks{cpanel: true},
+		Downloads: true, PutsBack: true, Links: userLinks{cpanel: true},
 		Account: "studio", Kinds: userKinds, Repository: "repo", Snapshot: "abcdef",
 		SnapshotAt: now, Snapshots: []resticrun.Snapshot{{ID: "abcdef", Time: now}},
 	})
@@ -303,7 +303,7 @@ func TestTheRecoveryPageOffersPuttingBackOnlyWhereItIsPossible(t *testing.T) {
 	}
 
 	databases := render(granular.KindDatabase, userView{
-		Downloads: true, Links: userLinks{cpanel: true},
+		Downloads: true, PutsBack: true, Links: userLinks{cpanel: true},
 		Root: "/var/lib/gniza/staging/stage-studio/databases",
 		Path: "/var/lib/gniza/staging/stage-studio/databases",
 		Entries: []browseEntry{{
@@ -335,7 +335,7 @@ func TestTheRecoveryPageOffersPuttingBackOnlyWhereItIsPossible(t *testing.T) {
 	// go through the other form on the same page. That form has to offer
 	// the same two choices, and a database restored without the user that
 	// reads it is the reason it matters.
-	users := render(granular.KindDBUsers, userView{Downloads: true, Links: userLinks{cpanel: true}})
+	users := render(granular.KindDBUsers, userView{Downloads: true, PutsBack: true, Links: userLinks{cpanel: true}})
 	for _, want := range []string{
 		`name="action" value="restore"`,
 		`name="action" value="download"`,
@@ -348,7 +348,7 @@ func TestTheRecoveryPageOffersPuttingBackOnlyWhereItIsPossible(t *testing.T) {
 	}
 
 	// DNS is put back by the host, so the page offers only the copy.
-	dns := render(granular.KindDNS, userView{Downloads: true, Links: userLinks{cpanel: true}})
+	dns := render(granular.KindDNS, userView{Downloads: true, PutsBack: true, Links: userLinks{cpanel: true}})
 	if strings.Contains(dns, `value="restore"`) || strings.Contains(dns, `name="confirm"`) {
 		t.Error("DNS records were offered for writing into the live account")
 	}
@@ -672,27 +672,34 @@ func TestAccountLinksFollowThePanel(t *testing.T) {
 	}
 }
 
-// DirectAdmin wraps everything a plugin prints in its skin, so nothing
-// can be downloaded through the account page there. What is offered is
-// what can be put back, and the controls that would hand over a file
-// are not on the page.
-func TestDirectAdminOffersOnlyWhatItCanPutBack(t *testing.T) {
+// A panel that can neither hand the browser a file nor put a part of an
+// account back has nothing to offer, and offers nothing: a card that
+// leads to no button is a question with no answer.
+func TestAPanelWithNoCopiesAndNoPutBackOffersNothing(t *testing.T) {
 	cpanel := &Server{}
 	if got := cpanel.offeredUserKinds(); len(got) != len(userKinds) {
 		t.Errorf("cPanel offers %v, want every kind", got)
 	}
-	directadmin := &Server{daSessions: &stubDASessions{}}
-	want := []granular.Kind{granular.KindFiles, granular.KindCron, granular.KindDatabase,
-		granular.KindDBUsers, granular.KindMailbox}
-	got := directadmin.offeredUserKinds()
-	if fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Errorf("DirectAdmin offers %v, want %v", got, want)
+	// DirectAdmin with no engine behind it: no copies into the home, and
+	// nothing put back either.
+	bare := &Server{daSessions: &stubDASessions{}}
+	bare.facts = &panelFacts{}
+	if got := bare.offeredUserKinds(); len(got) != 0 {
+		t.Errorf("a panel with no copies and no put-back offers %v", got)
 	}
-	for _, hidden := range []granular.Kind{userKindAccount, granular.KindDNS, granular.KindSSL,
-		granular.KindFTP, granular.KindDomains} {
-		if directadmin.offersUserKind(hidden) {
-			t.Errorf("DirectAdmin offers %s, which can only be downloaded", hidden)
-		}
+}
+
+// DirectAdmin wraps everything a plugin prints in its skin, so nothing
+// is downloaded through the account page there; a copy is written into
+// the customer's home directory instead. And the DirectAdmin provider
+// puts nothing back yet. So the page offers every kind as a copy, says
+// where the copy lands, and carries no button that would put something
+// back.
+func TestDirectAdminOffersEveryKindAsACopyIntoTheHome(t *testing.T) {
+	directadmin := &Server{daSessions: &stubDASessions{}}
+	directadmin.facts = &panelFacts{deliversToHome: true}
+	if got := directadmin.offeredUserKinds(); fmt.Sprint(got) != fmt.Sprint(userKinds) {
+		t.Errorf("DirectAdmin offers %v, want every kind as a copy", got)
 	}
 
 	server, err := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -703,9 +710,10 @@ func TestDirectAdminOffersOnlyWhatItCanPutBack(t *testing.T) {
 	render := func(name string, view userView) string {
 		t.Helper()
 		view.Account = "studio"
-		view.Kinds = want
+		view.Kinds = userKinds
 		view.Links = userLinks{}
 		view.Panel = "DirectAdmin"
+		view.Downloads, view.DeliversToHome, view.PutsBack = true, true, false
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request = request.WithContext(context.WithValue(request.Context(), accountKey{}, "studio"))
 		response := httptest.NewRecorder()
@@ -716,7 +724,7 @@ func TestDirectAdminOffersOnlyWhatItCanPutBack(t *testing.T) {
 		return response.Body.String()
 	}
 	collectable := []restoreRow{{Restore: nodestore.Restore{ID: "r1", Account: "studio",
-		Status: job.StatusSuccess, ArchivePath: "/tmp/x"}, Collectable: true}}
+		Status: job.StatusSuccess, DeliveredPath: "/home/studio/gniza-downloads/studio-abcdef.tar.gz"}, Collectable: true}}
 	pages := map[string]string{
 		"home": render("user_home.html", userView{TotalPoints: 1, Latest: now, Ready: 1, Restores: collectable}),
 		"logs": render("user_logs.html", userView{TotalPoints: 1, Restores: collectable}),
@@ -724,9 +732,8 @@ func TestDirectAdminOffersOnlyWhatItCanPutBack(t *testing.T) {
 			Snapshots: []resticrun.Snapshot{{ID: "abcdef", Time: now}}, Kind: granular.KindDatabase}),
 	}
 	for name, page := range pages {
-		for _, absent := range []string{`value="download"`, "Download package", "Download a copy",
-			"ready to download", "live.php", "cPanel account", "cPanel login", "Full account", "DNS records", "FTP accounts",
-			"Download a private copy"} {
+		for _, absent := range []string{`value="restore"`, "Download package", "Download a copy",
+			"ready to download", "live.php", "cPanel account", "cPanel login", `name="confirm"`, "?p=download"} {
 			if strings.Contains(page, absent) {
 				t.Errorf("the DirectAdmin %s page offers %q", name, absent)
 			}
@@ -735,10 +742,19 @@ func TestDirectAdminOffersOnlyWhatItCanPutBack(t *testing.T) {
 			t.Errorf("the DirectAdmin %s page does not link the restore page by its query", name)
 		}
 	}
+	for _, name := range []string{"home", "logs"} {
+		for _, want := range []string{"gniza-downloads/studio-abcdef.tar.gz", `href="/CMD_FILE_MANAGER/gniza-downloads"`} {
+			if !strings.Contains(pages[name], want) {
+				t.Errorf("the DirectAdmin %s page does not say where the copy is: missing %q", name, want)
+			}
+		}
+	}
 	if !strings.Contains(pages["browse"], `action="?p=restore"`) {
 		t.Error("the DirectAdmin restore form does not post to the plugin's own address")
 	}
-	if !strings.Contains(pages["browse"], `value="restore"`) {
-		t.Error("the DirectAdmin restore page has no button that puts the databases back")
+	for _, want := range []string{`value="download"`, "Save a copy to my home directory", "Full account", "DNS records"} {
+		if !strings.Contains(pages["browse"], want) {
+			t.Errorf("the DirectAdmin restore page is missing %q", want)
+		}
 	}
 }

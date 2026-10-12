@@ -55,11 +55,12 @@
       <tr class="{{template "runstripe" .Status}}" {{if not .Status.Terminal}}data-running="1"{{end}}>
         <td class="cpr:whitespace-nowrap"><span class="cpr:mono">{{stamp .QueuedAt}}</span><div class="cpr:sublabel">{{agoTime .QueuedAt}}</div></td>
         <td class="cpr:font-semibold">{{$data.RestoreTitle .}}</td>
-        <td>{{if .Apply}}Restore into the account{{else}}Copy to download{{end}}
+        <td>{{if .Apply}}Restore into the account{{else if $data.DeliversToHome}}Copy into your home directory{{else}}Copy to download{{end}}
           {{if and .Applied .Detail}}<div class="cpr:sublabel">{{.Detail}}</div>{{end}}</td>
         <td>{{template "runstate" .Status}}</td>
         <td class="cpr:text-right cpr:whitespace-nowrap">
-          {{if and .Collectable $data.Downloads}}<a class="cpr:btn cpr:btn-xs cpr:btn-primary" href="{{$data.Links.URL "download" "id" .ID}}">Download package</a>
+          {{if and .Collectable $data.DeliversToHome}}<span class="cpr:mono cpr:text-xs">{{$data.HomeFile .}}</span> <a class="cpr:btn cpr:btn-xs cpr:btn-primary" href="{{$data.HomeFolderURL .}}">Open in File Manager</a>
+          {{else if and .Collectable $data.Downloads}}<a class="cpr:btn cpr:btn-xs cpr:btn-primary" href="{{$data.Links.URL "download" "id" .ID}}">Download package</a>
           {{else if .Applied}}<span class="cpr:sublabel">Nothing to download: it is in your account.</span>
           {{else if .Error}}<span class="cpr:sublabel cpr:text-error">{{.Error}}</span>{{end}}
         </td>

@@ -77,13 +77,14 @@
         package with everything in it instead.{{end}}</span>
       </label>
       {{else}}
-      <div class="cpr:me-auto cpr:max-md:me-0"><b>This basket is a download</b><p class="cpr:hint">{{$data.BasketBlocker}} cannot be
+      <div class="cpr:me-auto cpr:max-md:me-0"><b>This basket is a {{if $data.DeliversToHome}}copy for your home directory{{else}}download{{end}}</b><p class="cpr:hint">{{if $data.PutsBack}}{{$data.BasketBlocker}} cannot be
       put back by Gniza yet, and a basket goes back whole or not at all. Remove it above to
-      put the rest straight into your account.</p></div>
+      put the rest straight into your account.{{else}}Putting a part of your account back is not something Gniza does on {{$data.Panel}} yet. The copy
+      is yours to download{{if $data.DeliversToHome}} from <span class="cpr:mono">gniza-downloads</span> in your home directory{{end}}.{{end}}</p></div>
       {{end}}
       <div class="cpr:flex cpr:gap-3 cpr:shrink-0 cpr:max-md:flex-col">
         <button class="cpr:btn cpr:btn-sm cpr:max-md:w-full" type="submit" name="action" value="empty" formnovalidate>Empty the basket</button>
-        {{if $data.Downloads}}<button class="cpr:btn cpr:btn-sm cpr:max-md:w-full" type="submit" name="action" value="download" formnovalidate>Download as one package</button>{{end}}
+        {{if $data.Downloads}}<button class="cpr:btn cpr:btn-sm {{if not $data.BasketCanApply}}cpr:btn-primary {{end}}cpr:max-md:w-full" type="submit" name="action" value="download" formnovalidate>{{if $data.DeliversToHome}}Save as one package to my home directory{{else}}Download as one package{{end}}</button>{{end}}
         {{if $data.BasketCanApply}}<button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline cpr:max-md:w-full" type="submit" name="action" value="restore">{{$data.BasketLabel}}</button>{{end}}
       </div>
     </div>
@@ -217,7 +218,7 @@
 {{else}}
 <div class="cpr:flex cpr:items-start cpr:gap-3 cpr:px-4 cpr:py-3 cpr:rounded-box cpr:border cpr:border-base-300 cpr:bg-base-200 cpr:text-xs cpr:text-base-content/70">
   <svg class="cpr:size-5 cpr:shrink-0 cpr:fill-none cpr:stroke-success cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
-  <p><b class="cpr:text-base-content">Select a category to continue.</b> Everything here is yours alone. Files, mail, databases and their users can be put straight back into the account{{if $data.Downloads}}; anything else is a private copy to download{{end}}.</p>
+  <p><b class="cpr:text-base-content">Select a category to continue.</b> Everything here is yours alone. {{if $data.PutsBack}}Files, mail, databases and their users can be put straight back into the account{{if $data.Downloads}}; anything else is a private copy to download{{end}}.{{else}}Every part is a private copy{{if $data.DeliversToHome}}, saved in your home directory for you to download{{end}}; nothing on your account is changed.{{end}}</p>
 </div>
 {{end}}
 {{end}}
@@ -233,17 +234,19 @@
   </label>
   <div class="cpr:flex cpr:gap-3 cpr:shrink-0 cpr:max-md:flex-col">
     <button class="cpr:btn cpr:btn-sm cpr:max-md:w-full" type="submit" name="action" value="add" formnovalidate>{{if .InBasket .Kind}}Update my basket{{else}}Add to my basket{{end}}</button>
-    {{if .Downloads}}<button class="cpr:btn cpr:btn-sm cpr:max-md:w-full" type="submit" name="action" value="download" formnovalidate>Download a copy</button>{{end}}
+    {{if .Downloads}}<button class="cpr:btn cpr:btn-sm cpr:max-md:w-full" type="submit" name="action" value="download" formnovalidate>{{if .DeliversToHome}}Save a copy to my home directory{{else}}Download a copy{{end}}</button>{{end}}
     <button class="cpr:btn cpr:btn-sm cpr:btn-error cpr:btn-outline cpr:max-md:w-full" type="submit" name="action" value="restore">{{.PutBackLabel}}</button>
   </div>
   {{else}}
-  <div class="cpr:me-auto cpr:max-md:me-0"><b>Download a private copy</b><p class="cpr:hint">Putting this part back is not something
+  <div class="cpr:me-auto cpr:max-md:me-0"><b>{{if .DeliversToHome}}Save a private copy to your home directory{{else}}Download a private copy{{end}}</b><p class="cpr:hint">{{if .PutsBack}}Putting this part back is not something
   Gniza does yet. DNS records, certificates, FTP logins and panel settings each need a change
   the control panel makes rather than a file copied over another, and that is not built. Your host
-  can put it back from this copy.</p></div>
+  can put it back from this copy.{{else}}Putting a part of your account back is not something Gniza does on {{.Panel}} yet.
+  {{if .DeliversToHome}}The copy lands in <span class="cpr:mono">gniza-downloads</span> in your home directory, where you can download it.{{end}} Your host
+  can put it back from this copy.{{end}}</p></div>
   <div class="cpr:flex cpr:gap-3 cpr:shrink-0 cpr:max-md:flex-col">
     <button class="cpr:btn cpr:btn-sm cpr:max-md:w-full" type="submit" name="action" value="add" formnovalidate>{{if .InBasket .Kind}}Update my basket{{else}}Add to my basket{{end}}</button>
-    {{if .Downloads}}<button class="cpr:btn cpr:btn-sm cpr:btn-primary cpr:max-md:w-full" type="submit" name="action" value="download">Download a copy</button>{{end}}
+    {{if .Downloads}}<button class="cpr:btn cpr:btn-sm cpr:btn-primary cpr:max-md:w-full" type="submit" name="action" value="download">{{if .DeliversToHome}}Save a copy to my home directory{{else}}Download a copy{{end}}</button>{{end}}
   </div>
   {{end}}
 </div>

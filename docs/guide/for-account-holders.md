@@ -37,14 +37,16 @@ account archive, whatever else is selected: that one goes to cPanel's
 `restorepkg`, which runs as root over a home directory the customer controls,
 and it remains an operator's decision.
 
-On DirectAdmin the same page offers less, and says so by what is not on
-it. Nothing is downloaded: DirectAdmin wraps everything a plugin prints in
-its own skin, so a package could not reach the browser as a file. What is
-offered is what can be put back -- the home directory, the cron jobs,
-databases, database users and mail -- and the parts that could only be
-handed over as a copy, the full account archive among them, are not shown.
-Whether the page appears at all is the self-service setting on the
-operator's Settings page ([Settings](settings.md)).
+On DirectAdmin the same page offers copies only, and says so. DirectAdmin
+wraps everything a plugin prints in its own skin, so a package cannot reach
+the browser as a file; instead the copy is written into the customer's own
+home directory under `gniza-downloads`, owned by them and readable by
+nobody else, and the page shows the file and opens the File Manager on it.
+Every category is offered that way, the full account archive included.
+Nothing is put back into the live account from the page yet, because the
+DirectAdmin provider's put-backs are not built; the copy is what the host
+puts back from. Whether the page appears at all is the self-service setting
+on the operator's Settings page ([Settings](settings.md)).
 
 Putting the home directory back is done as the account, never as root: the
 service reads the staged copy, which the customer cannot, and the customer's

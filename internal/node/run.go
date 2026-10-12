@@ -660,6 +660,7 @@ func (e *Engine) runRestore(ctx context.Context, stored nodestore.Restore) error
 	stored.Hint = report.Hint
 	stored.Applied = report.Applied
 	stored.Error = report.Error
+	e.deliverToHome(ctx, &stored)
 	finished := time.Now().UTC()
 	stored.FinishedAt = &finished
 	if _, err := e.store.PutRestore(stored); err != nil {
@@ -1594,6 +1595,74 @@ func (e *Engine) OpenArchiveForDownload(restoreID string) (file *os.File, filena
 		return nil, "", 0, fmt.Errorf("node: that archive is not a regular file")
 	}
 	return file, filename, info.Size(), nil
+}
+
+// deliverToHome writes a finished copy into the account's own home
+// directory, on a panel that cannot hand a file to the browser and only
+// when the account page asked for that. The archive stays in staging as
+// well, as every copy does, and goes when the retention passes.
+//
+// A copy that could not be written is a failed restore: the whole point
+// of it was a file the customer can reach, and the usual reason is a home
+// directory with no room for one.
+func (e *Engine) deliverToHome(ctx context.Context, stored *nodestore.Restore) {
+	if !stored.DeliverToHome || stored.Applied || stored.Account == "" ||
+		stored.Status != job.StatusSuccess || stored.ArchivePath == "" {
+		return
+	}
+	deliverer, ok := e.provider.(panel.HomeDeliverer)
+	if !ok {
+		return
+	}
+	_, filename, _, err := e.statArchive(*stored)
+	if err == nil {
+		var path string
+		path, err = deliverer.DeliverToHome(ctx, stored.Account, stored.ArchivePath, filename)
+		if err == nil {
+			stored.DeliveredPath = path
+			return
+		}
+	}
+	e.log.Error("deliver a copy into the home directory",
+		"restore_id", stored.ID, "account", stored.Account, "error", err)
+	stored.Status = job.StatusFailed
+	stored.Error = err.Error()
+	stored.Hint = "The copy could not be saved in your home directory. " +
+		"Make room there -- it needs about the size of what you asked for -- and ask again."
+}
+
+// sweepDelivered removes the copies written into home directories whose
+// retention has passed, as the accounts they were written for. A copy
+// whose account name has changed hands since is not removed: the file at
+// that path is the next holder's, whatever it is called.
+func (e *Engine) sweepDelivered(ctx context.Context, cutoff time.Time) {
+	deliverer, ok := e.provider.(panel.HomeDeliverer)
+	if !ok {
+		return
+	}
+	restores, err := e.store.Restores(1000)
+	if err != nil {
+		e.log.Error("list restores to sweep delivered copies", "error", err)
+		return
+	}
+	for _, restore := range restores {
+		if restore.DeliveredPath == "" || restore.FinishedAt == nil || restore.FinishedAt.After(cutoff) {
+			continue
+		}
+		if e.BelongsToCurrentHolder(restore) {
+			if err := deliverer.RemoveFromHome(ctx, restore.Account, restore.DeliveredPath); err != nil {
+				e.log.Error("remove a delivered copy", "restore_id", restore.ID,
+					"account", restore.Account, "error", err)
+				continue
+			}
+			e.log.Info("removed a delivered copy nobody came back for",
+				"restore_id", restore.ID, "account", restore.Account)
+		}
+		restore.DeliveredPath = ""
+		if _, err := e.store.PutRestore(restore); err != nil {
+			e.log.Error("record a swept copy", "restore_id", restore.ID, "error", err)
+		}
+	}
 }
 
 // statArchive resolves a restore's archive and checks it is where this node

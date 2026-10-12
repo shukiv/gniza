@@ -386,7 +386,30 @@ func (e *Engine) SweepWorkdir() error {
 		e.log.Info("removed collected output nobody came back for",
 			"key", output.Key, "bytes", output.Bytes, "age_hours", time.Since(output.At).Hours())
 	}
+	e.sweepDelivered(context.Background(), cutoff)
 	return nil
+}
+
+// DeliversToHome says whether a copy for an account is written into its
+// home directory here, because the panel cannot hand the browser a file.
+func (e *Engine) DeliversToHome() bool {
+	if e.provider == nil {
+		return false
+	}
+	_, ok := e.provider.(panel.HomeDeliverer)
+	return ok
+}
+
+// PutsBack says whether this panel can write a part of an account back
+// into the live account at all. A panel that does not say is taken to.
+func (e *Engine) PutsBack() bool {
+	if e.provider == nil {
+		return true
+	}
+	if gate, ok := e.provider.(panel.PutBackGate); ok {
+		return gate.PutsBack()
+	}
+	return true
 }
 
 // Store exposes the state file to the UI.

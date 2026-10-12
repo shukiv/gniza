@@ -280,9 +280,15 @@ type userView struct {
 	Repositories []userRepository
 	// Links is where this page's links point, which the panel decides.
 	Links userLinks
-	// Downloads says a restore can be handed over as a file here. Where
+	// Downloads says a copy can be had here, one way or the other. Where
 	// it cannot, every control that would offer one stays off the page.
 	Downloads bool
+	// DeliversToHome says the copy is written into the account's own home
+	// directory rather than handed to the browser.
+	DeliversToHome bool
+	// PutsBack says this panel can write a part of the account back into
+	// the live account. Where it cannot, the page offers copies only.
+	PutsBack bool
 	// Panel names the control panel, for the copy that has to.
 	Panel    string
 	Restores []restoreRow
@@ -333,7 +339,7 @@ func (v userView) BasketLabel() string {
 
 // BasketCanApply reports whether everything in the basket can go back into
 // the account.
-func (v userView) BasketCanApply() bool { return basketCanApply(v.Basket) }
+func (v userView) BasketCanApply() bool { return v.PutsBack && basketCanApply(v.Basket) }
 
 // BasketBlocker names the part that keeps the basket from being put back,
 // so the reason is on the page rather than left to be guessed at.
@@ -410,7 +416,26 @@ func (v userView) Selected(k granular.Kind) bool { return v.Kind == k }
 
 // CanApply reports whether the chosen part of the account can be written
 // back into it, rather than only handed over as a copy.
-func (v userView) CanApply() bool { return v.Kind.CanApply() }
+func (v userView) CanApply() bool { return v.PutsBack && v.Kind.CanApply() }
+
+// HomeFile is where a delivered copy is, in the account's own terms: the
+// directory under their home and the file in it.
+func (v userView) HomeFile(row restoreRow) string {
+	if row.DeliveredPath == "" {
+		return ""
+	}
+	return filepath.Base(filepath.Dir(row.DeliveredPath)) + "/" + filepath.Base(row.DeliveredPath)
+}
+
+// HomeFolderURL opens the panel's file manager on the directory the
+// copies are written into. DirectAdmin's own address for its file
+// manager, which every skin answers at.
+func (v userView) HomeFolderURL(row restoreRow) string {
+	if row.DeliveredPath == "" {
+		return ""
+	}
+	return "/CMD_FILE_MANAGER/" + filepath.Base(filepath.Dir(row.DeliveredPath))
+}
 
 // Here is where the picker is, in the account's own terms. Path is where
 // the backup put it -- a home directory as it was named on the server that
@@ -456,12 +481,15 @@ func (v userView) PutBackLabel() string {
 // chosen whole rather than item by item.
 func (v userView) PutBackNote() string {
 	switch {
-	case v.Kind == granular.KindDBUsers:
+	case v.Kind == granular.KindDBUsers && v.PutsBack:
 		return "The users come back with the passwords they had and the access they had " +
 			"to this account's databases: a user that still exists is set back to the " +
 			"password in the backup. Your own " + v.Panel + " login keeps its current password."
-	case v.Kind.CanApply():
+	case v.CanApply():
 		return "This can go straight back into the account, or be downloaded as a copy."
+	case v.DeliversToHome:
+		return "A copy is saved in your home directory, where you can download it; send it to " +
+			"your host, who can put it back."
 	}
 	return "Download it here and send it to your host, who can put it back."
 }
@@ -526,11 +554,13 @@ func (v userView) RestoreTitle(row restoreRow) string {
 // every account page needs to know about the panel it is served on.
 func (s *Server) userViewFor(r *http.Request) userView {
 	return userView{
-		Account:   accountOf(r),
-		Kinds:     s.offeredUserKinds(),
-		Links:     s.userLinks(),
-		Downloads: s.accountDownloads(),
-		Panel:     s.panelName(),
+		Account:        accountOf(r),
+		Kinds:          s.offeredUserKinds(),
+		Links:          s.userLinks(),
+		Downloads:      s.accountCopies(),
+		DeliversToHome: s.deliversToHome(),
+		PutsBack:       s.putsBack(),
+		Panel:          s.panelName(),
 	}
 }
 
@@ -582,11 +612,12 @@ func (s *Server) handleUserHome(w http.ResponseWriter, r *http.Request) {
 		if !s.engine.BelongsToCurrentHolder(restore) {
 			continue
 		}
+		collectable := s.collectable(restore)
 		view.Restores = append(view.Restores, restoreRow{
 			Restore:     accountSafeRestore(restore),
-			Collectable: restore.ArchivePath != "" && onDisk(restore.ArchivePath),
+			Collectable: collectable,
 		})
-		if restore.ArchivePath != "" && onDisk(restore.ArchivePath) {
+		if collectable {
 			view.Ready++
 		}
 	}
@@ -610,13 +641,16 @@ var userKinds = []granular.Kind{
 }
 
 // offeredUserKinds is the part of that list this panel can do anything
-// with. A kind that can only be handed over as a copy -- the whole
-// account, the DNS records, the certificates, the FTP logins, the
-// domains -- is nothing to offer where nothing can be downloaded: a card
-// that leads to no button is a question with no answer.
+// with. Where a copy can be had, every kind can: a copy is what the
+// kinds that cannot be put back are for. Where it cannot, a kind that
+// can only be handed over as a copy is nothing to offer: a card that
+// leads to no button is a question with no answer.
 func (s *Server) offeredUserKinds() []granular.Kind {
-	if s.accountDownloads() {
+	if s.accountCopies() {
 		return userKinds
+	}
+	if !s.putsBack() {
+		return nil
 	}
 	var offered []granular.Kind
 	for _, kind := range userKinds {
@@ -842,12 +876,19 @@ func (s *Server) handleUserRestore(w http.ResponseWriter, r *http.Request) {
 			"Tick the box to confirm before restoring into your account.")
 		return
 	}
-	// Where nothing can be downloaded, a copy is a file nobody can
-	// collect. The page offers no such button; a request that asks
-	// anyway is told the same thing.
-	if !apply && !s.accountDownloads() {
+	// Where no copy can be had, a copy is a file nobody can collect; and
+	// where the panel cannot put things back, asking it to is asking for
+	// a refusal. The page offers no such button either way; a request
+	// that asks anyway is told the same thing.
+	if !apply && !s.accountCopies() {
 		redirectUser(w, s.userLinks(), "/", "error",
 			"Downloads are not available here. Tick the box to put it back into your account instead.")
+		return
+	}
+	if apply && !s.putsBack() {
+		redirectUser(w, s.userLinks(), "/", "error",
+			"Putting a part of your account back is not available on "+s.panelName()+
+				" yet. Leave the box unticked to save a copy instead.")
 		return
 	}
 	var (
@@ -887,6 +928,9 @@ func (s *Server) handleUserRestore(w http.ResponseWriter, r *http.Request) {
 		redirectUser(w, s.userLinks(), "/", "error", "That backup is not one of yours.")
 		return
 	}
+	// A copy on a panel that cannot hand one to the browser goes into
+	// the home directory instead, as the account, when it is ready.
+	restore.DeliverToHome = !restore.Apply && s.deliversToHome()
 	if _, err := s.engine.QueueRestore(restore); err != nil {
 		s.log.Error("queue account restore", "account", account, "error", err)
 		message := "The restore could not be started. Ask your host to check it."
@@ -909,9 +953,24 @@ func (s *Server) handleUserRestore(w http.ResponseWriter, r *http.Request) {
 				"was in that backup.")
 		return
 	}
+	if restore.DeliverToHome {
+		redirectUser(w, s.userLinks(), "/", "ok",
+			"Started. When it finishes, the copy will be in your home directory under "+
+				"gniza-downloads, and listed below; nothing on your account is changed.")
+		return
+	}
 	redirectUser(w, s.userLinks(), "/", "ok",
 		"Started. What it recovers will appear below to download; nothing on your account "+
 			"is changed.")
+}
+
+// collectable says whether a finished copy is there for the account to
+// take: on the server, to download, or in their home directory.
+func (s *Server) collectable(restore nodestore.Restore) bool {
+	if s.deliversToHome() {
+		return restore.DeliveredPath != "" && onDisk(restore.DeliveredPath)
+	}
+	return restore.ArchivePath != "" && onDisk(restore.ArchivePath)
 }
 
 // redirectUser keeps account-side navigation in cPanel's .live.php entry
@@ -1010,11 +1069,39 @@ func directAdminPages(next http.Handler) http.Handler {
 	})
 }
 
-// accountDownloads says whether an account can be handed a file at all.
+// accountDownloads says whether the page can hand the browser a file.
 // DirectAdmin wraps everything a plugin prints in its skin, so a restore
-// archive cannot reach the browser as itself; there, what a customer
-// recovers is put back into the account and nothing is downloaded.
+// archive cannot reach the browser as itself there.
 func (s *Server) accountDownloads() bool { return s.daSessions == nil }
+
+// panelFacts is what the engine would say about the panel, for a test
+// that has no engine to ask.
+type panelFacts struct {
+	deliversToHome bool
+	putsBack       bool
+}
+
+// deliversToHome says whether a copy is written into the account's own
+// home directory instead, where its file manager and FTP already look.
+func (s *Server) deliversToHome() bool {
+	if s.facts != nil {
+		return s.facts.deliversToHome
+	}
+	return s.engine != nil && s.engine.DeliversToHome()
+}
+
+// accountCopies says whether an account can have a copy at all, one way
+// or the other.
+func (s *Server) accountCopies() bool { return s.accountDownloads() || s.deliversToHome() }
+
+// putsBack says whether this panel can write a part of an account back
+// into the live account. Where it cannot, the page offers copies only.
+func (s *Server) putsBack() bool {
+	if s.facts != nil {
+		return s.facts.putsBack
+	}
+	return s.engine == nil || s.engine.PutsBack()
+}
 
 var errUserRestoreNeedsNames = errors.New("account recovery needs at least one item")
 

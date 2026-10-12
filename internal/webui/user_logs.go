@@ -150,7 +150,7 @@ func (s *Server) handleUserLogs(w http.ResponseWriter, r *http.Request) {
 		}
 		view.Restores = append(view.Restores, restoreRow{
 			Restore:     accountSafeRestore(restore),
-			Collectable: restore.ArchivePath != "" && onDisk(restore.ArchivePath),
+			Collectable: s.collectable(restore),
 		})
 	}
 	s.renderUser(w, r, "user_logs.html", view)

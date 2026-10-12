@@ -92,6 +92,32 @@ type AccountHolder interface {
 	Package(name string) string
 }
 
+// HomeDeliverer is a panel on which the only way to hand an account a
+// file is to put it where the account already looks: its own home
+// directory. DirectAdmin wraps everything a plugin prints in its skin,
+// so an archive cannot reach the browser through the page; it can reach
+// the account's file manager and FTP.
+type HomeDeliverer interface {
+	// DeliverToHome copies the file at from into the account's home
+	// directory under the name given, as the account, and returns the
+	// path it was written to. Root reads the file, which the account
+	// cannot; the account writes it, so what lands there is theirs and
+	// can land nowhere they could not already write.
+	DeliverToHome(ctx context.Context, user, from, name string) (string, error)
+	// RemoveFromHome removes a file DeliverToHome wrote, as the account,
+	// for the same reason: root removing a path inside a home directory
+	// is root following whatever the account put at that path.
+	RemoveFromHome(ctx context.Context, user, path string) error
+}
+
+// PutBackGate is a panel that says whether a part of an account can be
+// written back into the live account at all. A panel without one is
+// taken to put things back; one whose put-backs are not built yet says
+// so here, so a page does not offer what the panel will refuse.
+type PutBackGate interface {
+	PutsBack() bool
+}
+
 // SelfServiceGate is implemented by a panel that keeps its own switch for
 // whether an account holder may use the account-facing pages -- cPanel's
 // Feature Manager. A panel without one leaves the decision to the

@@ -56,7 +56,7 @@ func TestDumpAccountRecoveryPages(t *testing.T) {
 		},
 	}
 	for name, view := range views {
-		view.Downloads, view.Links = true, userLinks{cpanel: true}
+		view.Downloads, view.PutsBack, view.Links = true, true, userLinks{cpanel: true}
 		templateName := "user_browse.html"
 		path := "/browse"
 		if name == "overview" {

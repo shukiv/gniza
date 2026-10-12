@@ -726,23 +726,33 @@ ask cpsrvd to vouch for it (ADR 0013); DirectAdmin gives the plugin the
 session, and a one-use token derived from a session that is itself
 checked on every request would prove nothing the session does not.
 
-Two things the page does on cPanel it does not do here, and says so by
-not offering them:
+What the page does here, and what it does not, was settled twice the
+same day. The first cut offered the five kinds that can be put back
+and hid the rest, on the reasoning that with no download a copy-only
+kind was a card with no button. That reasoning had the facts backwards:
+the DirectAdmin provider's put-backs -- `PutHomeDir`, `PutCrontab`,
+`LoadDatabase`, `CreateDatabase`, `PutDatabaseUsers` -- all still answer
+`ErrUnverified`, so the five kinds offered were five refusals, and the
+README said they went back. Corrected the same evening:
 
-- **Nothing is downloaded.** DirectAdmin's skin wraps everything a
-  plugin prints, so an archive would reach the browser as HTML with a
-  tarball inside it. The home, logs and restore pages carry no download
-  control on DirectAdmin, and a request that asks for a copy anyway is
-  told to put it back instead. The way to hand a customer a file on
-  DirectAdmin is to write it into their own home directory, as the
-  account, where their file manager and FTP already are; that is the
-  next piece, not this one.
-- **Only what can be put back is offered.** With no download, a kind
-  whose only action is a copy is a card that leads to no button: the
-  whole account, the domains, the DNS records, the certificates and the
-  FTP logins are not shown. What is shown is the home directory, the
-  cron jobs, the databases, the database users and the mail, each put
-  back into the live account after the same tick box cPanel asks for.
+- **A copy is written into the home directory.** DirectAdmin's skin
+  wraps everything a plugin prints, so an archive would reach the
+  browser as HTML with a tarball inside it. Instead, when a copy is
+  ready, root opens the archive the account cannot read and a child
+  running as the account writes it to `~/gniza-downloads/<name>` under
+  umask 077 (`panel.HomeDeliverer`, `internal/directadmin/deliver.go`).
+  Nothing runs as root inside the home: the file is the account's
+  without a chown, and a link planted at the directory's name leads
+  nowhere the account could not already write. The page shows the file
+  and links `/CMD_FILE_MANAGER/gniza-downloads`. The copy is removed by
+  the account, the same way, when `KeepOutputDays` passes; a name that
+  has changed hands since is not touched, the file is the next holder's.
+  A copy that cannot be written -- a home with no room -- is a failed
+  restore with a hint that says so.
+- **Every kind is offered, as a copy; nothing is put back.** The
+  provider says so through `panel.PutBackGate`, and the page draws no
+  button that would reach a put-back, no tick box, no basket that
+  applies. The cPanel page is unchanged: it streams and it puts back.
 
 The plugin has one address, so the page is named in the query --
 `?p=browse&repository=...` -- and Gniza turns that back into the route
@@ -778,13 +788,15 @@ production server.
 
 Not yet, and known:
 
-1. **Who was at the keyboard under login-as** is not recorded.
+1. **Putting a part of a DirectAdmin account back** from the page: the
+   provider's put-backs first, then `PutsBack` answers true and the
+   page's buttons return on their own.
+2. **Who was at the keyboard under login-as** is not recorded.
    `IS_LOGIN_AS` and `LOGIN_AS_MASTER` reach the script as environment
    variables, which is what the process was started with and not proof
    of anything; the restore record names the account, as it does on
    cPanel. Recording the master would need DirectAdmin's own word for
    it, and `CMD_API_SHOW_USER_CONFIG` does not give one.
-2. **A copy into the customer's home** in place of a download.
 3. **Which unix user the `user/` script runs as under login-as** is
    what the socket attributes the request by, and it has been read from
    DirectAdmin's documentation rather than measured. The first drill on

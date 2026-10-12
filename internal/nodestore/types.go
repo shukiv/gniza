@@ -508,8 +508,16 @@ type Restore struct {
 	// is written back where it belongs. Off unless explicitly asked for.
 	// Unrestricted asks cPanel to skip its Restricted Restore checks
 	// when applying the archive. The default is restricted.
-	Unrestricted  bool       `json:"unrestricted,omitempty"`
-	Apply         bool       `json:"apply"`
+	Unrestricted bool `json:"unrestricted,omitempty"`
+	Apply        bool `json:"apply"`
+	// DeliverToHome asks for the copy to be written into the account's
+	// own home directory when it is ready, as the account, on a panel
+	// that cannot hand a file to the browser. Set by the account page.
+	DeliverToHome bool `json:"deliver_to_home,omitempty"`
+	// DeliveredPath is where that copy was written, inside the home
+	// directory, once it was. Removed with the rest of the output when
+	// the retention passes.
+	DeliveredPath string     `json:"delivered_path,omitempty"`
 	Status        job.Status `json:"status"`
 	BytesRestored uint64     `json:"bytes_restored"`
 	// Progress is how far a running restore has got. Nil until it starts

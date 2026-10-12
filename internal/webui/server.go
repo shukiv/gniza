@@ -98,6 +98,8 @@ type Server struct {
 	// a session for, so a process guessing sessions is answered here
 	// rather than by DirectAdmin every time.
 	daRefusals refusalLog
+	// facts stands in for the engine's word on the panel in tests.
+	facts *panelFacts
 	// browser is the door on the TCP listener, for a server with no
 	// panel: a password, sessions and a lockout. Nil where nothing
 	// listens on a port. See browser.go.

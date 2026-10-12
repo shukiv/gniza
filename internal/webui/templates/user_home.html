@@ -33,7 +33,7 @@
   </div>
   {{if $data.Downloads}}<div class="cpr:flex cpr:items-center cpr:gap-3 cpr:rounded-box cpr:border cpr:border-base-300 cpr:bg-base-100 cpr:p-3">
     <svg class="cpr:size-6 cpr:text-primary cpr:shrink-0 cpr:fill-none cpr:stroke-current cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
-    <div><p class="cpr:text-lg cpr:font-semibold cpr:mono cpr:leading-tight">{{$data.Ready}}</p><p class="cpr:text-xs cpr:text-base-content/60">ready to download</p></div>
+    <div><p class="cpr:text-lg cpr:font-semibold cpr:mono cpr:leading-tight">{{$data.Ready}}</p><p class="cpr:text-xs cpr:text-base-content/60">{{if $data.DeliversToHome}}copies in your home directory{{else}}ready to download{{end}}</p></div>
   </div>{{end}}
 </section>
 
@@ -81,7 +81,7 @@
         {{if .Collectable}}{{else if .Applied}}<span class="cpr:block cpr:text-xs cpr:text-base-content/60">Nothing to download: it is in your account.</span>
         {{else if .Error}}<span class="cpr:block cpr:text-xs cpr:text-error">{{.Error}}</span>{{end}}
       </span>
-      {{if and .Collectable $data.Downloads}}<a class="cpr:btn cpr:btn-xs cpr:btn-primary cpr:shrink-0 cpr:self-center" href="{{$data.Links.URL "download" "id" .ID}}">Download package</a>{{end}}
+      {{if and .Collectable $data.DeliversToHome}}<span class="cpr:flex cpr:flex-col cpr:items-end cpr:gap-1 cpr:shrink-0 cpr:self-center"><span class="cpr:mono cpr:text-xs">{{$data.HomeFile .}}</span><a class="cpr:btn cpr:btn-xs cpr:btn-primary" href="{{$data.HomeFolderURL .}}">Open in File Manager</a></span>{{else if and .Collectable $data.Downloads}}<a class="cpr:btn cpr:btn-xs cpr:btn-primary cpr:shrink-0 cpr:self-center" href="{{$data.Links.URL "download" "id" .ID}}">Download package</a>{{end}}
     </li>
     {{end}}
   </ul>
@@ -90,9 +90,11 @@
   {{end}}
   <div class="cpr:flex cpr:items-start cpr:gap-3 cpr:px-4 cpr:py-3 cpr:border-t cpr:border-base-300 cpr:bg-base-200 cpr:text-xs cpr:text-base-content/70 cpr:rounded-b-box">
     <svg class="cpr:size-5 cpr:shrink-0 cpr:fill-none cpr:stroke-success cpr:stroke-[1.8]" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
-    <p><b class="cpr:text-base-content">You choose what happens.</b> Files, mail, databases and their users can be put straight
+    <p>{{if $data.PutsBack}}<b class="cpr:text-base-content">You choose what happens.</b> Files, mail, databases and their users can be put straight
     back into the account, replacing what is there now. {{if $data.Downloads}}Everything else is prepared as a copy to
-    download, and nothing{{else}}Nothing{{end}} is changed until you ask for it.</p>
+    download, and nothing{{else}}Nothing{{end}} is changed until you ask for it.{{else}}<b class="cpr:text-base-content">Nothing on your account is changed here.</b> Every part of a backup is
+    prepared as a copy{{if $data.DeliversToHome}} and saved in your home directory under <span class="cpr:mono">gniza-downloads</span>, where you can
+    download it{{end}}. Putting a part back into the live account is not something Gniza does on {{$data.Panel}} yet; your host can, from the copy.{{end}}</p>
   </div>
 </section>
 {{end}}

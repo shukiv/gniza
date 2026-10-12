@@ -135,7 +135,7 @@ func TestTheLogsPageRenders(t *testing.T) {
 	request = request.WithContext(context.WithValue(request.Context(), accountKey{}, "studio"))
 	response := httptest.NewRecorder()
 	server.renderUser(response, request, "user_logs.html", userView{
-		Downloads: true, Links: userLinks{cpanel: true},
+		Downloads: true, PutsBack: true, Links: userLinks{cpanel: true},
 		Account: "studio",
 		Backups: []userBackupRow{{
 			When: now, Status: job.StatusSuccess,

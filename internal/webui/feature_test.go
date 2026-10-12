@@ -725,7 +725,8 @@ func TestDirectAdminOffersOnlyWhatItCanPutBack(t *testing.T) {
 	}
 	for name, page := range pages {
 		for _, absent := range []string{`value="download"`, "Download package", "Download a copy",
-			"ready to download", "live.php", "cPanel account", "cPanel login", "Full account", "DNS records", "FTP accounts"} {
+			"ready to download", "live.php", "cPanel account", "cPanel login", "Full account", "DNS records", "FTP accounts",
+			"Download a private copy"} {
 			if strings.Contains(page, absent) {
 				t.Errorf("the DirectAdmin %s page offers %q", name, absent)
 			}

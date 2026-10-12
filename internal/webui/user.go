@@ -697,8 +697,11 @@ func (s *Server) handleUserBrowse(w http.ResponseWriter, r *http.Request) {
 		s.renderUser(w, r, "user_browse.html", view)
 		return
 	}
-	if !isUserKind(view.Kind) {
+	if !s.offersUserKind(view.Kind) {
+		// Nothing of it is drawn: a form for a kind the page does not
+		// offer would carry buttons that lead nowhere.
 		view.Err = "That recovery option is not available for your account."
+		view.Kind = ""
 		s.renderUser(w, r, "user_browse.html", view)
 		return
 	}

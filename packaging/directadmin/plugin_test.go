@@ -48,7 +48,7 @@ func TestDirectAdminHasEverythingItNeedsToServeThePlugin(t *testing.T) {
 			t.Errorf("plugin.conf says %s=%q, wanted %q", key, got, want)
 		}
 	}
-	for _, path := range []string{"hooks/admin_txt.html", "admin/index.html", "user/index.html"} {
+	for _, path := range []string{"hooks/admin_txt.html", "admin/index.html", "hooks/user_txt.html", "user/index.html"} {
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("%s is missing, so DirectAdmin serves nothing: %v", path, err)
 		}
@@ -129,10 +129,11 @@ func theAdminPageNeverPrintsTheSession(t *testing.T, page string) {
 	if strings.Contains(stripComments(page), "--header \"X-Gniza-DA") {
 		t.Error("the session is on curl's command line, where every local user can read it")
 	}
-	for _, want := range []string{"--config -", `header = "X-Gniza-DA-Session: %s"`, `header = "X-Gniza-DA-Key: %s"`,
-		"session_config | curl", `*[!A-Za-z0-9:_.-]*) fail`} {
+	for _, want := range []string{`--config "$CFG"`, "CFG=$(mktemp)", `trap 'rm -f -- "$CFG"' EXIT`, "umask 077",
+		`header = "X-Gniza-DA-Session: %s"`, `header = "X-Gniza-DA-Key: %s"`,
+		`session_config >"$CFG"`, `*[!A-Za-z0-9:_.-]*) fail`} {
 		if !strings.Contains(page, want) {
-			t.Errorf("the page is missing %s, so curl is not handed the session on standard input", want)
+			t.Errorf("the page is missing %s, so curl is not handed the session in a private file", want)
 		}
 	}
 	if strings.Contains(page, "$SESSION_ID") && !strings.Contains(page, "${SESSION_ID:-}") {
@@ -152,10 +153,16 @@ func TestTheFormIsForwardedFromWhereDirectAdminPutsIt(t *testing.T) {
 }
 
 func theFormIsForwardedFromWhereDirectAdminPutsIt(t *testing.T, page string) {
-	if !strings.Contains(page, `--data-raw "${POST:-}"`) {
-		t.Error("the page does not forward the form DirectAdmin handed it in POST")
+	if !strings.Contains(page, `printf '%s' "${POST:-}" | curl`) || !strings.Contains(page, "--data-binary @-") {
+		t.Error("the page does not forward the form DirectAdmin handed it in POST on curl's standard input")
 	}
-	for _, reading := range []string{"head -c", "CONTENT_LENGTH", "--data-binary @-"} {
+	// The form carries a destination's password on the administrator's
+	// page. On the command line it would be readable by every local
+	// user through /proc for the length of the request.
+	if strings.Contains(stripComments(page), "--data-raw") || strings.Contains(stripComments(page), "--data \"") {
+		t.Error("the form is on curl's command line, where every local user can read it")
+	}
+	for _, reading := range []string{"head -c", "CONTENT_LENGTH"} {
 		if strings.Contains(stripComments(page), reading) {
 			t.Errorf("the page still reads the request body with %q, which DirectAdmin never fills", reading)
 		}
@@ -297,26 +304,33 @@ func TestARedirectIsFollowedHereBecauseDirectAdminCannotPassOneOn(t *testing.T) 
 // it looked like on a real 1.709 host. JetBackup ships an anchor in
 // admin_txt.html and an anchor with an icon in admin_img.html, and is
 // listed where an administrator looks for it.
+//
+// The account level is the same pair one level down: user_txt.html and
+// user_img.html, pointing at /CMD_PLUGINS/, which is where DirectAdmin
+// serves a customer the plugin and its images. Without them the account
+// page exists and nobody is shown the way to it.
 func TestTheMenuEntriesAreLinksDirectAdminCanFollow(t *testing.T) {
-	const target = "/CMD_PLUGINS_ADMIN/gniza/index.html"
-	for _, name := range []string{"hooks/admin_txt.html", "hooks/admin_img.html"} {
-		entry := read(t, name)
-		if !strings.Contains(entry, `href="`+target+`"`) {
-			t.Errorf("%s does not link to %s", name, target)
+	for level, base := range map[string]string{"admin": "/CMD_PLUGINS_ADMIN/gniza/", "user": "/CMD_PLUGINS/gniza/"} {
+		target := base + "index.html"
+		for _, name := range []string{"hooks/" + level + "_txt.html", "hooks/" + level + "_img.html"} {
+			entry := read(t, name)
+			if !strings.Contains(entry, `href="`+target+`"`) {
+				t.Errorf("%s does not link to %s", name, target)
+			}
+			if !strings.Contains(entry, "Backups") {
+				t.Errorf("%s does not say what the page is", name)
+			}
 		}
-		if !strings.Contains(entry, "Gniza") {
-			t.Errorf("%s does not name the plugin", name)
+		// The tile carries the icon, and the icon has to be a file the
+		// installer puts where that address resolves.
+		img := read(t, "hooks/"+level+"_img.html")
+		icon := regexp.MustCompile(`src="(` + regexp.QuoteMeta(base) + `images/[^"]+)"`).FindStringSubmatch(img)
+		if icon == nil {
+			t.Fatalf("%s_img.html has no icon under the plugin's own images directory", level)
 		}
-	}
-	// The tile carries the icon, and the icon has to be a file the
-	// installer puts where that address resolves.
-	img := read(t, "hooks/admin_img.html")
-	icon := regexp.MustCompile(`src="(/CMD_PLUGINS_ADMIN/gniza/images/[^"]+)"`).FindStringSubmatch(img)
-	if icon == nil {
-		t.Fatal("admin_img.html has no icon under the plugin's own images directory")
-	}
-	if _, err := os.Stat(strings.TrimPrefix(icon[1], "/CMD_PLUGINS_ADMIN/gniza/")); err != nil {
-		t.Errorf("the icon %s is not in the package: %v", icon[1], err)
+		if _, err := os.Stat(strings.TrimPrefix(icon[1], base)); err != nil {
+			t.Errorf("the icon %s is not in the package: %v", icon[1], err)
+		}
 	}
 	install := read(t, "install.sh")
 	if !strings.Contains(install, "images") {
@@ -325,7 +339,7 @@ func TestTheMenuEntriesAreLinksDirectAdminCanFollow(t *testing.T) {
 	// And it installs both menu files. A glob that matched only
 	// *_txt.html left the tile behind, which is the half of the pair
 	// Evolution actually draws.
-	for _, name := range []string{"admin_txt.html", "admin_img.html"} {
+	for _, name := range []string{"admin_txt.html", "admin_img.html", "user_txt.html", "user_img.html"} {
 		matched := false
 		for _, glob := range regexp.MustCompile(`hooks/(\*[^"\s]*\.html)`).FindAllStringSubmatch(install, -1) {
 			if ok, _ := path.Match(glob[1], name); ok {

@@ -243,7 +243,7 @@
   can put it back from this copy.</p></div>
   <div class="cpr:flex cpr:gap-3 cpr:shrink-0 cpr:max-md:flex-col">
     <button class="cpr:btn cpr:btn-sm cpr:max-md:w-full" type="submit" name="action" value="add" formnovalidate>{{if .InBasket .Kind}}Update my basket{{else}}Add to my basket{{end}}</button>
-    <button class="cpr:btn cpr:btn-sm cpr:btn-primary cpr:max-md:w-full" type="submit" name="action" value="download">Download a copy</button>
+    {{if .Downloads}}<button class="cpr:btn cpr:btn-sm cpr:btn-primary cpr:max-md:w-full" type="submit" name="action" value="download">Download a copy</button>{{end}}
   </div>
   {{end}}
 </div>

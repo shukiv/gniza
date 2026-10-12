@@ -1614,10 +1614,11 @@ func (e *Engine) deliverToHome(ctx context.Context, stored *nodestore.Restore) {
 	if !ok {
 		return
 	}
-	_, filename, _, err := e.statArchive(*stored)
+	_, _, _, err := e.statArchive(*stored)
 	if err == nil {
 		var path string
-		path, err = deliverer.DeliverToHome(ctx, stored.Account, stored.ArchivePath, filename)
+		path, err = deliverer.DeliverToHome(ctx, stored.Account, stored.ArchivePath,
+			deliveredName(*stored))
 		if err == nil {
 			stored.DeliveredPath = path
 			return
@@ -1629,6 +1630,35 @@ func (e *Engine) deliverToHome(ctx context.Context, stored *nodestore.Restore) {
 	stored.Error = err.Error()
 	stored.Hint = "The copy could not be saved in your home directory. " +
 		"Make room there -- it needs about the size of what you asked for -- and ask again."
+}
+
+// deliveredName is what a copy is called in the account's home directory:
+// the account, what was asked for, and enough of the restore's identifier
+// that two copies of the same thing are two files -- a second copy must
+// not overwrite the first while it is being downloaded, and the sweep
+// of the first must not remove the second. The archive's own suffix is
+// kept; the rest is letters, digits, dot, dash and underscore, which is
+// all a file name delivered into a home directory is allowed to be.
+func deliveredName(stored nodestore.Restore) string {
+	what := "account"
+	if stored.Kind != protocol.RestoreAccount {
+		what = "basket"
+		if selections := stored.Selections(); len(selections) == 1 {
+			what = selections[0].Kind
+		}
+	}
+	suffix := ".tar"
+	for _, known := range []string{".tar.zst", ".tar.gz", ".tar"} {
+		if strings.HasSuffix(stored.ArchivePath, known) {
+			suffix = known
+			break
+		}
+	}
+	id := stored.ID
+	if len(id) > 8 {
+		id = id[:8]
+	}
+	return stored.Account + "-" + what + "-" + id + suffix
 }
 
 // sweepDelivered removes the copies written into home directories whose

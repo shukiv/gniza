@@ -59,9 +59,13 @@ func (r *Real) DeliverToHome(ctx context.Context, account, from, name string) (s
 	target := filepath.Join(downloads, name)
 	// The shell is the account's: umask first, so the directory and the
 	// file are the account's alone from the moment they exist; -- so a
-	// name is a name. The paths are arguments, not part of the script.
+	// name is a name. The paths are arguments, not part of the script. A
+	// write that stops short -- a quota reached is the usual way -- takes
+	// the part it wrote with it: half an archive that looks whole is
+	// worse than none.
 	write := exec.CommandContext(ctx, "/bin/sh", "-c",
-		`umask 077 && mkdir -p -- "$1" && cat > "$2"`, "gniza-deliver", downloads, target)
+		`umask 077 && mkdir -p -- "$1" && { cat > "$2" || { rm -f -- "$2"; exit 1; }; }`,
+		"gniza-deliver", downloads, target)
 	write.Dir = home
 	write.SysProcAttr = &syscall.SysProcAttr{
 		// Groups is left empty on purpose: without it the child would

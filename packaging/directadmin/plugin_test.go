@@ -121,14 +121,16 @@ func theAdminPageNeverPrintsTheSession(t *testing.T, page string) {
 		// curl's configuration; it is a builtin, so the values are never
 		// a process's arguments. --header on the command line would put
 		// them in /proc for every local user to read.
-		if !strings.Contains(trimmed, `"${SESSION_ID:-}" "${SESSION_KEY:-}"`) {
+		if !strings.Contains(trimmed, `"${SESSION_ID:-}" "${SESSION_KEY:-}"`) &&
+			!strings.HasPrefix(trimmed, `for value in "${SESSION_ID:-}" "${SESSION_KEY:-}"`) {
 			t.Errorf("the session is used somewhere other than the configuration printf: %q", trimmed)
 		}
 	}
 	if strings.Contains(stripComments(page), "--header \"X-Gniza-DA") {
 		t.Error("the session is on curl's command line, where every local user can read it")
 	}
-	for _, want := range []string{"--config -", `header = "X-Gniza-DA-Session: %s"`, `header = "X-Gniza-DA-Key: %s"`, "session_config | curl"} {
+	for _, want := range []string{"--config -", `header = "X-Gniza-DA-Session: %s"`, `header = "X-Gniza-DA-Key: %s"`,
+		"session_config | curl", `*[!A-Za-z0-9:_.-]*) fail`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page is missing %s, so curl is not handed the session on standard input", want)
 		}

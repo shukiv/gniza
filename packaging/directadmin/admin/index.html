@@ -66,10 +66,21 @@ set -- \
 	--location --max-redirs 5 --proto '=http' \
 	--unix-socket "$SOCKET" \
 	--config -
+#
+# A value becomes a quoted line in that configuration, so a quote or a
+# line break in it would end the line early and start another. A session
+# DirectAdmin issues is letters, digits and colons; anything wider than
+# that and the punctuation a token could carry is not one, and the
+# request is not made with it. Gniza draws the same line on its side.
 session_config() {
 	printf 'header = "X-Gniza-DA-Session: %s"\nheader = "X-Gniza-DA-Key: %s"\n' \
 		"${SESSION_ID:-}" "${SESSION_KEY:-}"
 }
+for value in "${SESSION_ID:-}" "${SESSION_KEY:-}"; do
+	case "$value" in
+	*[!A-Za-z0-9:_.-]*) fail 'This page is opened from inside DirectAdmin.' ;;
+	esac
+done
 
 # A post with a form in it is a submission. A post with nothing in it is
 # Evolution opening the page through its own wrapper,

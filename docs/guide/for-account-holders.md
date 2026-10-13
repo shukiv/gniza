@@ -42,7 +42,10 @@ wraps everything a plugin prints in its own skin, so a package cannot reach
 the browser as a file; instead the copy is written into the customer's own
 home directory under `gniza-downloads`, owned by them and readable by
 nobody else, and the page shows the file and opens the File Manager on it.
-Every category is offered that way, the full account archive included.
+Three categories are offered that way: the home directory, mail, and the
+full account archive. The others -- a database, the database users, cron,
+domains and DNS, FTP, SSL -- are inside the full account archive, and the
+page says so rather than offering a copy it cannot make.
 Nothing is put back into the live account from the page yet, because the
 DirectAdmin provider's put-backs are not built; the copy is what the host
 puts back from. Whether the page appears at all is the self-service setting

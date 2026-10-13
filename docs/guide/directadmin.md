@@ -64,9 +64,13 @@ their own.
   on its first run, goes back to taking the archive apart, and says so on
   every account. See `docs/adr/0021-the-account-is-read-where-it-lies.md`.
 - **The account page.** A customer opens **Gniza Backups** in their own
-  DirectAdmin and sees their own restore points, asks for any part of one
-  -- or the whole account -- as a copy, and reads what has been backed up
-  and recovered. The page runs as the account and carries the customer's
+  DirectAdmin and sees their own restore points, asks for their home
+  directory, a mailbox or the whole account from one as a copy, and reads
+  what has been backed up and recovered. A database, the database users,
+  cron, a domain, DNS, FTP or a certificate on its own is not offered:
+  a split DirectAdmin backup has no separate dumps and no account archive
+  for those readers to take them out of, so they travel inside the
+  whole-account copy, and the page says so. The page runs as the account and carries the customer's
   own DirectAdmin session, which Gniza puts to DirectAdmin on every
   request; a process merely running as the account is refused. Nothing is
   downloaded through the page itself, because DirectAdmin wraps a

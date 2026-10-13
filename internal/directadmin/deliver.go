@@ -26,6 +26,32 @@ const DownloadsDir = "gniza-downloads"
 // PutDatabaseUsers), so a page that offered one would offer a refusal.
 func (r *Real) PutsBack() bool { return false }
 
+// CopiesItem answers for the kinds the account page offers. A split
+// DirectAdmin backup is the home directory as one tree and DirectAdmin's
+// own records as another, under backup/: the home directory and a
+// mailbox are paths in the first, and the whole account is both put back
+// together into DirectAdmin's archive. Every other kind is taken out of
+// a databases part or an account archive inside the metadata part
+// (granular.buildDatabase, inventory.archivePath, agent.soleArchive),
+// which this layout does not have, and each was measured failing on a
+// production server on 2026-10-13: database, database users, cron, DNS,
+// domains, FTP and SSL. Until those readers know the tree, the kinds are
+// not offered; the whole-account copy carries them all.
+func (r *Real) CopiesItem(kind string) bool {
+	switch kind {
+	case "account", "files", "mailbox":
+		return true
+	}
+	return false
+}
+
+// CopyNote tells the account holder where the rest is.
+func (r *Real) CopyNote() string {
+	return "Databases, database users, cron jobs, domains, DNS records, FTP logins " +
+		"and certificates travel inside the whole-account copy. A copy of one of " +
+		"them on its own is not something Gniza takes out of a DirectAdmin backup yet."
+}
+
 // DeliverToHome writes a copy of from into the account's home directory
 // as the account.
 //

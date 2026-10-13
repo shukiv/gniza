@@ -294,8 +294,11 @@ type userView struct {
 	Panel    string
 	Restores []restoreRow
 	// Backups is this account's own backup history, on the logs page.
-	Backups     []userBackupRow
-	Kinds       []granular.Kind
+	Backups []userBackupRow
+	Kinds   []granular.Kind
+	// CopyNote is the panel's word on the kinds the page does not offer
+	// as copies, shown under the ones it does. Empty says nothing.
+	CopyNote    string
 	Err         string
 	TotalPoints int
 	Ready       int
@@ -557,6 +560,7 @@ func (s *Server) userViewFor(r *http.Request) userView {
 	return userView{
 		Account:        accountOf(r),
 		Kinds:          s.offeredUserKinds(),
+		CopyNote:       s.copyNote(),
 		Links:          s.userLinks(),
 		Downloads:      s.accountCopies(),
 		DeliversToHome: s.deliversToHome(),
@@ -648,7 +652,15 @@ var userKinds = []granular.Kind{
 // leads to no button is a question with no answer.
 func (s *Server) offeredUserKinds() []granular.Kind {
 	if s.accountCopies() {
-		return userKinds
+		// A copy of a kind the panel's backups cannot give up is a
+		// failure with a card in front of it.
+		var offered []granular.Kind
+		for _, kind := range userKinds {
+			if s.copiesItem(kind) {
+				offered = append(offered, kind)
+			}
+		}
+		return offered
 	}
 	if !s.putsBack() {
 		return nil
@@ -701,7 +713,7 @@ func (s *Server) handleUserBrowse(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.log.Error("browse account snapshots", "account", view.Account,
 			"repository", view.Repository, "error", err)
-		view.Err = "This backup destination could not be read. Ask your host to check it."
+		view.Err = browseErrorMessage(err)
 		s.renderUser(w, r, "user_browse.html", view)
 		return
 	}
@@ -1095,6 +1107,29 @@ func (s *Server) accountDownloads() bool { return s.daSessions == nil }
 type panelFacts struct {
 	deliversToHome bool
 	putsBack       bool
+	// copiesItem answers for one kind; nil copies every kind.
+	copiesItem func(kind string) bool
+	copyNote   string
+}
+
+// copiesItem says whether this panel's backups give up one kind alone as
+// a copy. Where they cannot, the kind is not offered (offeredUserKinds).
+func (s *Server) copiesItem(kind granular.Kind) bool {
+	if s.facts != nil {
+		return s.facts.copiesItem == nil || s.facts.copiesItem(string(kind))
+	}
+	return s.engine == nil || s.engine.CopiesItem(string(kind))
+}
+
+// copyNote is the panel's word on the kinds it does not copy.
+func (s *Server) copyNote() string {
+	if s.facts != nil {
+		return s.facts.copyNote
+	}
+	if s.engine == nil {
+		return ""
+	}
+	return s.engine.CopyNote()
 }
 
 // deliversToHome says whether a copy is written into the account's own
@@ -1120,6 +1155,18 @@ func (s *Server) putsBack() bool {
 }
 
 var errUserRestoreNeedsNames = errors.New("account recovery needs at least one item")
+
+// browseErrorMessage is what the account holder reads when their restore
+// points cannot be listed. A repository that is locked is being checked
+// or pruned, which takes minutes and is nothing a host has to look at;
+// anything else is.
+func browseErrorMessage(err error) string {
+	if errors.Is(err, resticrun.ErrLocked) {
+		return "Your backups are being checked right now, and the restore points cannot be " +
+			"listed until that finishes. Try again in a few minutes."
+	}
+	return "This backup destination could not be read. Ask your host to check it."
+}
 
 // userRestoreRequest converts the account page's narrow vocabulary into an
 // engine request. In particular, "account" is the full archive flow rather

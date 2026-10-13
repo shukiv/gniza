@@ -412,6 +412,29 @@ func (e *Engine) PutsBack() bool {
 	return true
 }
 
+// CopiesItem says whether the provider's backups give up one kind of
+// item as a copy of its own. A provider with no say copies every kind.
+func (e *Engine) CopiesItem(kind string) bool {
+	if e.provider == nil {
+		return true
+	}
+	if copier, ok := e.provider.(panel.ItemCopier); ok {
+		return copier.CopiesItem(kind)
+	}
+	return true
+}
+
+// CopyNote is the provider's word on the kinds it does not copy.
+func (e *Engine) CopyNote() string {
+	if e.provider == nil {
+		return ""
+	}
+	if copier, ok := e.provider.(panel.ItemCopier); ok {
+		return copier.CopyNote()
+	}
+	return ""
+}
+
 // Store exposes the state file to the UI.
 func (e *Engine) Store() *nodestore.Store { return e.store }
 

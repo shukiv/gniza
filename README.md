@@ -114,9 +114,10 @@ restore drill proved the rebuilt archive on two servers before that became
 the default ([ADR 21](docs/adr/0021-the-account-is-read-where-it-lies.md)).
 An account the server no longer has is restored, not refused. A customer
 has their own **Gniza Backups** page, carrying their DirectAdmin session,
-where any part of any restore point -- or the whole account -- is saved as
-a copy into their home directory under `gniza-downloads`, for their file
-manager or FTP to download. Not yet: putting a part of an account back into
+where their home directory, a mailbox or the whole account from any
+restore point is saved as a copy into their home directory under
+`gniza-downloads`, for their file manager or FTP to download; a database
+or the configuration on its own travels inside the whole-account copy. Not yet: putting a part of an account back into
 the live account from that page (the provider's put-backs are not built;
 the page offers copies only), schedule exclusions beyond the home
 directory, and the server's own configuration. The plugin says so where an

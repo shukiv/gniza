@@ -373,7 +373,7 @@ func (e *Engine) QueueInitialBackup(account string) (bool, error) {
 	if _, err := e.QueueBackup(selected.ID, account); err != nil {
 		return false, err
 	}
-	e.log.Info("queued initial backup for new cPanel account",
+	e.log.Info("queued initial backup for new account",
 		"account", account, "policy", selected.Name)
 	return true, nil
 }

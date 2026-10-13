@@ -76,3 +76,25 @@ func TestDirectAdminSaysItPutsNothingBackYet(t *testing.T) {
 		t.Error("the provider claims to put things back while every put-back answers ErrUnverified")
 	}
 }
+
+// The kinds the account page may offer as a copy are the ones a split
+// DirectAdmin backup can give up on their own: paths in the home tree
+// and the whole account. The others need a databases part or an account
+// archive the layout does not have, and each was measured failing on a
+// production server on 2026-10-13.
+func TestCopiesOnlyWhatTheSplitBackupCanGiveUp(t *testing.T) {
+	real := &Real{}
+	for _, kind := range []string{"account", "files", "mailbox"} {
+		if !real.CopiesItem(kind) {
+			t.Errorf("a copy of %s is refused", kind)
+		}
+	}
+	for _, kind := range []string{"database", "dbusers", "cron", "dns", "domains", "ftp", "ssl", "settings", "website", ""} {
+		if real.CopiesItem(kind) {
+			t.Errorf("a copy of %q is offered, and the backup has nothing to take it out of", kind)
+		}
+	}
+	if note := real.CopyNote(); !strings.Contains(note, "whole-account copy") {
+		t.Errorf("the note does not say where the rest is: %q", note)
+	}
+}

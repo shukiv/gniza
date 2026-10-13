@@ -124,7 +124,7 @@ func (s *Server) handleLifecycleEvent(w http.ResponseWriter, r *http.Request) {
 		case err != nil:
 			detail = "ownership boundary recorded; the initial backup could not be " +
 				"queued: " + err.Error()
-			s.log.Error("queue the initial backup for a new cPanel account",
+			s.log.Error("queue the initial backup for a new account",
 				"account", account, "error", err)
 		case queued:
 			detail = "ownership boundary recorded; initial backup queued"

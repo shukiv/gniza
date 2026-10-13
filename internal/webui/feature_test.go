@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	dapanel "github.com/shukiv/gniza/internal/directadmin"
 	"github.com/shukiv/gniza/internal/granular"
 	"github.com/shukiv/gniza/internal/nodestore"
 	"github.com/shukiv/gniza/internal/protocol"
@@ -698,17 +699,28 @@ func TestAPanelWithNoCopiesAndNoPutBackOffersNothing(t *testing.T) {
 	}
 }
 
-// DirectAdmin wraps everything a plugin prints in its skin, so nothing
-// is downloaded through the account page there; a copy is written into
+// DirectAdmin cannot stream a file through its plugin, so a copy lands in
 // the customer's home directory instead. And the DirectAdmin provider
-// puts nothing back yet. So the page offers every kind as a copy, says
-// where the copy lands, and carries no button that would put something
-// back.
-func TestDirectAdminOffersEveryKindAsACopyIntoTheHome(t *testing.T) {
+// puts nothing back yet. So the page offers copies only, says where the
+// copy lands, and carries no button that would put something back -- and
+// it offers only the kinds a DirectAdmin backup can give up as a copy of
+// their own. The rest were measured failing on a production server on
+// 2026-10-13, every one of them with "Ask your host to check the backup
+// service" in front of the customer, because the split backup has no
+// databases part and no account archive for the per-kind readers.
+func TestDirectAdminOffersWhatItsBackupsCanGiveUpAsACopy(t *testing.T) {
 	directadmin := &Server{daSessions: &stubDASessions{}}
-	directadmin.facts = &panelFacts{deliversToHome: true}
-	if got := directadmin.offeredUserKinds(); fmt.Sprint(got) != fmt.Sprint(userKinds) {
-		t.Errorf("DirectAdmin offers %v, want every kind as a copy", got)
+	provider := &dapanel.Real{}
+	directadmin.facts = &panelFacts{deliversToHome: true, copiesItem: provider.CopiesItem, copyNote: provider.CopyNote()}
+	want := []granular.Kind{userKindAccount, granular.KindFiles, granular.KindMailbox}
+	if got := directadmin.offeredUserKinds(); fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("DirectAdmin offers %v, want %v", got, want)
+	}
+	for _, kind := range []granular.Kind{granular.KindDatabase, granular.KindDBUsers, granular.KindCron,
+		granular.KindDNS, granular.KindDomains, granular.KindFTP, granular.KindSSL} {
+		if directadmin.offersUserKind(kind) {
+			t.Errorf("DirectAdmin offers %s, which its backups cannot give up as a copy", kind)
+		}
 	}
 
 	server, err := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -719,7 +731,8 @@ func TestDirectAdminOffersEveryKindAsACopyIntoTheHome(t *testing.T) {
 	render := func(name string, view userView) string {
 		t.Helper()
 		view.Account = "studio"
-		view.Kinds = userKinds
+		view.Kinds = directadmin.offeredUserKinds()
+		view.CopyNote = directadmin.copyNote()
 		view.Links = userLinks{}
 		view.Panel = "DirectAdmin"
 		view.Downloads, view.DeliversToHome, view.PutsBack = true, true, false
@@ -761,10 +774,32 @@ func TestDirectAdminOffersEveryKindAsACopyIntoTheHome(t *testing.T) {
 	if !strings.Contains(pages["browse"], `action="?p=restore"`) {
 		t.Error("the DirectAdmin restore form does not post to the plugin's own address")
 	}
-	for _, want := range []string{`value="download"`, "Save a copy to my home directory", "Full account", "DNS records",
-		`<input type="hidden" name="p" value="browse">`} {
+	for _, want := range []string{`value="download"`, "Save a copy to my home directory", "Full account",
+		`<input type="hidden" name="p" value="browse">`, "item=files", "item=mailbox",
+		"travel inside the whole-account copy"} {
 		if !strings.Contains(pages["browse"], want) {
 			t.Errorf("the DirectAdmin restore page is missing %q", want)
 		}
+	}
+	for _, absent := range []string{"item=database", "item=cron", "item=dns", "item=domains", "item=ftp", "item=ssl", "item=dbusers"} {
+		if strings.Contains(pages["browse"], absent) {
+			t.Errorf("the DirectAdmin restore page still offers %q", absent)
+		}
+	}
+}
+
+// A repository that is locked is being checked or pruned, which takes
+// minutes and is nothing a host has to look at. On a production server
+// on 2026-10-13 the weekly check held the lock for 505 seconds and the
+// account page told the customer their destination could not be read
+// and to ask their host; the destination was fine.
+func TestALockedRepositoryIsSaidToBeBusyNotBroken(t *testing.T) {
+	busy := browseErrorMessage(fmt.Errorf("resticrun: snapshots: %w: restic exited 11", resticrun.ErrLocked))
+	if !strings.Contains(busy, "being checked") || strings.Contains(busy, "Ask your host") {
+		t.Errorf("a locked repository reads as %q", busy)
+	}
+	broken := browseErrorMessage(errors.New("resticrun: repository does not exist"))
+	if !strings.Contains(broken, "Ask your host") {
+		t.Errorf("a broken destination reads as %q", broken)
 	}
 }

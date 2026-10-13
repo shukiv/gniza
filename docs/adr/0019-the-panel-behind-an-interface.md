@@ -749,10 +749,25 @@ README said they went back. Corrected the same evening:
   has changed hands since is not touched, the file is the next holder's.
   A copy that cannot be written -- a home with no room -- is a failed
   restore with a hint that says so.
-- **Every kind is offered, as a copy; nothing is put back.** The
-  provider says so through `panel.PutBackGate`, and the page draws no
-  button that would reach a put-back, no tick box, no basket that
+- **Copies only, of what the backup can give up; nothing is put back.**
+  The provider says so through `panel.PutBackGate`, and the page draws
+  no button that would reach a put-back, no tick box, no basket that
   applies. The cPanel page is unchanged: it streams and it puts back.
+  And not every kind: a split DirectAdmin backup is two trees, the home
+  directory and DirectAdmin's records under `backup/`, and the per-kind
+  readers take a database out of a `databases` part
+  (`granular.buildDatabase`) and the configuration out of an account
+  archive inside the metadata part (`inventory.archivePath`,
+  `agent.soleArchive`), neither of which the trees have. The first drill
+  on a live host, on 2026-10-13, measured it: the home directory, a
+  mailbox and the whole account landed in `gniza-downloads`; database,
+  database users, cron, DNS, domains, FTP and SSL each failed with "Ask
+  your host to check the backup service" in front of the customer. The
+  provider now says which kinds its backups give up as a copy
+  (`panel.ItemCopier`), the page offers those three, and tells the holder
+  that the rest travel inside the whole-account copy -- which they do:
+  the archive holds `backup/<db>.sql`, `backup/crontab.conf` and the
+  domain's records.
 
 The plugin has one address, so the page is named in the query --
 `?p=browse&repository=...` -- and Gniza turns that back into the route
@@ -801,3 +816,8 @@ Not yet, and known:
    what the socket attributes the request by, and it has been read from
    DirectAdmin's documentation rather than measured. The first drill on
    a live host measures it.
+4. **A copy of one database, cron job, domain, DNS zone, FTP login or
+   certificate on its own** from a DirectAdmin backup: the readers
+   named above assume cPanel's shape. Teaching them the tree -- the
+   dumps at `backup/<db>.sql`, the records as files -- lifts the
+   `ItemCopier` answer kind by kind, and the page follows on its own.

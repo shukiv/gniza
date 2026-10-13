@@ -118,6 +118,24 @@ type PutBackGate interface {
 	PutsBack() bool
 }
 
+// ItemCopier is implemented by a provider whose backups cannot give up
+// every kind of item as a copy of its own. The per-kind copies are taken
+// out of a databases part or an account archive inside the metadata
+// part, and a backup laid out without those -- DirectAdmin's, taken
+// apart into a tree with the account's records as files under backup/
+// -- has nothing for them to read, so a page that offered one would
+// offer a failure. A provider that does not implement this copies every
+// kind.
+type ItemCopier interface {
+	// CopiesItem says whether a copy of one kind alone can be taken out
+	// of this provider's backups: "files", "mailbox", "database" and the
+	// other granular kinds, or "account" for the whole.
+	CopiesItem(kind string) bool
+	// CopyNote is what the account page tells the holder about the kinds
+	// it does not offer, in a sentence or two. Empty says nothing.
+	CopyNote() string
+}
+
 // SelfServiceGate is implemented by a panel that keeps its own switch for
 // whether an account holder may use the account-facing pages -- cPanel's
 // Feature Manager. A panel without one leaves the decision to the

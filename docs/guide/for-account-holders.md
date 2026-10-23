@@ -1,6 +1,6 @@
 # For account holders
 
-Your customers get a tile in cPanel, or **Backups** in DirectAdmin: their
+Your customers get a tile in cPanel, or **Gniza Backups** in DirectAdmin: their
 own restore points, and nothing else.
 
 ## What they can do

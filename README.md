@@ -120,7 +120,9 @@ restore point is saved as a copy into their home directory under
 or the configuration on its own travels inside the whole-account copy. Not yet: putting a part of an account back into
 the live account from that page (the provider's put-backs are not built;
 the page offers copies only), schedule exclusions beyond the home
-directory, and the server's own configuration. The plugin says so where an
+directory, and putting the server's own configuration back: it is backed
+up as `@system`, and a replacement server is set up by an administrator
+reading it. The plugin says so where an
 operator reads it rather than guessing. [The DirectAdmin guide](docs/guide/directadmin.md) has the
 full list.
 
@@ -259,7 +261,7 @@ directory, reachable only from the management network, recorded as
 | Area | State |
 |---|---|
 | cPanel/WHM: provider, plugin, customer tile, hooks, termination and suspension safety | working, in production |
-| DirectAdmin: provider, plugin, hooks, lean backup, restore of existing and deleted accounts | working, in production; granular restore and customer pages not built |
+| DirectAdmin: provider, plugin, hooks, lean backup, restore of existing and deleted accounts, customer page | working, in production; granular restore, and putting parts back from the customer page, not built |
 | Plain server: provider, package, system backup, browser interface behind a password | working; restore not yet proved live |
 | Terminal interface | destinations, schedules, backups, logs; restore and settings read-only |
 | Standalone: scheduling, retention, drills, update from release or dist branch | working |

@@ -27,6 +27,7 @@ Start here if you run the WHM plugin.
 | [Settings](guide/settings.md) | Concurrency, staging, log level, alerting channels, payload contents |
 | [For account holders](guide/for-account-holders.md) | The cPanel tile your customers see |
 | [Troubleshooting](guide/troubleshooting.md) | When something fails, where to look, and how to report it |
+| [cPanel/WHM](guide/cpanel.md) | What is cPanel's own: where the plugin is, `pkgacct` and `restorepkg`, the hooks, the customer tile |
 | [DirectAdmin](guide/directadmin.md) | What works there, what is refused, and why |
 
 ## For the curious and the contributing

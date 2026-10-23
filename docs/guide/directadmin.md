@@ -175,11 +175,13 @@ DirectAdmin is a question a host has yet to answer.
 
 Native backups on the tested host were compressed archives. Split mode
 takes one apart, and a backup that reads the home directory in place
-never writes one at all; neither has been through a restore drill on a
-live account yet, so a server should be moved onto the second only
-knowingly. Normal account-level self-service remains unavailable until
-the session bridge and granular restore paths are implemented and
-validated.
+never writes one at all. The second has been the default since v0.3.6,
+after restore drills proved the rebuilt archive on two servers, and a
+whole-account restore to the live account was proved on 2026-09-28.
+Account holders have their own page since v0.3.16 (*The account page*,
+above); what it does not do yet is put anything back into the live
+account, because the provider's put-backs and granular restore are not
+built.
 
 Native temporary work is separate from service state, under
 `/var/lib/gniza-directadmin-native`. This dedicated root is service-owned
@@ -206,9 +208,17 @@ A backup provider that guesses produces backups that look successful and
 restore into nothing. That is the one failure this program exists to
 prevent, so the guesses are refusals instead.
 
-## Installing it anyway
+## Installing
 
-For whoever is doing that verification:
+The same command as on cPanel, on the DirectAdmin server as root:
+
+```sh
+curl -fsSL https://github.com/shukiv/gniza/releases/latest/download/get.sh | sh
+```
+
+`get.sh` finds `/usr/local/directadmin` and installs the DirectAdmin
+package from the release, checked against the release's signed checksums
+the way the cPanel one is. To build the package yourself instead:
 
 ```sh
 make directadmin-package
@@ -216,9 +226,6 @@ make directadmin-package
 tar xzf gniza-directadmin-amd64.tar.gz
 cd gniza-directadmin && sh install.sh
 ```
-
-It is not on the releases page, and that is deliberate: a package one
-`curl` away is a package that ends up on a customer's server.
 
 `uninstall.sh` deletes nothing, and neither does the cPanel one. The plugin directory, both binaries and
 the unit file are moved into a dated directory under

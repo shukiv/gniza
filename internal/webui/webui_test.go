@@ -2199,7 +2199,7 @@ func TestTheRailPointsAtTheSourceAndTheManual(t *testing.T) {
 	_, page := get(t, client, "/")
 	for _, want := range []string{
 		`href="https://github.com/shukiv/gniza"`,
-		`href="https://github.com/shukiv/gniza/blob/master/docs/README.md"`,
+		`href="https://gniza.app/docs/"`,
 		`aria-label="Gniza on GitHub"`,
 		`aria-label="Documentation"`,
 		// Opening a new tab from someone else's page hands them

@@ -214,6 +214,7 @@ func main() {
 		return
 	}
 
+	surviveBrokenLog()
 	if err := run(ctx, cfg, log); err != nil && !errors.Is(err, context.Canceled) {
 		log.Error("agent stopped", "error", err)
 		os.Exit(1)
@@ -579,5 +580,5 @@ func newLogger(level string) (*slog.Logger, *slog.LevelVar) {
 	}
 	current := new(slog.LevelVar)
 	current.Set(parsed)
-	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: current})), current
+	return slog.New(slog.NewTextHandler(newLogWriter(), &slog.HandlerOptions{Level: current})), current
 }

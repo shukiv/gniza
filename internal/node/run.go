@@ -949,10 +949,7 @@ func (e *Engine) Schedule(ctx context.Context, now time.Time) (int, error) {
 		if policy.LastRunAt != nil {
 			last = *policy.LastRunAt
 		}
-		if earliest := now.Add(-catchUpWindow); last.IsZero() || last.Before(earliest) {
-			last = earliest
-		}
-		if next := schedule.Next(last); next.After(now) {
+		if next := nextFiring(schedule, last, now.Add(-catchUpWindow), now.Location()); next.After(now) {
 			e.log.Debug("schedule is not due",
 				"policy", policy.Name, "cron", policy.ScheduleCron,
 				"due", next.UTC().Format(time.RFC3339))
@@ -997,6 +994,43 @@ func (e *Engine) Schedule(ctx context.Context, now time.Time) (int, error) {
 
 // catchUpWindow bounds how far back a restart looks for missed schedules.
 const catchUpWindow = 2 * time.Hour
+
+// nextFiring is when a schedule next comes due after last, on the server's
+// clock, looking no further back than earliest: a policy that has never run,
+// or has been dormant longer than the catch-up window, starts from the edge of
+// that window.
+//
+// A cron line has no zone and is read in the zone of the time it is handed,
+// and a last firing comes back from the store in UTC. Read there, "0 2 * * *"
+// also comes due at 02:00 UTC, which ran every backup twice a night on a
+// server one or two hours ahead of it.
+//
+// The hour the clocks go back happens twice, and a schedule in it would fire
+// in both. The second time is not a new night, so a firing no later on the
+// wall than the last one is passed over. A schedule that runs every few
+// minutes waits out that hour rather than running through it.
+func nextFiring(schedule cron.Schedule, last, earliest time.Time, server *time.Location) time.Time {
+	from := last
+	if from.Before(earliest) {
+		from = earliest
+	}
+	next := schedule.Next(from.In(server))
+	// Compared with the firing itself, not with where the search started:
+	// the edge of the window moves on and would let the repeat through.
+	lastOnTheWall := onTheWall(last.In(server))
+	// Next answers with the zero time for a date that never comes.
+	for !next.IsZero() && !onTheWall(next).After(lastOnTheWall) {
+		next = schedule.Next(next)
+	}
+	return next
+}
+
+// onTheWall is what a clock on the wall would show, as a time that can be
+// compared across a change of offset.
+func onTheWall(t time.Time) time.Time {
+	year, month, day := t.Date()
+	return time.Date(year, month, day, t.Hour(), t.Minute(), t.Second(), 0, time.UTC)
+}
 
 // watchForTrouble raises the two things no run reports, because no run
 // happens: an account whose backups have stopped, and a run that started

@@ -94,7 +94,9 @@ func (s *Scheduler) runPolicy(ctx context.Context, policy store.Policy, now time
 	if lastRun.IsZero() || lastRun.Before(earliest) {
 		lastRun = earliest
 	}
-	if next := schedule.Next(lastRun); next.After(now) {
+	// In the scheduler's own zone: a cron line is read in the zone of the time
+	// it is handed, and one read in UTC comes due at the wrong hour as well.
+	if next := schedule.Next(lastRun.In(now.Location())); next.After(now) {
 		return nil
 	}
 

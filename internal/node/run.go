@@ -904,11 +904,7 @@ func (e *Engine) Schedule(ctx context.Context, now time.Time) (int, error) {
 	// Outside watchForTrouble, which returns early when nothing is
 	// listening: how full a destination is has to be on the page whether
 	// or not anybody has set up somewhere to be told about it.
-	e.probeDestinations(ctx, now)
-	e.censusRepositories(ctx, now)
-	e.sweepLocks(ctx, now)
-	e.sweepRetention(ctx, now)
-	e.checkRepositories(ctx, now)
+	e.upkeep(ctx, now)
 	e.rehearseAccounts(ctx, now)
 	e.sweepDeletedAccounts(ctx, now)
 	e.checkForUpdate(ctx, now)
@@ -968,6 +964,7 @@ func (e *Engine) Schedule(ctx context.Context, now time.Time) (int, error) {
 			"accounts", strings.Join(accounts, ","),
 			"include_system", policy.IncludeSystem,
 			"destinations", len(policy.RepositoryIDs))
+		e.preTasks(ctx, now)
 		if err := e.store.SetPolicyLastRun(policy.ID, now); err != nil {
 			return queued, err
 		}
@@ -986,6 +983,9 @@ func (e *Engine) Schedule(ctx context.Context, now time.Time) (int, error) {
 				continue
 			}
 			queued++
+		}
+		if queued > 0 {
+			e.backupsFired.Store(true)
 		}
 		e.log.Info("policy fired", "policy", policy.Name, "queued", queued)
 	}
@@ -1173,30 +1173,24 @@ func (e *Engine) watchForTrouble(ctx context.Context, now time.Time) {
 	}
 }
 
-// probeDestinations reaches each destination on a slow cadence, so that a
-// backup server which went away is reported when it goes rather than at
-// the next backup — which is the night the operator finds out they have
-// none.
+// probeDestinations reaches each destination that has not been reached
+// lately, so that one which went away is reported and how much room is left
+// on it stays on the page. How long ago is read from the store, so a restart
+// does not log in to every destination again.
 func (e *Engine) probeDestinations(ctx context.Context, now time.Time) {
-	e.alertedMu.Lock()
-	if now.Sub(e.lastProbe) < probeEvery {
-		e.alertedMu.Unlock()
-		return
-	}
-	e.lastProbe = now
-	e.alertedMu.Unlock()
-
 	destinations, err := e.store.Destinations()
 	if err != nil {
 		e.log.Error("read destinations", "error", err)
 		return
 	}
 	for _, dest := range destinations {
+		if dest.LastCheckedAt != nil && now.Sub(*dest.LastCheckedAt) < probeEvery {
+			continue
+		}
 		// TestDestination records the result and says so if it changed.
-		// A probe that succeeded says nothing above debug on purpose: it
-		// happens every few minutes, and a log of things that are fine is
-		// a log nobody reads. At debug it is how an operator sees the
-		// probe is running at all.
+		// A probe that succeeded says nothing above debug on purpose: a
+		// log of things that are fine is a log nobody reads. At debug it
+		// is how an operator sees the probe is running at all.
 		started := time.Now()
 		err := e.TestDestination(ctx, dest.ID)
 		e.log.Debug("probed a destination", "destination", dest.Name,
@@ -1779,9 +1773,10 @@ const (
 	// enough that reading the account registry costs nothing, short
 	// enough that a stuck run is reported the same hour it wedges.
 	watchEvery = 5 * time.Minute
-	// probeEvery is how often each destination is reached for. A
-	// destination that is down is down for hours, not seconds.
-	probeEvery = time.Hour
+	// probeEvery is how often each destination is reached for. Every
+	// reach is a login on somebody's server, and a backup that cannot get
+	// there says so itself.
+	probeEvery = upkeepEvery
 )
 
 // restoreSelections carries a stored restore's parts onto the wire.

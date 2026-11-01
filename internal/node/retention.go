@@ -386,18 +386,18 @@ func (e *Engine) recordRetention(repositoryID string, update func(*nodestore.Ret
 // cannot overlap: this waits for the queue to be empty, and leaves a
 // repository alone for the best part of a day after it has been looked
 // at.
-func (e *Engine) sweepRetention(ctx context.Context, now time.Time) {
+func (e *Engine) sweepRetention(ctx context.Context, now time.Time) bool {
 	busy, err := e.anyJobRunning()
 	if err != nil || busy || e.checking.Load() || e.sweepingLocks.Load() {
 		// A backup holds the same lock. Retention can wait; a backup
 		// cannot.
-		return
+		return false
 	}
 
 	repositories, err := e.store.Repositories()
 	if err != nil {
 		e.log.Error("read repositories", "error", err)
-		return
+		return false
 	}
 	for _, repo := range repositories {
 		if repo.InitialisedAt == nil {
@@ -423,21 +423,22 @@ func (e *Engine) sweepRetention(ctx context.Context, now time.Time) {
 			if _, err := e.PlanRetention(ctx, repo.ID); err != nil {
 				e.log.Warn("plan retention", "repository", repo.ID, "error", err)
 			}
-			return
+			return true
 		}
 
 		removed, err := e.ApplyRetention(ctx, repo.ID)
 		if err != nil {
 			e.log.Error("apply retention", "repository", repo.ID, "error", err)
-			return
+			return true
 		}
 		if removed > 0 {
 			e.log.Info("retention applied", "repository", repo.ID, "removed", removed)
 		}
 		// One repository per pass: each one takes a lock and a prune
 		// walks everything.
-		return
+		return true
 	}
+	return false
 }
 
 // lastRetentionAttempt is when this repository was last looked at, either

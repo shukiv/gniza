@@ -78,3 +78,10 @@ func RehearsalDueForTest(accounts []string, jobs []nodestore.Job, restores []nod
 func RoomToRehearseForTest(account string, need uint64, root string) error {
 	return roomToRehearse(account, need, &staging.Manager{Root: root})
 }
+
+// CensusingForTest says a census is running beside the scheduler.
+func (e *Engine) CensusingForTest() bool { return e.censusing.Load() }
+
+// SweepingLocksForTest says a look for stale locks is running beside the
+// scheduler.
+func (e *Engine) SweepingLocksForTest() bool { return e.sweepingLocks.Load() }

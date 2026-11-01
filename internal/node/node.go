@@ -60,7 +60,6 @@ type Engine struct {
 	alertedMu     sync.Mutex
 	alerted       map[string]bool
 	lastWatch     time.Time
-	lastProbe     time.Time
 	lastReconcile time.Time
 	// lastDeletedSweep is when accounts gone longer than this server
 	// keeps them were last looked for.
@@ -85,6 +84,9 @@ type Engine struct {
 	// started.
 	sweepingLocks atomic.Bool
 	lastLockSweep time.Time
+	// backupsFired is set when a schedule queues work, and cleared when
+	// the post-tasks that follow it have been started.
+	backupsFired atomic.Bool
 	// lastRehearsalSweep is when the server last looked for an account
 	// that is due a rehearsal.
 	lastRehearsalSweep time.Time

@@ -20,8 +20,9 @@ const lockTimeout = 5 * time.Minute
 // lockSweepEvery is how often the repositories are looked at for locks
 // nothing holds. A lock that stops retention costs a night; one left by a
 // prune or a check that was killed stops every backup, and must not be
-// there when the next schedule fires.
-const lockSweepEvery = time.Hour
+// there when the next schedule fires, which is why the look comes just
+// before it does.
+const lockSweepEvery = upkeepEvery
 
 // sweepLocks removes stale locks from every repository, off the
 // scheduler's own goroutine, when the server has nothing running.

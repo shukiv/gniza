@@ -12,11 +12,11 @@ const (
 	// censusEvery is how often each repository is asked what it holds.
 	// The answer changes by one night's backups, and getting it costs a
 	// walk of the repository index across the network.
-	censusEvery = 6 * time.Hour
+	censusEvery = upkeepEvery
 	// censusRetryAfter keeps a repository that cannot be measured from
 	// being tried on every tick. A destination that is down is down for
 	// hours.
-	censusRetryAfter = time.Hour
+	censusRetryAfter = 6 * time.Hour
 	// censusTimeout bounds one repository. The first reading of a large
 	// repository over SFTP downloads the whole index; later ones are
 	// served from the local restic cache and take seconds.

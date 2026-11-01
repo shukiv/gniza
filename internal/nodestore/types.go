@@ -177,10 +177,11 @@ type RepositoryCensus struct {
 func (c RepositoryCensus) Known() bool { return c.MeasuredAt != nil }
 
 // StaleAfter is how old a reading has to be before the page says when it
-// was taken rather than presenting it as the truth. It is three of the
-// intervals the census runs on, so an ordinary missed measurement does
-// not mark every figure on the page as doubtful.
-const StaleAfter = 18 * time.Hour
+// was taken rather than presenting it as the truth. The census runs once a
+// day after the backup, so this is a day and a half: a night that took longer
+// than the last does not mark every figure on the page as doubtful, and a
+// night that was missed does.
+const StaleAfter = 36 * time.Hour
 
 // Stale reports whether this reading is old enough to need its date shown
 // beside it.

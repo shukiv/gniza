@@ -12,13 +12,13 @@ const (
 	// day so that a night which finishes earlier than the last still has
 	// its upkeep.
 	upkeepEvery = 20 * time.Hour
-	// upkeepWithoutBackups is how long a server waits for a schedule to
-	// fire before it does its upkeep anyway. Longer than a day, so a nightly
-	// schedule is always what sets the hour.
+	// upkeepWithoutBackups is how old a reading gets before the server stops
+	// waiting for a schedule and does its upkeep anyway. Longer than a day,
+	// so a nightly schedule is what sets the hour.
 	upkeepWithoutBackups = 30 * time.Hour
-	// preTaskTimeout bounds what stands between a schedule and its backups.
-	// A destination that does not answer in this time is the backup's to
-	// report.
+	// preTaskTimeout bounds what each repository can put between a schedule
+	// and its backups. A destination that does not answer in this time is
+	// the backup's to report.
 	preTaskTimeout = 2 * time.Minute
 )
 
@@ -39,10 +39,11 @@ func (e *Engine) preTasks(ctx context.Context, now time.Time) {
 		return
 	}
 	defer e.sweepingLocks.Store(false)
-	e.lastLockSweep = now
-	ctx, cancel := context.WithTimeout(ctx, preTaskTimeout)
-	defer cancel()
-	e.sweepLocksOnce(ctx)
+	// Only a look that reached everything counts: one that did not is tried
+	// again before the next schedule fires, not a day later.
+	if e.sweepLocksWithin(ctx, preTaskTimeout) {
+		e.lastLockSweep = now
+	}
 }
 
 // upkeep runs from every tick and does its work once the backups a schedule
@@ -56,16 +57,30 @@ func (e *Engine) preTasks(ctx context.Context, now time.Time) {
 // the count is what is left, and the integrity check last because it wants the
 // repository to itself.
 //
-// A server whose schedules are not firing still needs telling about its
-// destinations, so after upkeepWithoutBackups it stops waiting, and looks for
-// locks here because no pre-task will.
+// Following the backups is when this normally happens, and it is not what
+// decides whether it happens. A server whose schedules are not firing, whose
+// firing queued nothing, or which restarted during the run has nothing to
+// follow, so a reading older than upkeepWithoutBackups starts the upkeep by
+// itself, and looks for locks here because no pre-task did. A job that never
+// finishes would hold all of this back, so an overdue destination is still
+// reached for beside it: that does not touch the repository.
 func (e *Engine) upkeep(ctx context.Context, now time.Time) {
 	busy, err := e.anyJobRunning()
-	if err != nil || busy || e.checking.Load() || e.sweepingLocks.Load() {
+	if err != nil {
+		return
+	}
+	overdue := e.upkeepOverdue(now)
+	if busy {
+		if overdue {
+			e.probeDestinations(ctx, now)
+		}
+		return
+	}
+	if e.checking.Load() || e.sweepingLocks.Load() {
 		return
 	}
 	if !e.backupsFired.Load() {
-		if e.scheduleFiredWithin(now, upkeepWithoutBackups) {
+		if !overdue {
 			return
 		}
 		// Beside the scheduler, and retention and the check wait for it.
@@ -74,16 +89,10 @@ func (e *Engine) upkeep(ctx context.Context, now time.Time) {
 
 	e.probeDestinations(ctx, now)
 
-	// sweepRetention takes one repository a pass.
-	repositories, err := e.store.Repositories()
-	if err != nil {
-		e.log.Error("read repositories", "error", err)
+	// One repository a tick, so that whatever is queued meanwhile runs
+	// between them. The next tick comes back here for the next one.
+	if e.sweepRetention(ctx, now) {
 		return
-	}
-	for range repositories {
-		if ctx.Err() != nil || !e.sweepRetention(ctx, now) {
-			break
-		}
 	}
 
 	e.censusRepositories(ctx, now)
@@ -94,19 +103,30 @@ func (e *Engine) upkeep(ctx context.Context, now time.Time) {
 	e.backupsFired.Store(false)
 }
 
-// scheduleFiredWithin reports whether a schedule that can run has fired
-// inside the window. A firing is stored, so this survives a restart.
-func (e *Engine) scheduleFiredWithin(now time.Time, window time.Duration) bool {
-	policies, err := e.store.Policies()
+// upkeepOverdue reports whether a destination or a repository has gone longer
+// than upkeepWithoutBackups without a reading, or has never had one. A reading
+// is stored, so this survives a restart.
+func (e *Engine) upkeepOverdue(now time.Time) bool {
+	destinations, err := e.store.Destinations()
 	if err != nil {
-		e.log.Error("read schedules", "error", err)
-		return true
+		e.log.Error("read destinations", "error", err)
+		return false
 	}
-	for _, policy := range policies {
-		if !policy.Enabled || len(policy.RepositoryIDs) == 0 || policy.LastRunAt == nil {
+	for _, dest := range destinations {
+		if dest.LastCheckedAt == nil || now.Sub(*dest.LastCheckedAt) >= upkeepWithoutBackups {
+			return true
+		}
+	}
+	repositories, err := e.store.Repositories()
+	if err != nil {
+		e.log.Error("read repositories", "error", err)
+		return false
+	}
+	for _, repo := range repositories {
+		if repo.InitialisedAt == nil {
 			continue
 		}
-		if now.Sub(*policy.LastRunAt) < window {
+		if repo.Census.MeasuredAt == nil || now.Sub(*repo.Census.MeasuredAt) >= upkeepWithoutBackups {
 			return true
 		}
 	}

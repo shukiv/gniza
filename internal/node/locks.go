@@ -46,31 +46,50 @@ func (e *Engine) sweepLocks(ctx context.Context, now time.Time) {
 
 // sweepLocksOnce looks at each repository in turn.
 func (e *Engine) sweepLocksOnce(ctx context.Context) {
+	e.sweepLocksWithin(ctx, lockTimeout)
+}
+
+// sweepLocksWithin gives each repository a time of its own, so a destination
+// that does not answer does not use up the look at the others, and reports
+// whether every repository was looked at.
+func (e *Engine) sweepLocksWithin(ctx context.Context, each time.Duration) bool {
 	repositories, err := e.store.Repositories()
 	if err != nil {
 		e.log.Error("read repositories", "error", err)
-		return
+		return false
 	}
+	complete := true
 	for _, repo := range repositories {
 		if ctx.Err() != nil {
-			return
+			return false
 		}
 		if repo.InitialisedAt == nil {
 			continue
 		}
-		removed, err := e.ClearStaleLocks(ctx, repo.ID)
-		if err != nil {
-			e.log.Warn("look for stale locks", "repository_id", repo.ID, "error", err)
-			continue
-		}
-		// What retention last said is on the page until it is asked
-		// again, and it is not asked again for most of a day. A
-		// repository that was locked then and is not now would go on
-		// saying it is.
-		if removed > 0 || retentionStoppedAtALock(repo) {
-			e.planAfterUnlock(ctx, repo.ID)
+		if !e.sweepLocksOf(ctx, repo, each) {
+			complete = false
 		}
 	}
+	return complete
+}
+
+// sweepLocksOf looks at one repository.
+func (e *Engine) sweepLocksOf(ctx context.Context, repo nodestore.Repository, within time.Duration) bool {
+	ctx, cancel := context.WithTimeout(ctx, within)
+	defer cancel()
+	removed, err := e.ClearStaleLocks(ctx, repo.ID)
+	if err != nil {
+		e.log.Warn("look for stale locks", "repository_id", repo.ID, "error", err)
+		return false
+	}
+	// What retention last said is on the page until it is asked
+	// again, and it is not asked again for most of a day. A
+	// repository that was locked then and is not now would go on
+	// saying it is.
+	if removed > 0 || retentionStoppedAtALock(repo) {
+		e.planAfterUnlock(ctx, repo.ID)
+	}
+	return true
 }
 
 // retentionStoppedAtALock reports whether the last thing retention said

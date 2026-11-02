@@ -10,7 +10,7 @@ this server runs, and the parts that are genuinely cPanel's own — `pkgacct`,
 `restorepkg`, Feature Manager — say so by name.
 
 The state of the fleet, what shipped last, and what to pick up next are in
-the latest handoff: [handoff-2026-10-08.md](handoff-2026-10-08.md).
+the latest handoff: [handoff-2026-11-01.md](handoff-2026-11-01.md).
 
 ## For operators
 

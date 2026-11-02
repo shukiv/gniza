@@ -89,10 +89,32 @@ Free space is measured honestly: `statfs` for a local path, `df -Pk` over SSH
 for SFTP. Object stores do not report a size, so they say so rather than
 inventing one.
 
+*Reached*, the free space and the counts are readings, taken around the backups
+rather than on a timer: see [how often it is visited](#how-often-it-is-visited).
+They can be a day old, and after thirty-six hours the page shows a reading's
+date. **Test** in the row menu goes there at once.
+
 **Edit** sits on the row. Everything else — test the connection, browse what it
 holds, remove it — is under the row menu. Removing one leaves what is stored
 there untouched but takes this server's copy of the recovery key with it;
 after that the backups can be read only with the copy you saved.
+
+## How often it is visited
+
+Every visit is a login on the destination, so they all come around the backups.
+Just before a schedule queues its backups, the repositories are looked at for
+stale locks. Once the last backup has finished, the destination is checked,
+retention runs one repository at a time, what is left is counted, and an
+integrity check runs if one is due.
+
+Each of these happens at most once in twenty hours, so a schedule that fires
+every hour does not make them hourly. A reading more than thirty hours old
+starts them by itself, so a server with no schedule firing still looks about once
+a day. If a job never finishes, an overdue destination check still runs beside
+it, and everything that touches the repository waits.
+
+The cost is that a destination that goes away is noticed at the next backup, not
+straight away.
 
 ## Reading it back
 
@@ -124,9 +146,11 @@ locked by PID …*, with the date the lock was made.
 
 Gniza removes a lock by itself when retention is refused by one and nothing
 holds it: it has not been refreshed for half an hour, or it was taken on this
-server by a process that no longer exists. **Remove stale locks** does the
-same at once. Neither touches a lock a running backup is using, and neither
-runs while this server has a backup or a restore in progress.
+server by a process that no longer exists. It also looks for such locks just
+before a schedule queues its backups, because a lock left by a killed prune or
+check, unlike one left by a backup, stops every backup. **Remove stale locks**
+does the same at once. None of these touches a lock a running backup is using,
+and none runs while this server has a backup or a restore in progress.
 
 ## Credentials
 

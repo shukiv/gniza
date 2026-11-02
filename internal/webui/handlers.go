@@ -5125,8 +5125,9 @@ func (s *Server) handleClearLocks(w http.ResponseWriter, r *http.Request) {
 					"or took its lock less than half an hour ago.")
 			return
 		}
-		// Removed already, by the hourly look for them or by somebody
-		// else. What the page still says is what retention said last.
+		// Removed already, by the look before a schedule fires or by
+		// somebody else. What the page still says is what retention said
+		// last.
 		said = "There is no lock on this repository any more."
 	}
 	if _, err := s.engine.PlanRetention(r.Context(), id); err != nil {

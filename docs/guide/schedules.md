@@ -36,9 +36,10 @@ was never set up lands somewhere that cannot serve it.
 
 ## How long it is kept
 
-Keep *n* daily, *n* weekly, *n* monthly. Retention runs after a successful
-backup and applies to that schedule's own group, so two runs of one account
-land in the same group and the older one can actually be removed.
+Keep *n* daily, *n* weekly, *n* monthly. Retention runs once the last backup has
+finished, at most once in twenty hours for each repository, and applies to that
+schedule's own group, so two runs of one account land in the same group and the
+older one can actually be removed.
 
 In standalone mode retention runs on the cPanel server, which means the
 credential able to delete backups lives on the machine an attacker would

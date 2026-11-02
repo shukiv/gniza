@@ -203,8 +203,10 @@ files and drops those logins — only a login of exactly the shape it makes,
 
 ## A destination stops answering
 
-The destination row says when it was last reachable. Test it from the row menu
-— that runs the real connection, not a cached verdict.
+The destination row says when it was last reachable. That reading is taken about
+once a day, after the backups, so a destination that went away this afternoon is
+noticed at tonight's backup. Test it from the row menu — that runs the real
+connection, not a cached verdict.
 
 For SFTP, the usual causes are a rotated host key or a key that was removed on
 the far side. For S3, an expired access key. For a local path, a mount that is

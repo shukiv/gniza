@@ -17,6 +17,13 @@ const (
 	// checkEvery is how often each repository is asked whether it is
 	// whole.
 	checkEvery = 7 * 24 * time.Hour
+	// checkEarly is how far short of checkEvery a check already comes due.
+	// The upkeep reaches the check once a night, at about the hour the last
+	// one started, and a check is stamped when it finishes: held to a whole
+	// week it was always short by the length of the check, and waited for
+	// the night after. Half a day covers that and a night that finishes
+	// earlier than the last, and on an ordinary night is not the sixth.
+	checkEarly = 12 * time.Hour
 	// checkRetryAfter keeps a repository whose check could not be run
 	// from being tried on every tick.
 	checkRetryAfter = 6 * time.Hour
@@ -135,16 +142,17 @@ func checkDueFor(repo nodestore.Repository, now time.Time, quiet bool) bool {
 	if check.AttemptedAt != nil && now.Sub(*check.AttemptedAt) < checkRetryAfter {
 		return false
 	}
+	every := checkEvery - checkEarly
 	// A repository is first checked a day after it was made rather than
 	// the moment it was: there is nothing in it yet, and the first night
 	// is the one that must not be held up.
-	since := repo.InitialisedAt.Add(24*time.Hour - checkEvery)
+	since := repo.InitialisedAt.Add(24*time.Hour - every)
 	if check.CheckedAt != nil {
 		since = *check.CheckedAt
 	}
 	age := now.Sub(since)
 	switch {
-	case age < checkEvery:
+	case age < every:
 		return false
 	case age >= checkOverdue:
 		return true

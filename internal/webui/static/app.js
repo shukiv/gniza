@@ -1316,4 +1316,34 @@
     });
     window.setTimeout(function () { button.textContent = said; }, 3000);
   });
+
+  // The recovery key's file is saved from the copy the page carries rather
+  // than asked of the server: under DirectAdmin the skin wraps whatever the
+  // plugin answers and drops its headers, so the server's download arrived
+  // as text in the page. Saving it is having it, as when the server sends
+  // it, so the form that records the key as stored goes next.
+  document.addEventListener("submit", function (event) {
+    var form = event.target;
+    if (!form.hasAttribute || !form.hasAttribute("data-recovery-file")) { return; }
+    if (typeof Blob === "undefined" || !window.URL || !URL.createObjectURL) { return; }
+    event.preventDefault();
+
+    var url = URL.createObjectURL(new Blob([form.getAttribute("data-recovery-file")],
+      { type: "text/plain;charset=utf-8" }));
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = form.getAttribute("data-recovery-name") || "gniza-recovery.txt";
+    link.hidden = true;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Long enough for the browser to have taken the file before the page
+    // moves on and the object it came from goes away.
+    var note = document.querySelector("form[data-recovery-note]");
+    window.setTimeout(function () {
+      URL.revokeObjectURL(url);
+      if (note) { note.submit(); }
+    }, 500);
+  });
 })();

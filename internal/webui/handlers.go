@@ -677,12 +677,45 @@ func (s *Server) handleNoteRecovery(w http.ResponseWriter, r *http.Request) {
 // handleRecoveryCard hands over the same thing as a file, for putting
 // somewhere else. It is a download rather than a page so it does not sit
 // in browser history.
+//
+// This is what the button does with no JavaScript. Under DirectAdmin it
+// cannot work: the skin wraps whatever a plugin answers and drops its
+// headers, so the file arrived as text in the page. The script saves the
+// copy the page carries instead (destinationsView.RecoveryFile).
 func (s *Server) handleRecoveryCard(w http.ResponseWriter, r *http.Request) {
 	card, err := s.engine.Recovery(r.PostFormValue("repository"))
 	if err != nil {
 		s.redirect(w, r, "/destinations", "error", err.Error())
 		return
 	}
+	file := recoveryFileOf(card, time.Now())
+
+	// Downloading it is having it. The warning exists to make sure the key
+	// leaves this server, and a file on the operator's machine is exactly
+	// that; making them press "I have stored it somewhere else" as well
+	// only teaches them to press it without reading.
+	if err := s.engine.NoteRecoveryKey(r.PostFormValue("repository")); err != nil {
+		s.log.Error("record that the recovery key was taken away", "error", err)
+	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+file.Name+`"`)
+	w.Header().Set("Content-Length", strconv.Itoa(len(file.Body)))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	// This file is the only thing that can read the backups. No copy of
+	// it belongs in a cache between here and the operator.
+	w.Header().Set("Cache-Control", "no-store, max-age=0")
+	_, _ = w.Write([]byte(file.Body))
+}
+
+// recoveryFile is a recovery card written out as a file.
+type recoveryFile struct {
+	Name string
+	Body string
+}
+
+// recoveryFileOf writes a recovery card out as the file an operator keeps.
+func recoveryFileOf(card node.RecoveryCard, written time.Time) recoveryFile {
 	var body strings.Builder
 	fmt.Fprintf(&body, `gniza recovery key
 ===================
@@ -788,25 +821,12 @@ server:
 everything needed to read those backups, which is the point of it and
 also the reason it belongs in a password manager rather than on a disk.
 Written %s
-`, card.Hostname, time.Now().UTC().Format("2006-01-02 15:04 MST"))
+`, card.Hostname, written.UTC().Format("2006-01-02 15:04 MST"))
 
-	// Downloading it is having it. The warning exists to make sure the key
-	// leaves this server, and a file on the operator's machine is exactly
-	// that; making them press "I have stored it somewhere else" as well
-	// only teaches them to press it without reading.
-	if err := s.engine.NoteRecoveryKey(r.PostFormValue("repository")); err != nil {
-		s.log.Error("record that the recovery key was taken away", "error", err)
+	return recoveryFile{
+		Name: fmt.Sprintf("gniza-recovery-%s-%s.txt", card.Hostname, card.Repository),
+		Body: body.String(),
 	}
-
-	filename := fmt.Sprintf("gniza-recovery-%s-%s.txt", card.Hostname, card.Repository)
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
-	w.Header().Set("Content-Length", strconv.Itoa(body.Len()))
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	// This file is the only thing that can read the backups. No copy of
-	// it belongs in a cache between here and the operator.
-	w.Header().Set("Cache-Control", "no-store, max-age=0")
-	_, _ = w.Write([]byte(body.String()))
 }
 
 // destinationsView is the destinations page.
@@ -850,6 +870,17 @@ type destinationsView struct {
 	// ago, so the card is the last step of adding it rather than an
 	// answer to somebody asking to see the key.
 	JustCreated bool
+}
+
+// RecoveryFile is the revealed card as the download button's file, carried
+// on the page so that the script can save it in the browser. Under
+// DirectAdmin nothing a plugin answers reaches the browser as a download.
+func (v destinationsView) RecoveryFile() *recoveryFile {
+	if v.Revealed == nil {
+		return nil
+	}
+	file := recoveryFileOf(*v.Revealed, time.Now())
+	return &file
 }
 
 // Field is what an input should show: what was submitted, else what is

@@ -2,6 +2,7 @@ package webui_test
 
 import (
 	"context"
+	"html"
 	"io"
 	"log/slog"
 	"net"
@@ -1858,6 +1859,22 @@ func TestTheRecoveryKeyIsShownAndNagsUntilItIsSaved(t *testing.T) {
 	}
 	if !strings.Contains(string(cardBody), password) {
 		t.Error("the recovery card does not carry the key")
+	}
+
+	// Under DirectAdmin that download reaches the operator as text in the
+	// page, so the page carries the same file for the browser to save.
+	carried := regexp.MustCompile(`data-recovery-file="([^"]*)"`).FindStringSubmatch(revealed)
+	if carried == nil {
+		t.Fatal("the page does not carry the recovery card for the browser to save")
+	}
+	written := regexp.MustCompile(`(?m)^Written .*$`)
+	if got, want := written.ReplaceAllString(html.UnescapeString(carried[1]), ""),
+		written.ReplaceAllString(string(cardBody), ""); got != want {
+		t.Errorf("the file the page carries is not the one the server sends:\n%s\n---\n%s", got, want)
+	}
+	if !strings.Contains(revealed, `data-recovery-name="gniza-recovery-`) ||
+		!strings.Contains(revealed, "data-recovery-note") {
+		t.Error("the page does not name the file, or mark the form that records it as stored")
 	}
 
 	// Saying it is stored stops the warning.

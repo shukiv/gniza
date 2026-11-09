@@ -45,12 +45,17 @@ restic restore &lt;snapshot-id&gt; --target /somewhere{{end}}</div>
     the host key, which is in the file below.</p>
     {{end}}
     <div class="cpr:flex cpr:flex-wrap cpr:items-center cpr:gap-3 cpr:mt-4">
-      <form method="post" action="?p=destinations/recovery/card" class="cpr:inline-block cpr:align-middle">
+      {{/* The script saves data-recovery-file in the browser, because under
+           DirectAdmin the server's own download reaches the operator as text
+           in the page; then it sends the form below, since saving it is
+           having it. With no JavaScript the form posts for the file. */}}
+      <form method="post" action="?p=destinations/recovery/card" class="cpr:inline-block cpr:align-middle"
+        {{- with $data.RecoveryFile}} data-recovery-file="{{.Body}}" data-recovery-name="{{.Name}}"{{end}}>
         <input type="hidden" name="csrf" value="{{$.CSRF}}">
         <input type="hidden" name="repository" value="{{$data.RevealedID}}">
         <button class="cpr:btn cpr:btn-sm">Download it as a file</button>
       </form>
-      <form method="post" action="?p=destinations/recovery/note" class="cpr:inline-block cpr:align-middle">
+      <form method="post" action="?p=destinations/recovery/note" class="cpr:inline-block cpr:align-middle" data-recovery-note>
         <input type="hidden" name="csrf" value="{{$.CSRF}}">
         <input type="hidden" name="repository" value="{{$data.RevealedID}}">
         <button class="cpr:btn cpr:btn-sm cpr:btn-primary">I have stored it somewhere else</button>
